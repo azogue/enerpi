@@ -1,16 +1,24 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
+from io import BytesIO
 import locale
+import matplotlib
+# do this before importing pylab or pyplot
+matplotlib.use('Agg')
+# noinspection PyPep8
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import matplotlib.dates as mpd
 import matplotlib.patches as mp
-import matplotlib.pyplot as plt
 import numpy as np
 import os
+import re
+from enerpi.base import CONFIG, timeit
 # import seaborn as sns
 
-# from prettyprinting import print_red, print_info, print_yellow
-from enerpi.base import timeit
-from enerpi import DATA_PATH
+
+IMG_BASEPATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
+DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK')
 
 
 def _gen_tableau20():
@@ -30,9 +38,24 @@ def _gen_tableau20():
 # semaforo_4 = [sns.palettes.crayons[k] for k in ['Green', 'Sea Green', 'Mango Tango', 'Razzmatazz']]
 # These are the "Tableau 20" colors as RGB.
 tableau20 = _gen_tableau20()
-locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+
+lang, codec = locale.getlocale()
+use_locale = '{}.{}'.format(lang, codec)
+locale.setlocale(locale.LC_ALL, use_locale)
+
 # sns.set_style('whitegrid')
-DEFAULT_IMG_MASK = 'enerpi_potencia_consumo_ldr_{:%Y%m%d_%H%M}_{:%Y%m%d_%H%M}.png'
+
+REGEXPR_SVG_HEIGHT = re.compile(r'<svg height="\d{1,4}pt"')
+REGEXPR_SVG_WIDTH = re.compile(r' width="(\d{1,4}pt")')
+
+GRIDSPEC_FULL = {'left': 0, 'right': 1, 'bottom': 0, 'top': 1, 'hspace': 0}
+# GRIDSPEC_NORMAL = {'left': 0.075, 'right': .925, 'bottom': 0.11, 'top': 0.91, 'hspace': 0}
+FONTSIZE = 10
+FONTSIZE_TILE = 12
+TICK_PARAMS_TILE = dict(direction='in', pad=-15, length=3, width=.5)
+font = {'family': 'sans-serif',
+        'size': FONTSIZE}  # 'weight' : 'light',
+matplotlib.rc('font', **font)
 
 
 def ch_color(x, ch=1., alpha=None):
@@ -40,10 +63,10 @@ def ch_color(x, ch=1., alpha=None):
     if alpha is not None:
         if len(x) == 4:
             new_c[3] = alpha
-            return new_c
+            return tuple(new_c)
         else:
-            return new_c + [alpha]
-    return new_c
+            return tuple(new_c + [alpha])
+    return tuple(new_c)
 
 
 def round_time(ts=None, delta=dt.timedelta(minutes=1)):
@@ -128,7 +151,7 @@ def _gen_image_path(data, filename):
         img_name += '.png'
     head, tail = os.path.split(img_name)
     if not head:
-        img_name = os.path.join(DATA_PATH, img_name)
+        img_name = os.path.join(IMG_BASEPATH, img_name)
     masks = img_name.count('{:')
     if masks == 2:
         return img_name.format(data.index[0], data.index[-1])
@@ -138,9 +161,9 @@ def _gen_image_path(data, filename):
         return img_name
 
 
-@timeit('plot_potencia_consumo_horas')
-def plot_potencia_consumo_horas(potencia, consumo, ldr=None,
-                                rs_potencia=None, rm_potencia=None, savefig=None):
+@timeit('plot_power_consumption_hourly')
+def plot_power_consumption_hourly(potencia, consumo, ldr=None,
+                                  rs_potencia=None, rm_potencia=None, savefig=None):
     f, ax_bar = plt.subplots(figsize=(16, 9))
     color_potencia = ch_color(tableau20[4], .85, alpha=.9)
     color_consumo = ch_color(tableau20[8], alpha=.9)
@@ -154,13 +177,13 @@ def plot_potencia_consumo_horas(potencia, consumo, ldr=None,
     ax_ts = f.add_axes(ax_pos, frameon=False, axis_bgcolor=None)
 
     if rm_potencia is not None:
-        potencia = potencia.rolling(rm_potencia).mean()
+        potencia = potencia.rolling(rm_potencia).mean().fillna(0)
         if ldr is not None:
-            ldr = ldr.rolling(rm_potencia).mean()
+            ldr = ldr.rolling(rm_potencia).mean().fillna(0)
     elif rs_potencia is not None:
-        potencia = potencia.resample(rs_potencia, label='left').mean()
+        potencia = potencia.resample(rs_potencia, label='left').mean().fillna(0)
         if ldr is not None:
-            ldr = ldr.resample(rs_potencia, label='left').mean()
+            ldr = ldr.resample(rs_potencia, label='left').mean().fillna(0)
     rango_ts = potencia.index[0], potencia.index[-1]
     ax_ts.plot(potencia, lw=1, color=color_potencia)
     ax_ts.fill_between(potencia.index, potencia.values, 0, lw=0, facecolor=ch_color(tableau20[5], alpha=.4),
@@ -173,8 +196,9 @@ def plot_potencia_consumo_horas(potencia, consumo, ldr=None,
     ylim = max(ylim_c * ratio, ylim_p)
 
     if ldr is not None:
-        ax_ts.plot(ldr * ylim, lw=1, color=color_ldr, zorder=0)
-        ax_ts.fill_between(ldr.index, ldr.values * ylim, 0, lw=0, facecolor=ch_color(tableau20[3], alpha=.1), zorder=0)
+        ax_ts.plot(ldr * ylim / 1000, lw=1, color=color_ldr, zorder=0)
+        ax_ts.fill_between(ldr.index, ldr.values * ylim / 1000, 0, lw=0,
+                           facecolor=ch_color(tableau20[3], alpha=.1), zorder=0)
 
     # Remove plot frame
     ax_ts.set_frame_on(False)
@@ -209,9 +233,146 @@ def plot_potencia_consumo_horas(potencia, consumo, ldr=None,
     ax_bar.set_position(ax_pos)
     if savefig is not None:
         img_name = _gen_image_path(potencia, savefig)
-        # img_name = savefig if type(savefig) is str else 'plot_potencia_consumo_ldr.png'
         f.savefig(img_name, dpi=300, transparent=True, bbox_inches='tight', pad_inches=0.1, frameon=False)
         return img_name
     else:
         return f, [ax_bar, ax_ts]
 
+
+@timeit('_write_fig_to_svg')
+def _write_fig_to_svg(fig, name_img):
+    # plt.close(fig)
+    canvas = FigureCanvas(fig)
+    output = BytesIO()
+    imgformat = 'svg'
+    canvas.print_figure(output, format=imgformat, transparent=True)
+    svg_out = output.getvalue()
+    # preserve_ratio=True
+    svg_out = REGEXPR_SVG_WIDTH.sub(' width="100%" preserveAspectRatio="none"',
+                                    REGEXPR_SVG_HEIGHT.sub('<svg height="100%"', svg_out.decode(), count=0),
+                                    count=0).encode()
+    try:
+        with open(name_img, 'wb') as f:
+            f.write(svg_out)
+    except Exception as e:
+        print('HA OCURRIDO UN ERROR GRABANDO SVG A DISCO: {}'.format(e))
+        return False
+    return True
+
+
+def _tile_figsize(fraction=1.):
+    dpi = 72
+    # height = 200
+    # width = 1.875 * height
+    height = 200
+    width = 4.5 * height * fraction
+    return round(width / dpi, 2), round(height / dpi, 2)
+
+
+@timeit('_prep_axis_tile')
+def _prep_axis_tile(color):
+    fig, ax = plt.subplots(figsize=_tile_figsize(), dpi=72, gridspec_kw=GRIDSPEC_FULL, facecolor='none')
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
+    ax.tick_params(direction='in', pad=-15, length=3, width=.5)
+    ax.tick_params(axis='y', length=0, width=0, labelsize=FONTSIZE_TILE)
+    ax.tick_params(axis='x', which='both', top='off', labelbottom='off')
+    ax.xaxis.grid(True, color=color, linestyle=':', linewidth=1.5, alpha=.6)
+    ax.yaxis.grid(True, color=color, linestyle=':', linewidth=1, alpha=.5)
+    return fig, ax
+
+
+def _adjust_tile_limits(name, ylim, date_ini, date_fin, ax):
+    ax.set_ylim(ylim)
+    ax.set_xlim(left=date_ini, right=date_fin)
+    yticks = list(ax.get_yticks())[1:-1]
+    yticks_l = [v for v in yticks if (v - ylim[0] < (2 * (ylim[1] - ylim[0]) / 3)) and (v > ylim[0])]
+    ax.set_yticks(yticks)
+    if name == 'power':
+        ax.set_yticklabels([str(round(float(y / 1000.), 1)) + 'kW' for y in yticks_l])
+        ax.tick_params(pad=-45)
+    elif name == 'ldr':
+        ax.set_yticklabels([str(round(float(y / 10.))) + '%' for y in yticks_l])
+        ax.tick_params(pad=-40)
+    else:
+        ax.tick_params(pad=-30)
+        ax.set_yticklabels([str(round(y, 4)) for y in yticks_l])
+    return ax
+
+
+@timeit('plot_tile_last_24h')
+def plot_tile_last_24h(data_s, rs_data_s=None, rm_data_s=None, barplot=False, ax=None, fig=None):
+    matplotlib.rcParams['axes.linewidth'] = 0
+    color = [1, 1, 1]
+    if ax is None:
+        fig, ax = _prep_axis_tile(color)
+    else:
+        ax.patch.set_alpha(0)
+        ax.tick_params(direction='in', pad=-15, length=3, width=.5)
+        ax.tick_params(axis='y', length=0, width=0, labelsize=FONTSIZE_TILE)
+        ax.tick_params(axis='x', which='both', top='off', labelbottom='off')
+        ax.xaxis.grid(True, color=color, linestyle=':', linewidth=1.5, alpha=.6)
+        ax.yaxis.grid(True, color=color, linestyle=':', linewidth=1, alpha=.5)
+    if not barplot and rm_data_s is not None:
+        data_s = data_s.rolling(rm_data_s).mean()
+    elif not barplot and rs_data_s is not None:
+        data_s = data_s.resample(rs_data_s, label='left').mean()
+    rango_ts = data_s.index[0], data_s.index[-1]
+    date_ini, date_fin = [t.to_pydatetime() for t in rango_ts]
+
+    if data_s is not None and not data_s.empty:
+        lw, alpha = 1.5, 1.
+        ax.grid(b=True, which='major')
+        data_s = data_s.fillna(0)
+        if barplot:
+            div = .5
+            ylim = (0, np.ceil((data_s.max() + div) // div) * div)
+            ax.bar(data_s.index, data_s, width=1 / 28, edgecolor=color, color=[1, 1, 1, .5], linewidth=lw)
+            ax.xaxis.set_major_locator(mpd.HourLocator((0, 12)))
+            # ax.set_xticks([])
+        else:
+            if data_s.name == 'power':
+                div = 500
+                ylim = (0, np.ceil((data_s.max() + div / 5) / div) * div)
+            else:  # ldr
+                div = 100
+                ylim = (0, np.ceil((data_s.max() + div / 2) // div) * div)
+            data_s = data_s.fillna(0)
+            ax.plot(data_s.index, data_s, color=color, linewidth=lw, alpha=alpha)
+            ax.fill_between(data_s.index, data_s, color=color, alpha=alpha / 2)
+            ax.xaxis.set_major_locator(mpd.HourLocator((0, 12)))
+            ax.xaxis.set_minor_locator(mpd.HourLocator(interval=1))
+    else:
+        ylim = 0, 100
+        ax.annotate('NO DATA!', xy=(.35, .3), xycoords='axes fraction',
+                    va='center', ha='center', color=(.9, .9, .9), fontsize=25)
+
+    _adjust_tile_limits(data_s.name, ylim, date_ini, date_fin, ax)
+    return fig, ax
+
+
+@timeit('gen_svg_tiles')
+def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
+    total_hours = last_hours[0]
+    last_data, last_data_c = catalog.get(last_hours=total_hours, with_summary=True)
+    if last_data is not None:
+        ahora = dt.datetime.now().replace(second=0, microsecond=0)
+        xlim = mpd.date2num(ahora - dt.timedelta(hours=total_hours)), mpd.date2num(ahora)
+        delta = xlim[1] - xlim[0]
+        fig, ax = None, None
+        for data_s, plot_bar in zip([last_data.power, last_data.ldr, last_data_c.kWh],
+                                    [False, False, True]):
+            if ax is not None:
+                plt.cla()
+                fig.set_figwidth(_tile_figsize()[0])
+            fig, ax = plot_tile_last_24h(data_s, rs_data_s='5min', barplot=plot_bar, ax=ax, fig=fig)  # , rm_data_s=300)
+            for lh in last_hours:
+                file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_s.name, lh))
+                ax.set_xlim((xlim[0] + delta * (1 - lh / total_hours), xlim[1]))
+                fig.set_figwidth(_tile_figsize(lh / total_hours)[0])
+                _write_fig_to_svg(fig, name_img=file)
+        if fig is not None:
+            plt.close(fig)
+        return True
+    else:
+        return False

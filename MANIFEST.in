@@ -1,11 +1,9 @@
 # Include the license file
 include LICENSE
 include README.rst
-include DATA
 
 # Include the data files
 recursive-include enerpi/rsc *
+recursive-include enerpiweb/static *
 
-# If using Python 2.6 or less, then have to include package data, even though
-# it's already declared in setup.py
-# include sample/*.dat
+exclude enerpiweb/static/img/icons/enerpi_icon.sketch

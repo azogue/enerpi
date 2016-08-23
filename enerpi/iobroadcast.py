@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
 from cryptography.fernet import Fernet
+from binascii import Error
 import os
 import socket
+import sys
 from time import time
+from enerpi.base import CONFIG, log
 
-from enerpi import BASE_PATH
-from enerpi.base import log
 
+# LAN broadcasting
+UDP_IP = CONFIG.get('BROADCAST', 'UDP_IP', fallback="192.168.1.255")
+UDP_PORT = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
+DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}".format(UDP_IP, UDP_PORT)
 
 # Encrypting msg with symmetric encryption. URL-safe base64-encoded 32-byte key
-KEY_FILE = os.path.join(BASE_PATH, '.secret_key')
+# KEY_FILE = os.path.join(BASE_PATH, '.secret_key')
+KEY_FILE = os.path.expanduser(CONFIG.get('BROADCAST', 'KEY_FILE', fallback='~/.secret_key'))
+
+
 try:
     SECRET_KEY = open(KEY_FILE).read().encode()
 except FileNotFoundError:
@@ -25,14 +33,13 @@ except FileNotFoundError:
         open(KEY_FILE, 'wb').write(SECRET_KEY)
     else:
         print('\033[31;1mNot a valid KEY!:\n"{}". Try again... BYE!\033[0m'.format(SECRET_KEY))
-        import sys
         sys.exit(-1)
-CODEC = Fernet(SECRET_KEY)
-
-# LAN broadcasting
-UDP_IP = "192.168.1.255"
-UDP_PORT = 57775
-DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}".format(UDP_IP, UDP_PORT)
+try:
+    CODEC = Fernet(SECRET_KEY)
+except Error as error_fernet:
+    print('\033[31;1mCrypto KEY is not a valid KEY! -> {}.\nPATH={}, KEY="{}". Try again... BYE!\033[0m'
+          .format(error_fernet, KEY_FILE, SECRET_KEY))
+    sys.exit(-1)
 
 
 def receiver_msg_generator(verbose=True):
@@ -42,17 +49,22 @@ def receiver_msg_generator(verbose=True):
     :param verbose: Imprime Broadcast IP & PORT.
     :yield: msg, ∆T_msg, ∆T_decryp
     """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((UDP_IP, UDP_PORT))
-    if verbose:
-        log(DESCRIPTION_IO, 'ok', verbose, False)
-    while True:
-        tic = time()
-        data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
-        toc_msg = time()
-        msg = CODEC.decrypt(data).decode()
-        toc_dcry = time()
-        yield msg, toc_msg - tic, toc_dcry - toc_msg
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((UDP_IP, UDP_PORT))
+        if verbose:
+            log(DESCRIPTION_IO, 'ok', verbose, False)
+        while True:
+            tic = time()
+            data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
+            toc_msg = time()
+            msg = CODEC.decrypt(data).decode()
+            toc_dcry = time()
+            yield msg, toc_msg - tic, toc_dcry - toc_msg
+        sock.close()
+    except OSError as e:
+        log('OSError {} en receiver_msg_generator'.format(e), 'error', verbose, True)
+        return None
 
 
 def broadcast_msg(msg, counter_unreachable, sock_send=None, verbose=True):
@@ -89,6 +101,5 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, verbose=True):
         log('ERROR en sendto: {} [{}]'.format(e, e.__class__), 'err', verbose)
         sock_send = _get_broadcast_socket()
         sock_send.sendto(encrypted_msg_b, (UDP_IP, UDP_PORT))
-    # TODO poner logging fijo cuando se desconecte LOGMODE = DEBUG
-    log('SENDED: {}'.format(msg), 'debug', verbose, verbose)
+    log('SENDED: {}'.format(msg), 'debug', verbose, False)
     return sock_send

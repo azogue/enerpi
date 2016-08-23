@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{#{% extends "base/only_content_layout.html" %}#}
+
+{% macro styles_bokeh(version) %}
+    <link rel="stylesheet" href="http://cdn.pydata.org/bokeh/release/bokeh-{{ version }}.min.css" type="text/css"/>
+    <script type="text/javascript" src="http://cdn.pydata.org/bokeh/release/bokeh-{{ version }}.min.js"></script>
+    <style type="text/css">
+        {% set color_base = '#0CBB43' %}
+        {% set color_light = '#3BFC71' %}
+        {% set color_dark = '#076E27' %}
+        .bk-plot-above.bk-toolbar-active { border-bottom-color: {{ color_dark }}; border-width: 3px; }
+        .bk-tooltip-color-block { outline: None;}
+        .bk-tooltip.bk-tooltip-custom {
+            border-color: {{ color_base }};
+            background: linear-gradient({{ color_light }}, rgba(233, 232, 235, 0.71));
+            border-width: 1px;
+        }
+    </style>
+{% endmacro %}
+
+{% block styles %}
+    {{ styles_bokeh(b_version) }}
+{% endblock %}
+
+{% block content %}
+    {% if plot_divs|count == 1 %}
+        {{ plot_divs[0] | safe }}
+    {% else %}
+        <div id="div-plots-bokeh" class="container-fluid">
+            {% for bokeh_div in plot_divs %}
+                {{ bokeh_div | safe }}
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block scripts %}
+    {{ script_bokeh | safe}}
+{% endblock %}

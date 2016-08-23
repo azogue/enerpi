@@ -8,25 +8,32 @@ import random
 import re
 from subprocess import check_output
 from time import sleep, time
+from enerpi.base import CONFIG
 
+
+# Conexiones analógicas vía MCP3008
+MCP3008_DAC_PREC = 10  # bits
+CH_VREF = CONFIG.getint('MCP3008', 'CH_VREF', fallback=0)
+CH_PROBE = CONFIG.getint('MCP3008', 'CH_PROBE', fallback=4)
+CH_NOISE = CONFIG.getint('MCP3008', 'CH_NOISE', fallback=3)
+CH_LDR = CONFIG.getint('MCP3008', 'CH_LDR', fallback=7)
 
 # Current meter
-VOLTAJE = 236   # Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
-A_REF = 30.     # 30 A para 1 V --> Pinza amperométrica SCT030-030
-V_REF = 3.3     # V, V_ref RPI GPIO
-TZ = pytz.timezone('Europe/Madrid')
+# Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
+VOLTAJE = CONFIG.getint('ENERPI_SAMPLER', 'VOLTAJE', fallback=236)
+# 30 A para 1 V --> Pinza amperométrica SCT030-030
+A_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'A_REF', fallback=30.)
+# V, V_ref RPI GPIO
+V_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
+
+TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
+
+DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
 
 # RMS_ROLL_WINDOW_SEC = 2  # ∆T para el deque donde se acumulan frames
 N_SAMPLES_BUFFER = 250  # Nº de samples tenidos en cuenta para calcular el RMS instantáneo
 PREC_SAMPLING = dt.timedelta(microseconds=500)
-DELTA_SEC_DATA = 1
 
-# Conexiones analógicas vía MCP3008
-MCP3008_DAC_PREC = 10  # bits
-CH_VREF = 0
-CH_PROBE = 4
-CH_NOISE = 3
-CH_LDR = 7
 
 # Sampling a texto y viceversa
 HOST = check_output('hostname').decode().splitlines()[0]
@@ -62,9 +69,12 @@ def msg_to_dict(msg, func_err=print, *args_err):
 
 def random_generator():
     p_min, p_max = 180, VOLTAJE * 15
-    while True:
+    count = 0
+    while count < 50:
         p = random.randint(p_min, p_max)
         yield dt.datetime.now(), p, 1, 0, .5
+        count += 1
+    print('PARADA PROGRAMADA DE RANDOM_GENERATOR')
 
 
 def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, min_ts_ms=0):
@@ -134,9 +144,11 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
             if con_pausa:
                 sleep(max(.00001, (min_ts_ms - .05) / 1000 - (time() - tic)))
                 tic = time()
-    except (RuntimeError, OSError, AttributeError) as e:
-        print('{} en PISAMPLER: {}. Terminando el generador.'.format(e.__class__, e))
-    # TODO Mejorar gestión de errores del generador de valores (pisampler)
-    except Exception as e:
-        print('Exception en PISAMPLER: {} [{}]. Terminando el generador'.format(e, e.__class__))
+            # if counter_frames > 100:
+            #     raise RuntimeError
+    except OSError as e:
+        print('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e))
+        raise KeyboardInterrupt
+    except (RuntimeError, AttributeError) as e:
+        print('{} en PISAMPLER: "{}". Terminando el generador.'.format(e.__class__, e))
     yield None

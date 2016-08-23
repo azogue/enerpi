@@ -1,0 +1,57 @@
+{% macro alert_dismiss(obj_alert) %}
+    <div class="container-fluid">
+        <div class="alert alert-{{ obj_alert.alert_type }} alert-dismissable"
+             style="word-wrap:break-word; overflow-wrap: break-word;">
+            <button type="button" class="close" data-dismiss="alert"
+                aria-hidden="true">
+                &times;
+            </button>
+            {{ obj_alert.texto_alerta }}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro style_class_greyscale(name, perc) %}
+<style type="text/css">
+    .{{ name }} {
+        filter: none;
+        -webkit-filter: grayscale({{ perc }}%);
+        -moz-filter: grayscale({{ perc }}%);
+        -ms-filter: grayscale({{ perc }}%);
+        -o-filter: grayscale({{ perc }}%);
+    }
+</style>
+{% endmacro %}
+
+{% macro styles_bokeh(version) %}
+    <link rel="stylesheet" href="http://cdn.pydata.org/bokeh/release/bokeh-{{ version }}.min.css" type="text/css"/>
+    <link rel="stylesheet" href="http://cdn.pydata.org/bokeh/release/bokeh-widgets-{{ version }}.min.css" type="text/css"/>
+    <script type="text/javascript" src="http://cdn.pydata.org/bokeh/release/bokeh-{{ version }}.min.js"></script>
+    <script type="text/javascript" src="http://cdn.pydata.org/bokeh/release/bokeh-widgets-{{ version }}.min.js"></script>
+{#    <style type="text/css">#}
+{#        {% set color_base = config.COLORS[config.MACHINE_CONFIG['color']]['base'] %}#}
+{#        {% set color_light = config.COLORS[config.MACHINE_CONFIG['color']]['light'] %}#}
+{#        {% set color_dark = config.COLORS[config.MACHINE_CONFIG['color']]['dark'] %}#}
+{#        .bk-plot-above.bk-toolbar-active { border-bottom-color: {{ color_dark }}; border-width: 3px; }#}
+{#        .bk-tooltip-color-block { outline: None;}#}
+{#        .bk-tooltip.bk-tooltip-custom {#}
+{#            border-color: {{ color_base | css_color }};#}
+{#            background: linear-gradient({{ color_light | css_color(0.45) }}, rgba(233, 232, 235, 0.71));#}
+{#            border-width: 1px;#}
+{#        }#}
+{#    </style>#}
+{% endmacro %}
+
+
+{#{% macro body_gradient_background(color, color_themes, alpha_ini=0.53, alpha_fin=0.27) %}#}
+{#    <style type="text/css">#}
+{#        {% set color_base = color_themes[color]['base'] %}#}
+{#        {% set color_light = color_themes[color]['light'] %}#}
+{#        body {#}
+{#            background: -webkit-linear-gradient({{ color_base | css_color(alpha_ini) }}, {{ color_light | css_color(alpha_fin) }});#}
+{#            background: linear-gradient({{ color_base | css_color(alpha_ini) }}, {{ color_light | css_color(alpha_fin) }});#}
+{#            background-repeat: no-repeat;#}
+{#            height: 100%;#}
+{#        }#}
+{#    </style>#}
+{#{% endmacro %}#}

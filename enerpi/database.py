@@ -5,28 +5,38 @@ import pandas as pd
 from time import time
 import re
 from shutil import copy as copy_file
-
-from enerpi import DATA_PATH, HDF_STORE, INIT_LOG_MARK
-from enerpi.base import log, funcs_tipo_output, timeit
+from enerpi.base import CONFIG, log, funcs_tipo_output, timeit
+from enerpi.catalog import EnerpiCatalog
 from enerpi.pisampler import COL_TS, COLS_DATA
 
 
-# Disk data default store
-KEY = 'rms'
-KEY_ANT = 'raw'
+# Config:
+INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT ENERPI')
+DATA_PATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'DATA_PATH'))
+HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
+
+KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
+KEY_ANT = '/raw'
+CONFIG_CATALOG = dict(preffix='DATA',
+                      # raw_file='temp' + STORE_EXT,
+                      key_raw_data=KEY,
+                      key_summary_data='/hours',
+                      key_summary_extra='/days',
+                      # catalog_file=INDEX,
+                      check_integrity=True,
+                      verbose=True,
+                      backup_original=True)
 
 # Set CLI pandas width:
-pd.set_option('display.width', 140)
+# pd.set_option('display.width', 140)
 
 
-def append_delta_y_consumo(data):
-    data = data.copy()
-    deltas = pd.Series(data.index).diff().fillna(method='bfill')
-    frac_hora = deltas / pd.Timedelta(hours=1)
-    data['Wh'] = data.power * frac_hora.values
-    data['delta'] = deltas.values
-    consumo = data['Wh'].rename('consumo_kWh').resample('1h', label='left').sum().divide(1000.)
-    return data, consumo
+def init_catalog(base_path=DATA_PATH, **kwargs):
+    conf = CONFIG_CATALOG.copy()
+    conf.update(base_path=base_path)
+    if kwargs:
+        conf.update(**kwargs)
+    return EnerpiCatalog(**conf)
 
 
 def _clean_store_path(path_st):
@@ -50,80 +60,89 @@ def show_info_data(df, df_consumo=None):
     if df_consumo is not None and not df_consumo.empty:
         frac_h = df.delta.resample('1h').sum().rename('frac')
         df_consumo = pd.DataFrame(pd.concat([df_consumo, (frac_h / pd.Timedelta('1h')).round(3)], axis=1))
-        f_print('\n** CONSUMO ELÉCTRICO HORARIO (kWh):\n{}'.format(df_consumo))
+        f_print('\n** HOURLY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(df_consumo))
         dias = df_consumo.resample('1D').sum()
         dias.frac /= 24
-        f_print('\n*** CONSUMO ELÉCTRICO DIARIO (kWh):\n{}'.format(dias))
+        f_print('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias))
 
 
-def load_data(path_st=HDF_STORE, filter_data=None, verbose=True, append_consumo=True):
-    if os.path.exists(path_st):
-        with pd.HDFStore(path_st, mode='r') as st:
-            try:
-                data = st[KEY]
-            except KeyError:
-                data = st[KEY_ANT]
-                data.columns = COLS_DATA
-        if filter_data:
-            loc_data = filter_data.split('::')
-            if len(loc_data) > 1:
-                if len(loc_data[0]) > 0:
-                    filtered = data.loc[loc_data[0]:loc_data[1]]
-                else:
-                    filtered = data.loc[:loc_data[1]]
-            else:
-                filtered = data.loc[loc_data[0]:]
-            data = filtered
-        if append_consumo:
-            data, consumo = append_delta_y_consumo(data)
-            return data, consumo
-        else:
-            return data
-    log('HDF Store not found at "{}"'.format(path_st), 'error', verbose)
-    if append_consumo:
-        return None, None
-    return None
+# def append_delta_y_consumo(data):
+#     if not data.empty:
+#         data = data.copy()
+#         deltas = pd.Series(data.index).diff().fillna(method='bfill')
+#         frac_hora = deltas / pd.Timedelta(hours=1)
+#         data['Wh'] = data.power * frac_hora.values
+#         data['delta'] = deltas.values
+#         consumo = data['Wh'].rename('kWh').resample('1h', label='left').sum().divide(1000.)
+#         return data, consumo
+#     return data, data
+#
+#
+# def load_data(path_st=HDF_STORE, filter_data=None, verbose=True, append_consumo=True):
+#     if os.path.exists(path_st):
+#         with pd.HDFStore(path_st, mode='r') as st:
+#             try:
+#                 data = st[KEY]
+#             except KeyError:
+#                 data = st[KEY_ANT]
+#                 data.columns = COLS_DATA
+#         if filter_data:
+#             loc_data = filter_data.split('::')
+#             if len(loc_data) > 1:
+#                 if len(loc_data[0]) > 0:
+#                     filtered = data.loc[loc_data[0]:loc_data[1]]
+#                 else:
+#                     filtered = data.loc[:loc_data[1]]
+#             else:
+#                 filtered = data.loc[loc_data[0]:]
+#             data = filtered
+#         if append_consumo:
+#             data, consumo = append_delta_y_consumo(data)
+#             return data, consumo
+#         else:
+#             return data
+#     log('HDF Store not found at "{}"'.format(path_st), 'error', verbose)
+#     if append_consumo:
+#         return None, None
+#     return None
 
 
-def operate_hdf_database(raw_path_st, compact=False, path_backup=None, clear_database=False):
+# TODO Rehacer backups y clears en catalog
+def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
     # HDF Store Config
     path_st = _clean_store_path(raw_path_st)
     existe_st = os.path.exists(path_st)
     if not existe_st:
         log('HDF Store not found at "{}"'.format(path_st), 'warn', True)
 
-    # Compactado de HDF Store
-    if existe_st and compact:
-        log('Se procede a compactar el HDF Store de "{}"'.format(path_st), 'info')
-        df = load_data(path_st, append_consumo=False)
-        show_info_data(df)
-        temp_st = path_st + '_temp.h5'
-        save_in_store(df, path_st=temp_st, verb=True)
-        os.remove(path_st)
-        os.rename(temp_st, path_st)
-
     # Backup de HDF Store
     if existe_st and path_backup is not None:
         path_bkp = _clean_store_path(path_backup)
-        log('Se procede a hacer backup del HDF Store:\n "{}" --> "{}"'.format(path_st, path_bkp), 'ok')
+        log('Backing up HDF Store:\n "{}" --> "{}"'.format(path_st, path_bkp), 'ok')
         copy_file(path_st, path_bkp)
 
     # Borrado de HDF Store
     if existe_st and clear_database:
-        log('Se procede a borrar el HDF Store en "{}"'.format(path_st), 'warn')
+        log('Deleting HDF Store in "{}"'.format(path_st), 'warn')
         os.remove(path_st)
 
     return path_st
 
 
-def save_in_store(data, path_st=HDF_STORE, verb=True):
-    with pd.HDFStore(path_st, mode='a', complevel=9, complib='zlib') as st:
-        if type(data) is not pd.DataFrame:
+def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
+    try:
+        if data is not None and type(data) is not pd.DataFrame:
             data = pd.DataFrame(data, columns=[COL_TS] + COLS_DATA).set_index(COL_TS).dropna().astype(float)
-        st.append(KEY, data)
-        df_tot = st[KEY]
-    log('Tamaño Store: {:.1} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)), 'debug', verb)
-    return True
+            # with pd.HDFStore(path_st, mode='a') as st:
+            with pd.HDFStore(path_st, mode='a', complevel=9, complib='blosc') as st:
+                st.append(KEY, data)
+                df_tot = st[KEY]
+            log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)), 'debug', verb)
+            if catalog is not None:
+                catalog.update_catalog(data=df_tot)
+        return True
+    except ValueError as e:
+        log('ValueError en save_in_store: {}'.format(e), 'error', True)
 
 
 @timeit('get_ts_last_save')
@@ -141,12 +160,12 @@ def get_ts_last_save(path_st=HDF_STORE, get_last_sample=False, verbose=True, n=3
         log('Store UPDATE: {:%c} , SIZE = {:.2f} KB. TOOK {:.3f} s'.format(ts, size_kb, time() - tic), 'debug', verbose)
         return ts
     except FileNotFoundError:
-        log('ERROR: No se encuentra Store en {}'.format(path_st), 'err', True)
+        log('ERROR: Store not found in {}'.format(path_st), 'err', True)
         return None
 
 
 def delete_log_file(log_file, verbose=True):
-    log('Se procede a borrar el LOG FILE en {} ...'.format(log_file), 'warn', verbose)
+    log('Deleting LOG FILE in {} ...'.format(log_file), 'warn', verbose)
     os.remove(log_file)
 
 
@@ -162,8 +181,9 @@ def extract_log_file(log_file, extract_temps=True, verbose=True):
     df_log['ts'] = df_log['ts'].apply(lambda x: dt.datetime.strptime(x, '%d/%m/%Y %H:%M:%S'))
     df_log.loc[df_log.msg.str.startswith('Tªs --> '), 'temp'] = True
     df_log.loc[df_log.msg.str.startswith('SENDED: '), 'debug_send'] = True
-    b_warn = df_log.tipo == 'WARNING'
-    df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError: [Errno 101] Network is unreachable')
+    b_warn = df_log['tipo'] == 'WARNING'
+    df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError: [Errno 101]; C_UNREACHABLE:')
+    # df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError:  La red es inaccesible')
     df_log['exec'] = df_log['msg'].str.contains(INIT_LOG_MARK).cumsum().astype(int)
     df_log = df_log.set_index('ts')
     if extract_temps:

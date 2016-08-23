@@ -1,0 +1,5 @@
+{% extends "layout_simple.html" %}
+{% from 'monitor_tiles.html' import monitor_tiles with context %}
+{% block content %}
+    {{ monitor_tiles(include_consumption, include_ldr) }}
+{% endblock %}

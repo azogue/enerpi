@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+from enerpi.base import CONFIG
+
+
 # PINOUT RGB_LED
-PIN_R = 19
-PIN_G = 20
-PIN_B = 16
+PIN_R = CONFIG.getint('RGBLED', 'PIN_R', fallback=19)
+PIN_G = CONFIG.getint('RGBLED', 'PIN_G', fallback=20)
+PIN_B = CONFIG.getint('RGBLED', 'PIN_B', fallback=16)
 
 
 def get_rgbled(verbose=True):

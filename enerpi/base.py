@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
+import configparser
 import logging
+import os
+import subprocess
 from time import time, sleep
+from enerpi import BASE_PATH
+
+
+CONFIG = configparser.RawConfigParser()
+CONFIG.read(os.path.join(BASE_PATH, 'config_enerpi.ini'))
 
 
 HAY_PP = True
@@ -63,11 +71,11 @@ def show_pi_temperature(ts=3):
         while True:
             t_cpu = get_cpu_temp()
             t_gpu = get_gpu_temp()
-            log('Tªs --> {:.1f} / {:.1f} ºC'.format(t_cpu, t_gpu), 'otro', True, True)
+            log('Tªs --> {:.1f} / {:.1f} ºC'.format(t_cpu, t_gpu), 'otro', False, True)
             sleep(ts)
 
 
-def timeit(cadena_log, *args_dec):
+def timeit(cadena_log, verbose=False, *args_dec):
     def real_deco(function):
         def wrapper(*args, **kwargs):
             kwargs_print = {}
@@ -76,9 +84,31 @@ def timeit(cadena_log, *args_dec):
                     kwargs_print[k] = kwargs.pop(k)
             tic = time()
             out = function(*args, **kwargs)
-            print_yellowb(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
+            if verbose:
+                print_yellowb(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
+            logging.debug(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
             return out
         return wrapper
     return real_deco
 
 
+def get_lines_file(filename, tail=None, reverse=False):
+    if os.path.exists(filename):
+        if os.path.isfile(filename):
+            try:
+                if tail is not None:
+                    output = subprocess.check_output(['/usr/bin/tail', '-n', '{}'.format(int(tail)), filename])
+                    lines = output.decode().split('\n')
+                else:
+                    with open(filename, 'r') as file:
+                        lines = file.read().split('\n')
+                if len(lines) > 0 and lines[-1] == '':
+                    lines = lines[:-1]
+                if reverse:
+                    return list(reversed(lines))
+                return lines
+            except Exception as e:
+                return ['ERROR Reading {}: "{}" [{}]'.format(filename, e, e.__class__)]
+        else:
+            return ['{} is not a file!!'.format(filename)]
+    return ['Path not found: "{}"'.format(filename)]

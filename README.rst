@@ -7,13 +7,17 @@
 
 A simple current meter based on:
 
-- SCT-030 030 Current sensor,
-- MCP3008 Analog to Digital converter (on RASP.IO Analog Zero Hat)
-- Raspberry PI
+- **SCT-030 030** Current sensor,
+- **MCP3008** Analog to Digital converter (on RASP.IO Analog Zero Hat)
+- **Raspberry PI**
 
-.. Warning:: Hacer descripción del módulo
+* Plus a little web server (**flask** based) with real-time streaming, beautiful **matplotlib** svg's,
+and some **bokeh** plots.
 
-----
+.. Warning:: TODO Hacer descripción del módulo
+
+-------------------------------
+
 
 To get started:
 
@@ -84,9 +88,9 @@ CLI Help:
 
     *** By default, ENERPI starts as receiver (-r) ***
 
-============ ==============
+============ =============
 |left-image| |right-image|
-============ ==============
+============ =============
 
 |plot-image|
 
@@ -100,7 +104,7 @@ CLI Help:
 
 
 .. |left-image| image:: https://github.com/azogue/enerpi/blob/master/docs/screenshot_cli_enerpi%20local%20receiver.png?raw=true
-       :width: 120%
+       :width: 100%
        :alt: CLI Receiver
        :align: bottom
 

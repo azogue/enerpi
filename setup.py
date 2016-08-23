@@ -2,6 +2,7 @@
 from setuptools import setup, find_packages
 from codecs import open
 import os
+from enerpi import VERSION
 
 
 with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst'), encoding='utf-8') as f:
@@ -12,18 +13,15 @@ PACKAGES = find_packages(exclude=['antiguo', 'docs', 'notebooks', 'DATA'])
 setup(
     # ext_modules=cythonize("extractlog.pyx"),
     name='enerpi',
-    version='0.8.0',
+    version=VERSION,
     description='AC Current Meter for Raspberry PI with GPIOZERO and MCP3008',
     long_description=LONG_DESCRIPTION,
     keywords='enerpi current gpiozero raspberry analog',
-
-    # url='https://github.com/azogue/enerpi',
-
     # Author details
     author='Eugenio Panadero',
     author_email='azogue.lab@gmail.com',
+    url='https://github.com/azogue/enerpi',
 
-    # Choose your license
     license='MIT',
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
@@ -50,16 +48,14 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Operating System :: Unix'
     ],
-
     packages=PACKAGES,
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
-    # package_data={
-    #     'sample': ['package_data.dat'],
-    # },
     package_data={
-        'enerpi': ['rsc/paleta_power_w.csv'],
+        'enerpi': ['rsc/paleta_power_w.csv', 'config_enerpi.ini', 'enerdaemon.sh'],
+        'enerpiweb': ['enerpiweb.ini', 'uwsgi_mac.ini', 'enerpiweb_nginx.conf',
+                      'templates/*', 'static/css/*', 'static/img/icons/*', 'static/css/*'],
     },
 
     # Alternatively, if you want to distribute just a my_module.py, uncomment
@@ -69,7 +65,8 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['numpy', 'pandas', 'pytz', 'cryptography', 'gpiozero', 'matplotlib'],
+    install_requires=['numpy', 'pandas', 'pytz', 'cryptography', 'gpiozero', 'matplotlib', 'termcolor', 'flask',
+                      'werkzeug', 'jinja2', 'bokeh'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
@@ -87,7 +84,10 @@ setup(
 
     entry_points={
         'console_scripts': [
-            'enerpi = enerpi.__main__:enerpi_main'
+            'enerpi = enerpi.__main__:enerpi_main_cli',
+            'pitemps = pitemps.__main__:main',
+            'enerpi-daemon = enerpi.enerdaemon:enerpi_daemon',
+            'enerpiweb = enerpiweb.__main__:main'
         ]
     },
 )

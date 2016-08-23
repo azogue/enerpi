@@ -1,0 +1,186 @@
+{% from 'macros.html' import style_class_greyscale %}
+
+{% macro monitor_tile_stream(title, type_data, mag, unit, class_ts, class_value, glyp) %}
+<div id="tile-{{ type_data + '-' + mag }}"
+     class="tile-monitor tile-monitor-{{ type_data}} tile-{{ type_data + '-' + mag }}">
+     <img id="tile-{{ type_data + '-' + mag }}-img" class="tile-img-bg" alt="last 24h ev."
+          src="{{ url_for('static', filename='img/generated/tile_{}_{}_last_72h.svg'.format(type_data, mag)) }}">
+    <div class="tile-monitor-innerContent">
+        <span class="tile-monitor-label pull-left">
+            {% if glyp %}
+                <strong><i class="fa fa-{{ glyp }}" aria-hidden="true"></i> {{ title }}</strong>
+            {% else %}
+                <strong>{{ title }}:</strong>
+            {% endif %}
+            <br><span class="tile-monitor-label-sub {{ class_ts }}"></span>
+        </span>
+        <span id="tile-{{ type_data + '-' + mag }}-text" class="pull-right tile-{{ type_data + '-' + mag }}-text">
+            <p class="tile-monitor-unit">{{ unit }}</p>
+            <p class="tile-monitor-value {{ class_value }}"></p>
+        </span>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro monitor_tiles(with_consumption, with_ldr) %}
+{% block styles %}
+    <script src="https://raw.github.com/phstc/jquery-dateFormat/master/dist/jquery-dateFormat.min.js"></script>
+    <link href="{{ url_for('static', filename='css/tiles.css') }}" rel="stylesheet">
+{#    {{ body_gradient_background(config.MACHINE_CONFIG['color'], config.COLORS) }}#}
+    {{ style_class_greyscale('tile-inactive', 90) }}
+    {{ style_class_greyscale('tile-no-stream', 30) }}
+    {{ style_class_greyscale('tile-monitor:hover', 50) }}
+{% endblock %}
+
+<div class="tile-monitor-container-join">
+    {{ monitor_tile_stream('POWER', 'enerpi_data', 'power', 'W', 'stream-ts-power', 'stream-power', 'flash') }}
+    {% if with_ldr %}
+    {{ monitor_tile_stream('ILUMINATION', 'enerpi_data', 'ldr', '%', 'stream-ts-ldr', 'stream-ldr', 'lightbulb-o') }}
+    {% endif %}
+    {% if with_consumption %}
+    {{ monitor_tile_stream('CONSUMPTION', 'enerpi_data', 'kWh', 'kWh', 'stream-ts-kWh', 'stream-kWh', 'bar-chart') }}
+    {% endif %}
+</div>
+
+{% block scripts %}
+    <script type="text/javascript">
+        function refresh_static_tile_bg(type_data, type_mag) {
+            var $item = $("#tile-" + type_data + "-" + type_mag + "-img");
+            var bgimg_url = $item.attr("src");
+            var $downloadingImage = $("<img>");
+            $downloadingImage.load(function(){
+                $item.fadeOut(250, function(){
+                    $(this).attr("src", $downloadingImage.attr("src")).fadeIn(250);
+                });
+            });
+            bgimg_url = bgimg_url.replace(/.svg(\?)?([0-9]*)?/i, ".svg?" + String(new Date().getTime()));
+            $downloadingImage.attr("src", bgimg_url);
+        }
+        function execAndSetIntervalSwitchTileBg(type_data, type_mag) {
+            var item = $("#tile-" + type_data + "-" + type_mag + "-img");
+            if (item.length > 0) {
+                refresh_static_tile_bg(type_data, type_mag);
+                setInterval(function() { refresh_static_tile_bg(type_data, type_mag); }, 60000);
+            }
+            return 0;
+        }
+        function delay_remove_class(obj, class_remove, delay_ms) {
+            setTimeout(function() { obj.removeClass(class_remove); }, delay_ms);
+            return 0;
+        }
+        function checkTilesWithWidth() {
+            var tile = $(".tile-monitor");
+            tile.each(function (index, value){
+                var width = parseInt($(this).width());
+                var bgimg_url = $(this).find('img').attr("src");
+                var delta_tile;
+                if (width > 650) {
+                    delta_tile = '72h';
+                } else if (width > 400) {
+                    delta_tile = '48h';
+                } else {
+                    delta_tile = '24h';
+                }
+                if (bgimg_url.indexOf(delta_tile) == -1) {
+                    var new_bgimg_url = bgimg_url.replace('72h', delta_tile).replace('48h', delta_tile)
+                            .replace('24h', delta_tile);
+                    console.log(width + '-> ' + bgimg_url + ' => CAMBIO A: ' + new_bgimg_url);
+                    $(this).find('img').attr("src", new_bgimg_url);
+                }
+            });
+        }
+{#        function makeTableRow(data, labels) {#}
+{#            #}
+{#        }#}
+        $(document).ready(
+            function() {
+                var animate_value = 'minipulse';
+                var tile = $(".tile-monitor");
+                var container_height = parseInt(tile.height());
+
+                var fontSizeValue = container_height * 0.72+"px";
+                var fontSizeUnit = container_height * 0.26+"px";
+                var fontSizeLabel = container_height * 0.12+"px";
+                var fontSizeLabelSub = container_height * 0.1+"px";
+
+                $(".tile-monitor-value").css('font-size', fontSizeValue);
+                $(".tile-monitor-unit").css('font-size', fontSizeUnit);
+                $(".tile-monitor-label").css('font-size', fontSizeLabel);
+                $(".tile-monitor-label-sub").css('font-size', fontSizeLabelSub);
+
+                checkTilesWithWidth();
+                $(window).on('resize', '', {}, checkTilesWithWidth);
+
+                execAndSetIntervalSwitchTileBg('enerpi_data', 'power');
+                execAndSetIntervalSwitchTileBg('enerpi_data', 'ldr');
+                execAndSetIntervalSwitchTileBg('enerpi_data', 'kWh');
+
+                var sse = new EventSource('{{ config['PREFIX_WEB'] }}/stream_enerpi');
+                sse.onmessage = function (message) {
+                    if (message.data == '"CLOSE"') {
+                        console.log('detectando id CLOSE y cerrando');
+                        $('.tile-monitor').not('.tile-inactive').addClass('tile-no-stream');
+                        sse.close();
+                    } else {
+                        var data = JSON.parse(message.data);
+                        var table = $('#table_body_stream');
+                        var hay_table = table.length > 0;
+                        {# console.log(data);#}
+                        var tile = $('.tile-monitor-' + 'enerpi_data');
+                        var text_values = tile.find('p.tile-monitor-value');
+
+                        $('#text-streams').html('Real time from: "' + data.host + '"');
+                        $('.stream-ts-power').html(data.ts);
+                        $('.stream-power').html(data.power);
+{#                        $('.stream-ts-kWh').html(data.ts);#}
+{#                        $('.stream-kWh').html(Math.round(data.noise * 100) / 100);#}
+                        $('.stream-ts-ldr').html(data.ts);
+                        $('.stream-ldr').html(Math.round(data.ldr * 1000) / 10);
+                        text_values.addClass(animate_value);
+                        delay_remove_class(text_values, animate_value, 500);
+
+                        if (hay_table) {
+                            var new_row = '<tr><td>' + $.format.date(data.ts, "HH:mm:ss")
+                                    + '</td><td style="text-align: left" class="hidden-md-down">' + data.msg + '</td><td><strong>'
+                                    + data.power + '</strong></td><td>' + (100 * data.ldr).toFixed(1) + '</td><td>'
+                                    + data.ref + '</td><td class="hidden-xs-down">' + data.noise + '</td></tr>'
+                            table.prepend(new_row);
+                        }
+                    }
+                };
+            });
+    </script>
+{% endblock %}
+{% endmacro %}
+
+{% macro table_last_samples_with_stream(last_samples) %}
+<div id="container_table_stream" class="container-fluid">
+    <h3><strong><span class="glyphicons glyphicons-stats"></span>Last samples:</strong></h3>
+    <table class="table table-sm table-stripped table-responsive table-hover table-not-bordered"
+           width="100%"
+           style="text-align: center">
+        <thead class="bg-success">
+            <tr>
+                <th>Time</th>
+                <th class="hidden-md-down">Raw MSG</th>
+                <th>Power (W)</th>
+                <th>LDR (%)</th>
+                <th>nº samples</th>
+                <th class="hidden-xs-down">noise</th>
+            </tr>
+        </thead>
+        <tbody id="table_body_stream">
+        {% for sample in last_samples|reverse %}
+            <tr>
+            <td>{{ sample['ts'].strftime('%H:%M:%S') }}</td>
+            <td style="text-align: left" class="hidden-md-down">{{ sample['msg'] }}</td>
+            <td><strong>{{ sample['power']|int }}</strong></td>
+            <td>{{ (sample['ldr'] * 100)|round(1)}}</td>
+            <td>{{ sample['ref']|int }}</td>
+            <td class="hidden-xs-down">{{ sample['noise'] }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
