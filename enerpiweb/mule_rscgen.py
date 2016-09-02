@@ -18,7 +18,7 @@ LOGGING_LEVEL_SERVER = 'DEBUG'
 # Establecemos logging
 logging.basicConfig(filename=SERVER_FILE_LOGGING, level=LOGGING_LEVEL_SERVER, datefmt='%d/%m/%Y %H:%M:%S',
                     format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
-logging.debug('(MULE)->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGING))
+# logging.debug('(MULE)->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGING))
 
 
 ###############################
@@ -26,7 +26,7 @@ logging.debug('(MULE)->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGI
 ###############################
 def _rsc_generator(catalog):
     tic, ok = time(), False
-    logging.debug('**RESOURCE_GENERATOR desde MULE con PID={}!!!'.format(os.getpid()))
+    # logging.debug('**RESOURCE_GENERATOR desde MULE con PID={}!!!'.format(os.getpid()))
     # try:
     ok = gen_svg_tiles(IMG_TILES_BASEPATH, catalog, last_hours=(72, 48, 24))
     toc = time()
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     p.add_argument('-t', '--timer', action='store', type=int, metavar='∆T', default=TILES_GENERATION_INTERVAL,
                    help='Set periodic timer, in seconds. Default={}.'.format(TILES_GENERATION_INTERVAL))
     args = p.parse_args()
-    logging.debug('(MULE)-> main con args={}'.format(args))
+    # logging.debug('(MULE)-> main con args={}'.format(args))
 
     # Cargamos catálogo
     cat = init_catalog(base_path=DATA_PATH, raw_file=HDF_STORE, check_integrity=False)
@@ -64,9 +64,9 @@ if __name__ == '__main__':
         _rsc_generator(cat)
     else:
         logging.debug('(MULE)-> Init loop with timer={} seconds'.format(args.timer))
-        print('(MULE)-> Init loop with timer={} seconds'.format(args.timer))
+        # print('(MULE)-> Init loop with timer={} seconds'.format(args.timer))
         _loop_rsc_generator(cat, args.timer)
-    logging.debug('(MULE) Saliendo')
+    # logging.debug('(MULE) Saliendo')
     # p = Process(target=_rsc_generator, args=(cat,))
     # p.start()
     # p.join()
