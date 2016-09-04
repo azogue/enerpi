@@ -2,62 +2,7 @@
 {% from 'monitor_tiles.html' import monitor_tiles with context %}
 {% from 'macros.html' import styles_bokeh with context %}
 
-{% block styles %}
-    {{ styles_bokeh(b_version) }}
-{% endblock %}
-
-{% block scripts %}
-    <script>
-    $(document).ready(function() {
-{#        var url = make_url_plot_bokeh();#}
-        var url = "{{ url_table }}";
-        var jqid_div_bokeh = '#XXX';
-        var query_ok = false;
-        sse = new EventSource(url);
-        sse.onmessage = function(message) {
-            console.log('Mensaje recibido!')
-            if (message.data == '"CLOSE"') {
-                sse.close();
-            } else {
-                var data = JSON.parse(message.data);
-                if (data['success']) {
-                    console.log('Mensaje recibido con success!')
-                    if (data.hasOwnProperty('table') && data.hasOwnProperty('took')) {
-                        console.log('Mensaje tabla!')
-                        $("#table-buffer").html(data['table']);
-                        $("#table-took").html('TABLE TOOK ' + data['took'] + 'secs');
-                        $("#table-took").removeClass('invisible');
-                    } else if (data.hasOwnProperty('bokeh_div') && data.hasOwnProperty('took')) {
-                        console.log('Mensaje plot!')
-                        $('#div-plot-bokeh').html(data['bokeh_div']);
-                        $("body").append(data['script_bokeh']);
-                        $("#bokeh-plot-took").html('PLOT TOOK ' + data['took'] + 'secs');
-                        $("#bokeh-plot-took").removeClass('invisible');
-{#                     var id_div_plot = data['id_div'];#}
-{#                        $('#plot_div_id').attr("id", id_div_plot);#}
-{#                    jqid_div_bokeh = '.bk-plot';#}
-                    }
-                }
-{#                else {#}
-{#                    query_ok = false;#}
-{#                    var str_error = JSON.stringify(data, undefined, 2);#}
-{#                    console.log('ERROR: \n' + str_error);#}
-{#                    $('#show-errors').removeClass("hidden");#}
-{#                    $('#show-errors-json').html(str_error);#}
-{#                    jqid_div_bokeh = '#show-errors';#}
-{#                }#}
-            }
-        };
-    });
-    </script>
-{% endblock %}
-
-{#    {{ js_resources|indent(4)|safe }}#}
-{#    {{ css_resources|indent(4)|safe }}#}
-{#    {{ plot_script|indent(4)|safe }}#}
-
 {% block content %}
-{#    {{ monitor_tiles(include_consumption, include_ldr) }}#}
     <div class="jumbotron">
         <div class="container-fluid">
             <div class="row">
@@ -67,12 +12,9 @@
                 </div>
                 <div class="col-xs-6 col-sm-8 col-md-9 col-lg-9">
                     <h1 class="display-5">EnerPi Control</h1>
-                    <p><span id="table-took" class="invisible"></span><span id="bokeh-plot-took" class="invisible"></span></p>
-
-
                 </div>
                 <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">
-                    <br>
+                    <br class="hidden-sm hidden-xs">
                     <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with enerPI LOG's">
                       <div class="btn-group" role="group" aria-label="FLASK LOG">
                         <a class="btn btn-secondary btn-outline-primary" href="{{ url_for('showfile', file='flask', tail=200, reverse=True)}}" role="button">Flask LOG</a>
@@ -82,27 +24,23 @@
                         <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='enerpi', tail=200, reverse=True)}}" role="button">EnerPi LOG</a>
                       </div>
                       <div class="btn-group" role="group" aria-label="UWSGI+NGINX LOGs">
-                        <a class="btn btn-secondary btn-outline-warning" href="{{ url_for('showfile', file='uwsgi', tail=200, reverse=True)}}" role="button">UWSGI LOG</a>
-                        <a class="btn btn-outline-secondary" href="{{ url_for('showfile', file='nginx', tail=200, reverse=True)}}" role="button">NGINX Access</a>
-                        <a class="btn btn-outline-danger" href="{{ url_for('showfile', file='nginx_err', tail=200, reverse=True)}}" role="button">NGINX Errors</a>
+                        <a class="btn btn-sm btn-secondary btn-outline-warning" href="{{ url_for('showfile', file='uwsgi', tail=200, reverse=True)}}" role="button">UWSGI LOG</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('showfile', file='nginx', tail=200, reverse=True)}}" role="button">NGINX Access</a>
+                        <a class="btn btn-sm btn-outline-danger" href="{{ url_for('showfile', file='nginx_err', tail=200, reverse=True)}}" role="button">NGINX Errors</a>
+                      </div>
+                    </div>
+                </div>
+                <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">
+                    <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with enerPI links to plots & tables">
+                      <div class="btn-group" role="group" aria-label="LINKS">
+                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('bokehplot')}}" role="button">
+                            <i class="fa fa-area-chart" aria-hidden="true"></i> Graph last</a>
+                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('tablelast')}}" role="button">
+                            <i class="fa fa-table" aria-hidden="true"></i> Table last</a>
                       </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-     <div class="container-fluid">
-         <h4>Last samples:</h4>
-        <div class="row">
-            <div id="div-plot-bokeh" class="col-xs-12 col-sm-12 col-md-7 col-lg-8">
-{#                <div id="show-errors" class="container-fluid invisible">#}
-{#                    <h4>Errores: </h4>#}
-{#                    <pre id="show-errors-json"></pre>#}
-{#                </div>#}
-            </div>
-{#            <div class="col-xs-12 col-sm-12 col-md-5 col-lg-4"><div id="table-buffer" class="container-fluid"></div></div>#}
-            <div id="table-buffer" class="col-xs-12 col-sm-12 col-md-5 col-lg-4"></div>
-        </div>
-    </div>
-
 {% endblock %}

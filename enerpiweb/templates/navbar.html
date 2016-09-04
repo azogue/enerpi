@@ -1,31 +1,3 @@
-{# FUNCIONA CON BOOTSTRAP 3#}
-{#{% macro navigation_bar() %}#}
-{#    {% block styles %}#}
-{#        <link href="{{ url_for('static', filename='css/navbar_custom.css') }}" rel="stylesheet">#}
-{#    {% endblock %}#}
-{#    <nav id="mynavbar" class="navbar navbar-custom navbar-custom-green" role="navigation">#}
-{#        <div class="container-fluid">#}
-{#            <div class="navbar-header">#}
-{#                <div class="navbar-left">#}
-{#                    <a class="nav pull-left navbar-link navbar-brand" href="{{ url_for('index') }}">#}
-{#                        <strong><span class="glyphicon glyphicon-flash"></span> enerPI</strong>#}
-{#                    </a>#}
-{#                    <a class="nav pull-right navbar-link hidden visible-xs" href="{{ url_for('control') }}">#}
-{#                        <img style="max-height:30px; margin: 0; border: 0; margin-top: -1px"#}
-{#                             class="img-responsive"#}
-{#                             src="{{ url_for('static', filename='img/icons/rsc/Icon-Small-40@2x.png') }}">#}
-{#                    </a>#}
-{#                </div>#}
-{#            </div>#}
-{#            <a class="nav pull-right navbar-link hidden-xs" href="{{ url_for('control') }}">#}
-{#                <img style="max-height:30px; margin: 0; border: 0;"#}
-{#                     class="img-responsive"#}
-{#                     src="{{ url_for('static', filename='img/icons/rsc/Icon-Small-40@2x.png') }}">#}
-{#            </a>#}
-{#        </div>#}
-{#    </nav>#}
-{#{% endmacro%}#}
-
 {% macro navigation_bar() %}
     {% block styles %}
         <link href="{{ url_for('static', filename='css/navbar_custom.css') }}" rel="stylesheet">
@@ -34,21 +6,12 @@
         <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('index') }}">
             <strong><i class="fa fa-bolt" aria-hidden="true"></i> enerPI</strong>
         </a>
-{#        <ul class="nav navbar-nav">#}
-{#          <li class="nav-item active">#}
-{#            <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>#}
-{#          </li>#}
-{#          <li class="nav-item">#}
-{#            <a class="nav-link" href="#">Config</a>#}
-{#          </li>#}
-{#          <li class="nav-item">#}
-{#            <a class="nav-link" href="#">Pricing</a>#}
-{#          </li>#}
-{#          <li class="nav-item">#}
-{#            <a class="nav-link" href="#">About</a>#}
-{#          </li>#}
-{#        </ul>#}
         <form class="form-inline pull-xs-right">
+            <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('bokehplot') }}">
+                <strong><i class="fa fa-area-chart" aria-hidden="true"></i></strong></a>
+            <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('tablelast') }}">
+                <strong><i class="fa fa-table" aria-hidden="true"></i></strong></a>
+            <a class="navbar-brand active" href="#"></a>
 {#          <input class="form-control" type="text" placeholder="Search">#}
 {#          <button class="btn btn-outline-primary" type="submit">Search</button>#}
             <a class="nav pull-right navbar-link hidden-xs" href="{{ url_for('control') }}">

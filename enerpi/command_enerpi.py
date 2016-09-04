@@ -23,7 +23,7 @@ LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 IMG_TILES_BASEPATH = os.path.join(BASE_PATH, '..', 'enerpiweb', 'static', 'img', 'generated')
 
 
-def _set_logging_conf(filename=FILE_LOGGING, level=LOGGING_LEVEL, verbose=True):
+def set_logging_conf(filename=FILE_LOGGING, level=LOGGING_LEVEL, verbose=True):
     # Logging configuration
     os.makedirs(DATA_PATH, exist_ok=True)
     logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
@@ -35,7 +35,7 @@ def _run_logger(is_demo=True, verbose=True, path_st=None, **kwargs_sender):
     # Logging configuration
     logfile = FILE_LOGGING + '_demo.log' if is_demo else FILE_LOGGING
 
-    _set_logging_conf(logfile, LOGGING_LEVEL, verbose)
+    set_logging_conf(logfile, LOGGING_LEVEL, verbose)
     print(logfile)
 
     # Data Store Config
@@ -138,7 +138,7 @@ def enerpi_main_cli():
     if (args.enerpi or args.info or args.compact or args.backup or args.clear or
             args.last or args.clearlog or args.filter or args.plot or args.plot_tiles):
         # Logging configuration
-        _set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, args.verbose)
+        set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, args.verbose)
 
         # Delete LOG File
         if args.clearlog:
@@ -215,7 +215,9 @@ def enerpi_main_cli():
         receiver(verbose=args.verbose, debug=args.debug)
 
 
-def enerpi_main_logger():
+def enerpi_main_logger(set_logging=False):
+    if set_logging:
+        set_logging_conf(verbose=False)
     # Shows RPI Temps
     Timer(3, show_pi_temperature, args=(3,)).start()
     _run_logger(is_demo=False, verbose=False,

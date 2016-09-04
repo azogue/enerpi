@@ -18,7 +18,7 @@ HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
 KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
 KEY_ANT = '/raw'
 CONFIG_CATALOG = dict(preffix='DATA',
-                      # raw_file='temp' + STORE_EXT,
+                      raw_file=HDF_STORE,
                       key_raw_data=KEY,
                       key_summary_data='/hours',
                       key_summary_extra='/days',
@@ -26,9 +26,6 @@ CONFIG_CATALOG = dict(preffix='DATA',
                       check_integrity=True,
                       verbose=True,
                       backup_original=True)
-
-# Set CLI pandas width:
-# pd.set_option('display.width', 140)
 
 
 def init_catalog(base_path=DATA_PATH, **kwargs):
@@ -66,47 +63,6 @@ def show_info_data(df, df_consumo=None):
         f_print('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias))
 
 
-# def append_delta_y_consumo(data):
-#     if not data.empty:
-#         data = data.copy()
-#         deltas = pd.Series(data.index).diff().fillna(method='bfill')
-#         frac_hora = deltas / pd.Timedelta(hours=1)
-#         data['Wh'] = data.power * frac_hora.values
-#         data['delta'] = deltas.values
-#         consumo = data['Wh'].rename('kWh').resample('1h', label='left').sum().divide(1000.)
-#         return data, consumo
-#     return data, data
-#
-#
-# def load_data(path_st=HDF_STORE, filter_data=None, verbose=True, append_consumo=True):
-#     if os.path.exists(path_st):
-#         with pd.HDFStore(path_st, mode='r') as st:
-#             try:
-#                 data = st[KEY]
-#             except KeyError:
-#                 data = st[KEY_ANT]
-#                 data.columns = COLS_DATA
-#         if filter_data:
-#             loc_data = filter_data.split('::')
-#             if len(loc_data) > 1:
-#                 if len(loc_data[0]) > 0:
-#                     filtered = data.loc[loc_data[0]:loc_data[1]]
-#                 else:
-#                     filtered = data.loc[:loc_data[1]]
-#             else:
-#                 filtered = data.loc[loc_data[0]:]
-#             data = filtered
-#         if append_consumo:
-#             data, consumo = append_delta_y_consumo(data)
-#             return data, consumo
-#         else:
-#             return data
-#     log('HDF Store not found at "{}"'.format(path_st), 'error', verbose)
-#     if append_consumo:
-#         return None, None
-#     return None
-
-
 # TODO Rehacer backups y clears en catalog
 def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
     # HDF Store Config
@@ -130,14 +86,17 @@ def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
 
 
 def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
+    df_tot = None
     try:
         if data is not None and type(data) is not pd.DataFrame:
             data = pd.DataFrame(data, columns=[COL_TS] + COLS_DATA).set_index(COL_TS).dropna().astype(float)
             # with pd.HDFStore(path_st, mode='a') as st:
             with pd.HDFStore(path_st, mode='a', complevel=9, complib='blosc') as st:
                 st.append(KEY, data)
-                df_tot = st[KEY]
-            log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)), 'debug', verb)
+                if catalog is not None:
+                    df_tot = st[KEY]
+                    log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)),
+                        'debug', verb)
             if catalog is not None:
                 catalog.update_catalog(data=df_tot)
         return True
@@ -198,3 +157,41 @@ def extract_log_file(log_file, extract_temps=True, verbose=True):
         if 'INFO' in conteo_tipos.index:
             log(df_log[df_log.tipo == 'INFO'].dropna(how='all', axis=1), 'info', True, False)
     return df_log
+
+
+if __name__ == '__main__':
+    from enerpi.api import enerpi_data_catalog
+    from enerpi.command_enerpi import set_logging_conf
+    from prettyprinting import *
+
+    set_logging_conf()
+    pd.set_option('display.width', 240)
+
+    # TEST UPDATE
+    # base = '/Users/uge/Dropbox/PYTHON/PYPROJECTS/respaldo_enerpi_rpi3/ENERPIDATA/'
+    # cat = enerpi_data_catalog(base_path=base, raw_file=os.path.join(base, 'enerpi_data.h5'), check_integrity=False, verbose=True)
+    # print_info(cat.tree)
+    #
+    # raw = pd.read_hdf(os.path.join(base, 'enerpi_data.h5'), 'rms')
+    # print_cyan(raw)
+    # print_red(raw.index.is_unique)
+    # cat.update_catalog(data=raw)
+
+    # TEST GET / GET SUMMARY
+    # Catálogo y lectura de todos los datos.
+    cat = enerpi_data_catalog()
+    cat.reprocess_all_data()
+
+    data_s = cat.get_summary(last_hours=100000)
+    data = cat.get_all_data(with_summary_data=False)
+    print_cyan(data_s)
+    print_red(data)
+    d2, data_s2 = cat.process_data_summary(data)
+    # print_info(data_s2)
+    # # print_red(data.loc['2016-08-31 23:00:00':'2016-09-01 01:00:00'])
+    common_idx = data_s.index.intersection(data_s2.index)
+    rows_iguales = (data_s.loc[common_idx].round(3).fillna(0) == data_s2.loc[common_idx].round(3).fillna(0)).all(axis=1)
+    # # print(rows_iguales)
+    print_magenta(data_s.loc[rows_iguales[~rows_iguales].index])
+    print_red(data_s2.loc[rows_iguales[~rows_iguales].index])
+

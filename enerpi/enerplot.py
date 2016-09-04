@@ -2,6 +2,7 @@
 import datetime as dt
 from io import BytesIO
 import locale
+import logging
 import matplotlib
 # do this before importing pylab or pyplot
 matplotlib.use('Agg')
@@ -162,8 +163,7 @@ def _gen_image_path(data, filename):
 
 
 @timeit('plot_power_consumption_hourly')
-def plot_power_consumption_hourly(potencia, consumo, ldr=None,
-                                  rs_potencia=None, rm_potencia=None, savefig=None):
+def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None, rm_potencia=None, savefig=None):
     f, ax_bar = plt.subplots(figsize=(16, 9))
     color_potencia = ch_color(tableau20[4], .85, alpha=.9)
     color_consumo = ch_color(tableau20[8], alpha=.9)
@@ -239,7 +239,6 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None,
         return f, [ax_bar, ax_ts]
 
 
-@timeit('_write_fig_to_svg')
 def _write_fig_to_svg(fig, name_img):
     # plt.close(fig)
     canvas = FigureCanvas(fig)
@@ -255,6 +254,7 @@ def _write_fig_to_svg(fig, name_img):
         with open(name_img, 'wb') as f:
             f.write(svg_out)
     except Exception as e:
+        logging.error('HA OCURRIDO UN ERROR GRABANDO SVG A DISCO: {}'.format(e))
         print('HA OCURRIDO UN ERROR GRABANDO SVG A DISCO: {}'.format(e))
         return False
     return True
@@ -269,7 +269,6 @@ def _tile_figsize(fraction=1.):
     return round(width / dpi, 2), round(height / dpi, 2)
 
 
-@timeit('_prep_axis_tile')
 def _prep_axis_tile(color):
     fig, ax = plt.subplots(figsize=_tile_figsize(), dpi=72, gridspec_kw=GRIDSPEC_FULL, facecolor='none')
     fig.patch.set_alpha(0)
@@ -301,9 +300,8 @@ def _adjust_tile_limits(name, ylim, date_ini, date_fin, ax):
 
 
 @timeit('plot_tile_last_24h')
-def plot_tile_last_24h(data_s, rs_data_s=None, rm_data_s=None, barplot=False, ax=None, fig=None):
+def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1), alpha=1, alpha_fill=.5):
     matplotlib.rcParams['axes.linewidth'] = 0
-    color = [1, 1, 1]
     if ax is None:
         fig, ax = _prep_axis_tile(color)
     else:
@@ -313,64 +311,67 @@ def plot_tile_last_24h(data_s, rs_data_s=None, rm_data_s=None, barplot=False, ax
         ax.tick_params(axis='x', which='both', top='off', labelbottom='off')
         ax.xaxis.grid(True, color=color, linestyle=':', linewidth=1.5, alpha=.6)
         ax.yaxis.grid(True, color=color, linestyle=':', linewidth=1, alpha=.5)
-    if not barplot and rm_data_s is not None:
-        data_s = data_s.rolling(rm_data_s).mean()
-    elif not barplot and rs_data_s is not None:
-        data_s = data_s.resample(rs_data_s, label='left').mean()
     rango_ts = data_s.index[0], data_s.index[-1]
     date_ini, date_fin = [t.to_pydatetime() for t in rango_ts]
-
     if data_s is not None and not data_s.empty:
-        lw, alpha = 1.5, 1.
+        lw = 1.5
         ax.grid(b=True, which='major')
         data_s = data_s.fillna(0)
         if barplot:
             div = .5
             ylim = (0, np.ceil((data_s.max() + div) // div) * div)
-            ax.bar(data_s.index, data_s, width=1 / 28, edgecolor=color, color=[1, 1, 1, .5], linewidth=lw)
+            ax.bar(data_s.index, data_s.values, width=1 / 28, edgecolor=color, color=list(color) + [.5], linewidth=lw)
             ax.xaxis.set_major_locator(mpd.HourLocator((0, 12)))
-            # ax.set_xticks([])
         else:
             if data_s.name == 'power':
                 div = 500
                 ylim = (0, np.ceil((data_s.max() + div / 5) / div) * div)
             else:  # ldr
                 div = 100
-                ylim = (0, np.ceil((data_s.max() + div / 2) // div) * div)
-            data_s = data_s.fillna(0)
+                ylim = (0, np.ceil((data_s.max() + div) // div) * div)
+            data_s = data_s
             ax.plot(data_s.index, data_s, color=color, linewidth=lw, alpha=alpha)
-            ax.fill_between(data_s.index, data_s, color=color, alpha=alpha / 2)
+            ax.fill_between(data_s.index, data_s, color=color, alpha=alpha_fill)
             ax.xaxis.set_major_locator(mpd.HourLocator((0, 12)))
             ax.xaxis.set_minor_locator(mpd.HourLocator(interval=1))
     else:
         ylim = 0, 100
         ax.annotate('NO DATA!', xy=(.35, .3), xycoords='axes fraction',
-                    va='center', ha='center', color=(.9, .9, .9), fontsize=25)
+                    va='center', ha='center', color=ch_color(color, .9), fontsize=25)
 
     _adjust_tile_limits(data_s.name, ylim, date_ini, date_fin, ax)
     return fig, ax
 
 
-@timeit('gen_svg_tiles')
 def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
+
+    def _cut_axes_and_save_svgs(figure, axes, xlim, delta_total, data_name):
+        for lh in last_hours:
+            file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_name, lh))
+            axes.set_xlim((xlim[0] + delta_total * (1 - lh / total_hours), xlim[1]))
+            figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
+            _write_fig_to_svg(figure, name_img=file)
+
     total_hours = last_hours[0]
-    last_data, last_data_c = catalog.get(last_hours=total_hours, with_summary=True)
-    if last_data is not None:
+    last_data, last_data_c = catalog.get(last_hours=last_hours[0], with_summary=True)
+    if (last_data is not None) and (len(last_data) > 2):
         ahora = dt.datetime.now().replace(second=0, microsecond=0)
-        xlim = mpd.date2num(ahora - dt.timedelta(hours=total_hours)), mpd.date2num(ahora)
+        xlim = mpd.date2num(ahora - dt.timedelta(hours=last_hours[0])), mpd.date2num(ahora)
         delta = xlim[1] - xlim[0]
-        fig, ax = None, None
-        for data_s, plot_bar in zip([last_data.power, last_data.ldr, last_data_c.kWh],
-                                    [False, False, True]):
-            if ax is not None:
-                plt.cla()
-                fig.set_figwidth(_tile_figsize()[0])
-            fig, ax = plot_tile_last_24h(data_s, rs_data_s='5min', barplot=plot_bar, ax=ax, fig=fig)  # , rm_data_s=300)
-            for lh in last_hours:
-                file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_s.name, lh))
-                ax.set_xlim((xlim[0] + delta * (1 - lh / total_hours), xlim[1]))
-                fig.set_figwidth(_tile_figsize(lh / total_hours)[0])
-                _write_fig_to_svg(fig, name_img=file)
+
+        fig, ax = plot_tile_last_24h(catalog.resample_data(last_data.power, rs_data='5min'), barplot=False)
+        _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data.power.name)
+
+        plt.cla()
+        fig.set_figwidth(_tile_figsize()[0])
+        fig, ax = plot_tile_last_24h(catalog.resample_data(last_data.ldr, rs_data='30s', use_median=True),
+                                     barplot=False, ax=ax, fig=fig)
+        _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data.ldr.name)
+
+        if len(last_data_c) > 1:
+            fig, ax = plot_tile_last_24h(last_data_c.kWh, barplot=True)
+            _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data_c.kWh.name)
+
         if fig is not None:
             plt.close(fig)
         return True

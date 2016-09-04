@@ -20,6 +20,8 @@ from hdftscat import HDFTimeSeriesCatalog
         return data, data, None
 '''
 
+DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL = 120  # pd.Timedelta('2min')
+
 
 def _compress_data(data, verbose=False):
     if data is not None:
@@ -40,16 +42,17 @@ def process_data(data, append_consumo=False):
     if data is not None and not data.empty and (append_consumo or ('high_delta' not in data.columns)):
         data = data.copy()
         data['delta'] = pd.Series(data.index).diff().fillna(method='bfill').dt.total_seconds().values
-        data['Wh'] = data.power * data.delta / 3600
         data['high_delta'] = False
         data['execution'] = False
         data.loc[data['delta'] > 3, 'high_delta'] = True
         data.loc[data['delta'] > 60, 'execution'] = 1
+        data['delta_consumo'] = data['delta'].apply(lambda x: min(x, DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL))
+        data['Wh'] = data.power * data.delta_consumo / 3600
         if append_consumo:
-            resampler = data[['power', 'Wh', 'delta', 'high_delta', 'execution']].resample('1h', label='left')
+            resampler = data[['power', 'Wh', 'delta_consumo', 'high_delta', 'execution']].resample('1h', label='left')
             consumo = pd.DataFrame(resampler['Wh'].sum().rename('kWh')).fillna(0.).astype('float32')
             consumo /= 1000.
-            consumo['t_ref'] = pd.Series(resampler['delta'].sum() / 3600).astype('float32')
+            consumo['t_ref'] = pd.Series(resampler['delta_consumo'].sum() / 3600).astype('float32')
             consumo['n_jump'] = resampler['high_delta'].sum().fillna(0).astype('int16')
             consumo['n_exec'] = resampler['execution'].sum().fillna(0).astype('int32')
             consumo['p_max'] = resampler['power'].max().round(0).astype('float16')
@@ -57,7 +60,7 @@ def process_data(data, append_consumo=False):
             consumo['p_min'] = resampler['power'].min().round(0).astype('float16')
         data['high_delta'] = data['high_delta'].astype(bool)
         data['execution'] = data['execution'].astype(bool)
-        data.drop(['delta', 'Wh'], axis=1, inplace=True)
+        data.drop(['delta', 'delta_consumo', 'Wh'], axis=1, inplace=True)
         if append_consumo:
             return data, consumo
         return data

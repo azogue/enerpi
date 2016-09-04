@@ -57,12 +57,12 @@ def enerpi_log(log_file=FILE_LOGGING, extract_temps=False, verbose=True):
 if __name__ == '__main__':
     from time import time
     import pandas as pd
-    from enerpi.base import timeit
     from prettyprinting import *
+    # from enerpi.base import timeit
 
-    @timeit('_get_all_data', verbose=True)
-    def _get_all_data(catalog, async_get, with_summary_data=True):
-        return catalog.get(start=catalog.min_ts, with_summary=with_summary_data, async_get=async_get)
+    # @timeit('_get_all_data', verbose=True)
+    # def _get_all_data(catalog, async_get, with_summary_data=True):
+    #     return catalog.get(start=catalog.min_ts, with_summary=with_summary_data, async_get=async_get)
 
     pd.set_option('display.width', 200)
     tic = time()
@@ -70,18 +70,18 @@ if __name__ == '__main__':
     toc_cat = time()
     print_magenta('CATALOG TOOK: {:.3f} s'.format(toc_cat - tic))
 
-    data, data_s = _get_all_data(cat, True, with_summary_data=True)
-    toc_get_a = time()
-    print_magenta('TOOK:\n\tGET ALL ASYNC: {:.3f} s ({} rows)'.format(toc_get_a - toc_cat, len(data)))
-
-    data_2, data_s2 = _get_all_data(cat, False, with_summary_data=True)
-    toc_get = time()
-    print_magenta('TOOK:\n\tGET ALL NO ASYNC: {:.3f} s ({} rows)'.format(toc_get - toc_get_a, len(data_2)))
-
-    print_info(data.tail(3))
-    print_info(data_2.tail(3))
-
-    print_cyan(data_s.tail(3))
-    print_cyan(data_s2.tail(3))
-    print_red(pd.DataFrame(data == data_2).all().all())
-    print_red(pd.DataFrame(data_s == data_s2).all().all())
+    # data, data_s = _get_all_data(cat, True, with_summary_data=True)
+    # toc_get_a = time()
+    # print_magenta('TOOK:\n\tGET ALL ASYNC: {:.3f} s ({} rows)'.format(toc_get_a - toc_cat, len(data)))
+    #
+    # data_2, data_s2 = _get_all_data(cat, False, with_summary_data=True)
+    # toc_get = time()
+    # print_magenta('TOOK:\n\tGET ALL NO ASYNC: {:.3f} s ({} rows)'.format(toc_get - toc_get_a, len(data_2)))
+    #
+    # print_info(data.tail(3))
+    # print_info(data_2.tail(3))
+    #
+    # print_cyan(data_s.tail(3))
+    # print_cyan(data_s2.tail(3))
+    # print_red(pd.DataFrame(data == data_2).all().all())
+    # print_red(pd.DataFrame(data_s == data_s2).all().all())

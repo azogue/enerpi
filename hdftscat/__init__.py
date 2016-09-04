@@ -75,6 +75,9 @@ DAY_MASK = '{}_{:%Y_%m_DAY_%d}' + STORE_EXT
 RG_DAY_MASK = re.compile('(?P<name>\.*)_(?P<year>\d{4})_(?P<month>\d{2})_DAY_(?P<day>\d{2})')
 
 
+# TODO to_json / from_json para recoger info vía webapi y replicarla en un catálogo remoto
+
+
 def timeit(cadena_log, verbose=False, *args_dec):
     def real_deco(function):
         def wrapper(*args, **kwargs):
@@ -204,7 +207,11 @@ class HDFTimeSeriesCatalog(object):
                       if (f.endswith(STORE_EXT) and (pb_bkp not in f) and
                           (f != self.raw_store) and (f not in paths.values))]
         index['new_ts'] = times
-        index['modif'] = index['ts_st'] != index['new_ts']
+        try:
+            index['modif'] = index['ts_st'] != index['new_ts']
+        except TypeError as e:
+            logging.error('TypeError "{}" intentando fijar index["modif"] en _check_index'.format(e))
+            index['modif'] = True
         if new_stores:
             logging.warning('NEW STORES WERE FOUND: {}'.format(new_stores))
         new_stores += paths.loc[index['new_ts'].notnull() & index['modif']].drop_duplicates().tolist()
@@ -226,6 +233,7 @@ class HDFTimeSeriesCatalog(object):
         return index
 
     def _load_hdf(self, rel_path, key=None, func_store=None):
+        # print('LOADING: {}, key={}, func_st is None? {}'.format(rel_path, key, func_store is None))
         p = os.path.join(self.base_path, rel_path)
         k = key or self.key_raw
         try:
@@ -307,8 +315,6 @@ class HDFTimeSeriesCatalog(object):
         else:
             df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw) for p in days_cm], axis=0)).sort_index()
             idx = df.index
-            # print_red('Current month data stats:\n- {} rows, from {:%c} to {:%c}, index: unique={}, monotonic={}'
-            #           .format(df.shape[0], idx[0], idx[-1], idx.is_unique, idx.is_monotonic_increasing))
             logging.debug('Current month data stats:\n- {} rows, from {:%c} to {:%c}, index: unique={}, monotonic={}'
                           .format(df.shape[0], idx[0], idx[-1], idx.is_unique, idx.is_monotonic_increasing))
             return df, days_cm
@@ -420,21 +426,51 @@ class HDFTimeSeriesCatalog(object):
             try:
                 d2 = st[self.key_summary]
             except KeyError:
-                d1_bis, d2 = self.process_data_summary(d1)
+                d1, d2 = self.process_data_summary(d1)
             return d1, d2
 
         asyncio.sleep(0)
-        if with_summary:
-            extracted = list(self._load_hdf(path_idx, func_store=_get_data_from_store))
-        else:
-            extracted = list(self._load_hdf(path_idx, key=self.key_raw))
-        asyncio.sleep(0)
-        if process_data and with_summary:
-            extracted[1] = self.process_data(extracted[0])
+        if with_summary and process_data:
+            extracted = self._load_hdf(path_idx, key=self.key_raw)
+            if extracted is not None:
+                extracted = self.process_data_summary(self.process_data(extracted))
+        elif with_summary:
+            extracted = self._load_hdf(path_idx, func_store=_get_data_from_store)
         elif process_data:
-            extracted = self.process_data(extracted)
-        # asyncio.sleep(0)
+            extracted = self.process_data(self._load_hdf(path_idx, key=self.key_raw))
+        else:
+            extracted = self._load_hdf(path_idx, key=self.key_raw)
+        asyncio.sleep(0)
+        if (extracted is None) and with_summary:
+            return None, None
         return extracted
+
+    def load_summary(self, path_idx):
+
+        def _get_summary_from_store(st):
+            try:
+                d2 = st[self.key_summary]
+            except KeyError:
+                _, d2 = self.process_data_summary(st[self.key_raw])
+            return d2
+
+        asyncio.sleep(0)
+        return self._load_hdf(path_idx, func_store=_get_summary_from_store)
+
+    def _remove_old_if_archive(self, old_stores, new_stores, ahora):
+        self.tree = self.tree.set_index('st').drop(ST_TODAY, errors='ignore').reset_index()
+        for p in old_stores:
+            remove = False
+            if ST_TODAY == p:
+                if ST_TODAY not in new_stores:
+                    remove = True
+            elif int(RG_DAY_MASK.search(p).groupdict()['month']) != ahora.month:
+                remove = True
+            if remove:
+                p_bkp = os.path.join(self.base_path, DIR_BACKUP, p)
+                os.makedirs(os.path.dirname(p_bkp), exist_ok=True)
+                shutil.copyfile(os.path.join(self.base_path, p), p_bkp)
+                os.remove(os.path.join(self.base_path, p))
 
     @timeit('archive_periodic')
     def archive_periodic(self, new_data=None, reload_index=False):
@@ -457,67 +493,77 @@ class HDFTimeSeriesCatalog(object):
 
         if reload_index:
             self.tree = self.get_index(check_index=False)
-        mod_paths = []
+        new_stores = []
         ahora = pd.Timestamp.now()
         month_now = ahora.year * 12 + ahora.month
         monthly_archive = False
-        data_current_month = self.tree[self.tree['st'].str.contains(DIR_CURRENT_MONTH)] if self._exist() else None
-        if data_current_month is not None and not data_current_month.empty:
-            # Archivo mensual
-            month_ts = data_current_month['ts_ini'].min()
-            month_cm = month_ts.year * 12 + month_ts.month
-            if not data_current_month.empty and (month_cm < month_now):
-                month, days_cm = self._load_current_month(with_summary_data=False)
-                logging.info('** ARCHIVE MONTH: {}'.format(days_cm))
-                mod_paths += self.distribute_data(month, mode='a')
-                self.tree = self.tree.set_index('st').drop(days_cm, errors='ignore').reset_index()
-                for p in days_cm:
-                    remove = False
-                    if ST_TODAY == p:
-                        if ST_TODAY not in mod_paths:
-                            remove = True
-                    elif RG_DAY_MASK.search(p).groupdict()['month'] != ahora.month:
-                            remove = True
-                    if remove:
-                        p_bkp = os.path.join(self.base_path, DIR_BACKUP, p)
-                        os.makedirs(os.path.dirname(p_bkp), exist_ok=True)
-                        shutil.copyfile(os.path.join(self.base_path, p), p_bkp)
-                        os.remove(os.path.join(self.base_path, p))
-                monthly_archive = len(mod_paths) > 0
-
-        ts_today = self._ts_filepath(ST_TODAY)
-        if not monthly_archive and ts_today:
-            day_now = ahora.toordinal()
-            try:
-                today_min = self.tree.set_index('st').loc[ST_TODAY, 'ts_ini'].toordinal()
-            except AttributeError:
-                logging.error(self.tree)
-                today_min = self.tree.set_index('st').loc[ST_TODAY, 'ts_ini'].ix[0].toordinal()
-            if (today_min < day_now) or (ts_today.toordinal() < day_now):
-                logging.debug('ARCHIVE DAY')
-                today = self._load_today()
-                mod_paths += self.distribute_data(today, mode='a')
-                self.tree = self.tree.set_index('st').drop(ST_TODAY, errors='ignore').reset_index()
-                if ST_TODAY not in mod_paths:
-                    p_bkp = os.path.join(self.base_path, DIR_BACKUP, ST_TODAY)
-                    os.makedirs(os.path.dirname(p_bkp), exist_ok=True)
-                    shutil.copyfile(os.path.join(self.base_path, ST_TODAY), p_bkp)
-                    os.remove(os.path.join(self.base_path, ST_TODAY))
 
         if new_data is not None:
             logging.debug('ARCHIVE NEW RAW DATA: {}'.format(new_data.shape))
             if self.is_raw_data(new_data):
-                mod_paths += self.distribute_data(self.process_data(new_data), mode='a')
-            else:
-                mod_paths += self.distribute_data(new_data, mode='a')
+                new_data = self.process_data(new_data)
+            hay_cambio_dia = new_data.index[-1].day != new_data.index[0].day
+            hay_cambio_mes = new_data.index[-1].month != new_data.index[0].month
+            if hay_cambio_mes:
+                monthly_archive = True
+                month, old_stores = self._load_current_month(with_summary_data=False)
+                logging.info('** ARCHIVE MONTH: {}'.format(old_stores))
+                new_data = pd.DataFrame(pd.concat([month, new_data], axis=0)).sort_index().groupby(level=0).first()
 
-        if mod_paths:
-            mod_paths = list(set(mod_paths))
-            logging.debug('Modificando index en archive_periodic: mod_paths: {}'.format(mod_paths))
+                # DEBUG TODO Quitar:
+                new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
+                                             'temp_debug_month_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
+
+                new_stores += self.distribute_data(new_data, mode='w')
+                self._remove_old_if_archive(old_stores, new_stores, ahora)
+            elif hay_cambio_dia:
+                today = self._load_today()
+                logging.info('** ARCHIVE DAY')
+                new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
+
+                # DEBUG TODO Quitar:
+                new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
+                                             'temp_debug_day_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
+
+                new_stores += self.distribute_data(new_data, mode='w')
+                self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
+            else:
+                new_stores += self.distribute_data(new_data, mode='a')
+        else:
+            data_current_month = self.tree[self.tree['st'].str.contains(DIR_CURRENT_MONTH)] if self._exist() else None
+            if data_current_month is not None and not data_current_month.empty:
+                # Archivo mensual
+                month_ts = data_current_month['ts_ini'].min()
+                month_cm = month_ts.year * 12 + month_ts.month
+                if not data_current_month.empty and (month_cm < month_now):
+                    month, days_cm = self._load_current_month(with_summary_data=False)
+                    logging.info('** ARCHIVE MONTH: {}'.format(days_cm))
+                    new_stores += self.distribute_data(month, mode='a')
+                    self._remove_old_if_archive(days_cm, new_stores, ahora)
+                    monthly_archive = len(new_stores) > 0
+            ts_today = self._ts_filepath(ST_TODAY)
+            if not monthly_archive and ts_today:
+                day_now = ahora.toordinal()
+                try:
+                    today_min = self.tree.set_index('st').loc[ST_TODAY, 'ts_ini'].toordinal()
+                except AttributeError:
+                    logging.error(self.tree)
+                    today_min = self.tree.set_index('st').loc[ST_TODAY, 'ts_ini'].ix[0].toordinal()
+                if (today_min < day_now) or (ts_today.toordinal() < day_now):
+                    logging.debug('ARCHIVE DAY')
+                    today = self._load_today()
+                    new_stores += self.distribute_data(today, mode='a')
+                    self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
+
+        if new_stores:
+            new_stores = list(set(new_stores))
+            logging.debug('Modificando index en archive_periodic: new_stores: {}'.format(new_stores))
             index = self.tree.copy()
-            new_rows = self._make_index(distribute_existent=False, paths=mod_paths)
+            new_rows = self._make_index(distribute_existent=False, paths=new_stores)
             index = index.set_index('st').drop(new_rows['st'].drop_duplicates().values, errors='ignore').reset_index()
             index = pd.DataFrame(pd.concat([index, new_rows], axis=0)).sort_values(by='ts_ini')
+            if monthly_archive:
+                index = self._check_index(index)
             self.tree = index
             self._save_index(index)
             self.min_ts = self.tree['ts_ini'].min() if not self.tree.empty else np.nan
@@ -572,7 +618,59 @@ class HDFTimeSeriesCatalog(object):
             self._save_hdf(dfs, p, keys, mode='w', **KWARGS_SAVE)
         return mod_paths
 
+    @timeit('get')
     def get(self, start=None, end=None, last_hours=None, with_summary=False, async_get=True):
+
+        def _concat_loaded_data(dfs, ini, fin=None):
+            try:
+                dataframe = pd.DataFrame(pd.concat([df for df in dfs if df is not None], axis=0)).sort_index()
+                if fin is not None:
+                    return dataframe.loc[ini:fin]
+                return dataframe.loc[ini:]
+            except ValueError as e:
+                logging.error('GET DATA ERROR: {}'.format(e))
+                print('GET DATA ERROR: {}'.format(e))
+                return None
+
+        if last_hours is not None:
+            start = pd.Timestamp.now().replace(minute=0, second=0, microsecond=0) - pd.Timedelta(hours=int(last_hours))
+            paths_idx = self._get_paths_interval(ts_ini=start)
+        else:
+            if start is None:
+                start = self.min_ts
+            paths_idx = self._get_paths_interval(ts_ini=start, ts_fin=end)
+        if paths_idx:
+            last, last_s = None, None
+            # Incluir RAW:
+            if (paths_idx[-1] == ST_TODAY) and ((last_hours is not None)
+                                                or ((end is not None)
+                                                    and (self.tree.ts_fin.max() >= pd.Timestamp(end)))):
+                paths_idx = paths_idx[:-1]
+                today = self.load_store(ST_TODAY)
+                plus = self.process_data(self.load_store(self.raw_store))
+                if with_summary:
+                    last, last_s = self.process_data_summary(pd.concat([today, plus]))
+                else:
+                    last = pd.DataFrame(pd.concat([today, plus]))
+            if async_get and len(paths_idx) > 2:
+                with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
+                    future_loads = {executor.submit(self.load_store, p, with_summary=with_summary): p
+                                    for p in paths_idx}
+                    extracted = [future.result() for future in futures.as_completed(future_loads)]
+            else:
+                extracted = [self.load_store(p, with_summary=with_summary) for p in paths_idx]
+            if with_summary:
+                dfs, dfs_s = list(zip(*extracted))
+                data = _concat_loaded_data(list(dfs) + [last], start, end)
+                data_s = _concat_loaded_data(list(dfs_s) + [last_s], start, end)
+                return data, data_s
+            return _concat_loaded_data(extracted + [last], start, end)
+        if with_summary:
+            return None, None
+        return None
+
+    @timeit('get_summary')
+    def get_summary(self, start=None, end=None, last_hours=None, async_get=True):
 
         def _concat_loaded_data(dfs, ini, fin=None):
             try:
@@ -584,7 +682,6 @@ class HDFTimeSeriesCatalog(object):
                 logging.error('GET DATA ERROR: {}'.format(e))
                 return None
 
-        # tic = time()
         if last_hours is not None:
             start = pd.Timestamp.now().replace(minute=0, second=0, microsecond=0) - pd.Timedelta(hours=last_hours)
             paths_idx = self._get_paths_interval(ts_ini=start)
@@ -592,34 +689,44 @@ class HDFTimeSeriesCatalog(object):
             if start is None:
                 start = self.min_ts
             paths_idx = self._get_paths_interval(ts_ini=start, ts_fin=end)
-        # toc_paths = time()
-        # print('** paths_idx:', len(paths_idx), '; PATHS_TOOK {:.3f} s'.format(toc_paths - tic))
-        process_data_paths = [False] * len(paths_idx)
-        load_last_raw_data = (last_hours is not None) or ((end is not None) and
-                                                          (self.tree.ts_fin.max() >= pd.Timestamp(end)))
-        if load_last_raw_data:
-            paths_idx.append(self.raw_store)
-            process_data_paths.append(True)
-        if async_get and len(paths_idx) > 3:
-            with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
-                future_loads = {executor.submit(self.load_store, p,
-                                                process_data=w_proc, with_summary=with_summary): p
-                                for p, w_proc in zip(paths_idx, process_data_paths)}
-                extracted = [future.result() for future in futures.as_completed(future_loads)]
+        if paths_idx:
+            if async_get and len(paths_idx) > 2:
+                with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
+                    future_loads = {executor.submit(self.load_summary, p): p for p in paths_idx}
+                    extracted = [future.result() for future in futures.as_completed(future_loads)]
+            else:
+                extracted = [self.load_summary(p) for p in paths_idx]
+            data_s = _concat_loaded_data(extracted, start, end)
+            return data_s
+        return None
 
-        else:
-            extracted = [self.load_store(p, process_data=w_proc, with_summary=with_summary)
-                         for p, w_proc in zip(paths_idx, process_data_paths)]
-        # toc_get = time()
-        if with_summary:
-            data = _concat_loaded_data(list(zip(*extracted))[0], start, end)
-            data_s = _concat_loaded_data(list(zip(*extracted))[1], start, end)
-            return data, data_s
-        return _concat_loaded_data(extracted, start, end)
-
-    @timeit('_get_all_data', verbose=True)
+    @timeit('get_all_data', verbose=True)
     def get_all_data(self, with_summary_data=True, async_get=True):
         return self.get(start=self.min_ts, with_summary=with_summary_data, async_get=async_get)
+
+    @staticmethod
+    def resample_data(data, rs_data=None, rm_data=None, use_median=False, func_agg=np.mean):
+
+        def _median(arr):
+            return 0 if arr.empty else np.nanmedian(arr)
+
+        if data is not None and not data.empty:
+            if use_median:
+                func_agg = _median
+            if rm_data is not None:
+                data = data.rolling(rm_data).apply(func_agg)
+            elif rs_data is not None:
+                data = data.resample(rs_data, label='left').apply(func_agg)
+        return data
+
+    @timeit('reprocess_all_data', verbose=True)
+    def reprocess_all_data(self):
+        paths_w_summary = self.tree[(self.tree.key == self.key_summary) & self.tree.is_cat]
+        for path in paths_w_summary.st:
+            df = self.load_store(path)
+            df_bis, df_s = self.process_data_summary(df)
+            assert((df == df_bis).all().all())
+            self._save_hdf([df_bis, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
 
     # def info_catalog(self):
     #     # TODO Tabla de información del catálogo: ruta, archivo, n_rows, ts_ini, ts_fin, medidas de completitud

@@ -1,19 +1,22 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 import os
+import logging
 import sys
 from enerpi.base import log
-from enerpi.command_enerpi import enerpi_main_logger  # , enerpi_main_logger_demo
+from enerpi.command_enerpi import enerpi_main_logger, set_logging_conf  # , enerpi_main_logger_demo
 from enerpi.daemon import Daemon
 
 
 class MyDaemon(Daemon):
     def run(self):
-        enerpi_main_logger()
+        enerpi_main_logger(set_logging=True)
         # enerpi_main_logger_demo()
 
 
 def enerpi_daemon():
+    set_logging_conf(verbose=True)
+    logging.info('Iniciando DAEMON')
     # TODO Eliminar stdout y stderr!
     # if sys.platform == 'linux':
     daemon = MyDaemon('/tmp/enerpilogger.pid',

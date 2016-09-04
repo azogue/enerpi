@@ -22,16 +22,14 @@
 </div>
 {% endmacro %}
 
-{% macro monitor_tiles(with_consumption, with_ldr) %}
-{% block styles %}
-    <script src="https://raw.github.com/phstc/jquery-dateFormat/master/dist/jquery-dateFormat.min.js"></script>
+{% macro monitor_tiles_styles() %}
     <link href="{{ url_for('static', filename='css/tiles.css') }}" rel="stylesheet">
-{#    {{ body_gradient_background(config.MACHINE_CONFIG['color'], config.COLORS) }}#}
     {{ style_class_greyscale('tile-inactive', 90) }}
     {{ style_class_greyscale('tile-no-stream', 30) }}
-    {{ style_class_greyscale('tile-monitor:hover', 50) }}
-{% endblock %}
+{#    {{ style_class_greyscale('tile-monitor:hover', 50) }}#}
+{% endmacro %}
 
+{% macro monitor_tiles(with_consumption, with_ldr) %}
 <div class="tile-monitor-container-join">
     {{ monitor_tile_stream('POWER', 'enerpi_data', 'power', 'W', 'stream-ts-power', 'stream-power', 'flash') }}
     {% if with_ldr %}
@@ -41,8 +39,10 @@
     {{ monitor_tile_stream('CONSUMPTION', 'enerpi_data', 'kWh', 'kWh', 'stream-ts-kWh', 'stream-kWh', 'bar-chart') }}
     {% endif %}
 </div>
+{% endmacro %}
 
-{% block scripts %}
+{% macro monitor_tiles_scripts() %}
+    <script src="https://raw.github.com/phstc/jquery-dateFormat/master/dist/jquery-dateFormat.min.js"></script>
     <script type="text/javascript">
         function refresh_static_tile_bg(type_data, type_mag) {
             var $item = $("#tile-" + type_data + "-" + type_mag + "-img");
@@ -89,9 +89,6 @@
                 }
             });
         }
-{#        function makeTableRow(data, labels) {#}
-{#            #}
-{#        }#}
         $(document).ready(
             function() {
                 var animate_value = 'minipulse';
@@ -115,7 +112,7 @@
                 execAndSetIntervalSwitchTileBg('enerpi_data', 'ldr');
                 execAndSetIntervalSwitchTileBg('enerpi_data', 'kWh');
 
-                var sse = new EventSource('{{ config['PREFIX_WEB'] }}/stream_enerpi');
+                var sse = new EventSource('{{ url_for("stream_sensors")}}');
                 sse.onmessage = function (message) {
                     if (message.data == '"CLOSE"') {
                         console.log('detectando id CLOSE y cerrando');
@@ -150,7 +147,6 @@
                 };
             });
     </script>
-{% endblock %}
 {% endmacro %}
 
 {% macro table_last_samples_with_stream(last_samples) %}
