@@ -8,7 +8,7 @@ from enerpi import VERSION
 with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst'), encoding='utf-8') as f:
     LONG_DESCRIPTION = f.read()
 
-PACKAGES = find_packages(exclude=['antiguo', 'docs', 'notebooks', 'DATA'])
+PACKAGES = find_packages()
 
 setup(
     # ext_modules=cythonize("extractlog.pyx"),
