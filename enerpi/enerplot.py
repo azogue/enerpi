@@ -5,7 +5,7 @@ import locale
 import logging
 import matplotlib
 # do this before importing pylab or pyplot
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 # noinspection PyPep8
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -239,7 +239,7 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
         return f, [ax_bar, ax_ts]
 
 
-def _write_fig_to_svg(fig, name_img):
+def write_fig_to_svg(fig, name_img):
     # plt.close(fig)
     canvas = FigureCanvas(fig)
     output = BytesIO()
@@ -350,7 +350,7 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
             file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_name, lh))
             axes.set_xlim((xlim[0] + delta_total * (1 - lh / total_hours), xlim[1]))
             figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
-            _write_fig_to_svg(figure, name_img=file)
+            write_fig_to_svg(figure, name_img=file)
 
     total_hours = last_hours[0]
     last_data, last_data_c = catalog.get(last_hours=last_hours[0], with_summary=True)

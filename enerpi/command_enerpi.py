@@ -127,6 +127,9 @@ def _enerpi_arguments():
 
 
 def enerpi_main_cli():
+    import matplotlib
+
+    matplotlib.use('Agg')
     # CLI Arguments
     args = _enerpi_arguments()
 
@@ -219,7 +222,7 @@ def enerpi_main_logger(set_logging=False):
     if set_logging:
         set_logging_conf(verbose=False)
     # Shows RPI Temps
-    Timer(3, show_pi_temperature, args=(3,)).start()
+    # Timer(3, show_pi_temperature, args=(3,)).start()
     _run_logger(is_demo=False, verbose=False,
                 delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, debug=False)
 

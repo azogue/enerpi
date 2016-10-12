@@ -304,20 +304,24 @@ class HDFTimeSeriesCatalog(object):
         return self._load_hdf(ST_TODAY, key=self.key_raw)
 
     def _load_current_month(self, with_summary_data=True):
-        days_cm = [p.replace(self.base_path + os.path.sep, '')
-                   for p in glob.glob(os.path.join(self.base_path, DIR_CURRENT_MONTH, '*{}'.format(STORE_EXT)))]
+        days_cm = list(sorted([p.replace(self.base_path + os.path.sep, '')
+                               for p in glob.glob(os.path.join(self.base_path, DIR_CURRENT_MONTH,
+                                                               '*{}'.format(STORE_EXT)))]))
         if with_summary_data:
             extracted = [self._load_hdf(p, func_store=lambda st: (st[self.key_raw], st[self.key_summary]))
                          for p in days_cm]
-            df = pd.DataFrame(pd.concat([e[0] for e in extracted if e is not None], axis=0)).sort_index()
-            df_s = pd.DataFrame(pd.concat([e[1] for e in extracted if e is not None], axis=0)).sort_index()
+            df = pd.DataFrame(pd.concat([e[0] for e in extracted if e is not None], axis=0))  # .sort_index()
+            df_s = pd.DataFrame(pd.concat([e[1] for e in extracted if e is not None], axis=0))  # .sort_index()
             return df, df_s, days_cm
         else:
-            df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw) for p in days_cm], axis=0)).sort_index()
-            idx = df.index
-            logging.debug('Current month data stats:\n- {} rows, from {:%c} to {:%c}, index: unique={}, monotonic={}'
-                          .format(df.shape[0], idx[0], idx[-1], idx.is_unique, idx.is_monotonic_increasing))
-            return df, days_cm
+            if days_cm:
+                df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw)
+                                            for p in days_cm], axis=0))  # .sort_index()
+                logging.debug('Current month data stats: {} rows, from {:%c} to {:%c}, index: unique={}, monotonic={}'
+                              .format(df.shape[0], df.index[0], df.index[-1],
+                                      df.index.is_unique, df.index.is_monotonic_increasing))
+                return df, days_cm
+            return None, []
 
     def _classify_data(self, df):
         paths_dfs_dfssum = []
@@ -508,8 +512,10 @@ class HDFTimeSeriesCatalog(object):
                 monthly_archive = True
                 month, old_stores = self._load_current_month(with_summary_data=False)
                 logging.info('** ARCHIVE MONTH: {}'.format(old_stores))
-                new_data = pd.DataFrame(pd.concat([month, new_data], axis=0)).sort_index().groupby(level=0).first()
-
+                logging.debug('MONTH DATA: {}'.format(month.shape))
+                # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0)).sort_index().groupby(level=0).first()
+                if month is not None:
+                    new_data = pd.DataFrame(pd.concat([month, new_data], axis=0))
                 # DEBUG TODO Quitar:
                 new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
                                              'temp_debug_month_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
@@ -519,12 +525,8 @@ class HDFTimeSeriesCatalog(object):
             elif hay_cambio_dia:
                 today = self._load_today()
                 logging.info('** ARCHIVE DAY')
-                new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
-
-                # DEBUG TODO Quitar:
-                new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
-                                             'temp_debug_day_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
-
+                if today is not None:
+                    new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
                 new_stores += self.distribute_data(new_data, mode='w')
                 self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
             else:

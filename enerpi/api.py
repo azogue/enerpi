@@ -6,7 +6,7 @@ from enerpi.enerpimeter import receiver_msg_generator, msg_to_dict
 
 
 # Config:
-DATA_PATH = CONFIG.get('ENERPI_DATA', 'DATA_PATH')
+DATA_PATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'DATA_PATH'))
 HDF_STORE = CONFIG.get('ENERPI_DATA', 'HDF_STORE')
 # Current meter
 TS_DATA_MS = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
