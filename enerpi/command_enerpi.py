@@ -6,6 +6,7 @@ import os
 import re
 from threading import Timer
 from time import time, sleep
+
 from enerpi import PRETTY_NAME, DESCRIPTION, BASE_PATH
 from enerpi.base import CONFIG, log, show_pi_temperature
 from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
@@ -160,7 +161,7 @@ def enerpi_main_cli():
         elif args.info or args.filter or args.plot or args.plot_tiles:
             catalog = init_catalog(base_path=DATA_PATH, raw_file=path_st, check_integrity=False)
             if args.plot_tiles:
-                from enerpi.enerplot import gen_svg_tiles
+                from enerpiplot.enerplot import gen_svg_tiles
 
                 ok = gen_svg_tiles(IMG_TILES_BASEPATH, catalog)
                 if ok:
@@ -187,7 +188,7 @@ def enerpi_main_cli():
                     show_info_data(data, consumption)
                 if (args.plot and data is not None and not data.empty and consumption is not None and
                         not consumption.empty):
-                    from enerpi.enerplot import plot_power_consumption_hourly
+                    from enerpiplot.enerplot import plot_power_consumption_hourly
 
                     img_name = plot_power_consumption_hourly(data.power, consumption.kWh, ldr=data.ldr,
                                                              rs_potencia=None, rm_potencia=60, savefig=args.plot)

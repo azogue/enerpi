@@ -70,7 +70,7 @@ def ch_color(x, ch=1., alpha=None):
     return tuple(new_c)
 
 
-def round_time(ts=None, delta=dt.timedelta(minutes=1)):
+def _round_time(ts=None, delta=dt.timedelta(minutes=1)):
     round_to = delta.total_seconds()
     if ts is None:
         ts = dt.datetime.now()
@@ -79,7 +79,7 @@ def round_time(ts=None, delta=dt.timedelta(minutes=1)):
     return ts + dt.timedelta(0, rounding - seconds, -ts.microsecond)
 
 
-def fix_time_series_bar_mix(ax_ts, ax_bar, rango_ts, index_ts_bar, bar_width=.8):
+def _fix_time_series_bar_mix(ax_ts, ax_bar, rango_ts, index_ts_bar, bar_width=.8):
     barras = [c for c in ax_bar.get_children() if type(c) is mp.Rectangle]
     delta_ts = rango_ts[1] - rango_ts[0]
     rango = ax_ts.get_xlim()
@@ -99,7 +99,7 @@ def fix_time_series_bar_mix(ax_ts, ax_bar, rango_ts, index_ts_bar, bar_width=.8)
     ax_ts.set_xlim(rango_ts)
 
 
-def format_timeseries_axis(ax_bar, ax_ts, rango_ts,
+def _format_timeseries_axis(ax_bar, ax_ts, rango_ts,
                            fmt='%-H:%M', ini=0, fin=None, axis_label='',
                            fmt_mayor=" %-d %h'%y, %-Hh", mayor_divisor=12,
                            fmt_mayor_day="%A %-d %h'%y",
@@ -114,7 +114,7 @@ def format_timeseries_axis(ax_bar, ax_ts, rango_ts,
         xticks = ax_bar.get_xticks()[ini:]
     else:
         xticks = ax_bar.get_xticks()[ini:fin]
-    new_xticks_dt = [round_time(dt.datetime.fromordinal(int(x)) + delta_day * (x % 1), dt.timedelta(hours=1))
+    new_xticks_dt = [_round_time(dt.datetime.fromordinal(int(x)) + delta_day * (x % 1), dt.timedelta(hours=1))
                      for x in xticks]
     new_xticks, new_ts_labels = list(zip(*[(mpd.date2num(x + delta_ticks), x.strftime(fmt)) for x in new_xticks_dt]))
     color_mayor = ch_color(tableau20[14], alpha=.7)
@@ -204,8 +204,8 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
     ax_ts.set_frame_on(False)
 
     # Formating xticks
-    fix_time_series_bar_mix(ax_ts, ax_bar, rango_ts, consumo.index, bar_width=.8)
-    format_timeseries_axis(ax_bar, ax_ts, rango_ts)  # , ini=1, fin=-1)
+    _fix_time_series_bar_mix(ax_ts, ax_bar, rango_ts, consumo.index, bar_width=.8)
+    _format_timeseries_axis(ax_bar, ax_ts, rango_ts)  # , ini=1, fin=-1)
 
     # Formating Y axes:
     ax_bar.set_ylabel('Consumo eléctrico', ha='center', fontweight='bold', fontsize='x-large', color=color_consumo)
@@ -239,6 +239,7 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
         return f, [ax_bar, ax_ts]
 
 
+@timeit('plot_power_consumption_hourly')
 def write_fig_to_svg(fig, name_img):
     # plt.close(fig)
     canvas = FigureCanvas(fig)

@@ -1,20 +1,22 @@
 # -*- coding: utf-8 -*-
-from collections import deque
 import datetime as dt
-from flask import render_template, Response, request, redirect, url_for
 import json
 import logging
-from threading import Thread, current_thread
-from time import sleep, time
 import os
 import pandas as pd
 import pytz
-from enerpiweb import app, basedir, SERVER_FILE_LOGGING
+from collections import deque
+from flask import render_template, Response, request, redirect, url_for
+from threading import Thread, current_thread
+from time import sleep, time
 
 from enerpi import BASE_PATH
-from enerpi.base import CONFIG, get_lines_file
 from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
-from enerpi.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
+from enerpi.base import CONFIG, get_lines_file
+from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
+
+from enerpiweb import app, basedir, SERVER_FILE_LOGGING
+
 
 TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
 DATA_PATH = CONFIG.get('ENERPI_DATA', 'DATA_PATH')

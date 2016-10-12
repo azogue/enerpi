@@ -2,6 +2,7 @@
 from collections import deque
 import datetime as dt
 from gpiozero import MCP3008
+from math import sqrt
 import numpy as np
 import pytz
 import random
@@ -70,7 +71,7 @@ def msg_to_dict(msg, func_err=print, *args_err):
 def random_generator():
     p_min, p_max = 180, VOLTAJE * 15
     count = 0
-    while count < 50:
+    while count < 500:
         p = random.randint(p_min, p_max)
         yield dt.datetime.now(), p, 1, 0, .5
         count += 1
@@ -135,11 +136,11 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
                 cumsum_noise += np.mean(buffer_noise)
             if ts - stop > delta_sampling_calc - PREC_SAMPLING:
                 stop = ts
-                power = np.sqrt(cumsum / counter_buffer) * VOLTAJE * A_REF * V_REF
-                # yield (ts, power, np.sqrt(cumsum_noise / counter_buffer),
+                power = sqrt(cumsum / counter_buffer) * VOLTAJE * A_REF * V_REF
+                # yield (ts, power, sqrt(cumsum_noise / counter_buffer),
                 #        np.sqrt(cumsum_ref / counter_buffer), np.sqrt(cumsum_ldr / counter_buffer))
-                yield (ts, power, np.sqrt(cumsum_noise / counter_buffer),
-                       counter_buffer, np.sqrt(cumsum_ldr / counter_buffer))
+                yield (ts, power, sqrt(cumsum_noise / counter_buffer),
+                       counter_buffer, sqrt(cumsum_ldr / counter_buffer))
                 counter_buffer = cumsum = cumsum_ref = cumsum_ldr = cumsum_noise = 0
             if con_pausa:
                 sleep(max(.00001, (min_ts_ms - .05) / 1000 - (time() - tic)))

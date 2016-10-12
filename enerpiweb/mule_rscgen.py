@@ -2,8 +2,10 @@
 import logging
 import os
 from time import time, sleep
+
 from enerpi.database import init_catalog, DATA_PATH, HDF_STORE
-from enerpi.enerplot import gen_svg_tiles
+from enerpiplot.enerplot import gen_svg_tiles
+
 # from multiprocessing import Process
 # from threading import Thread
 
