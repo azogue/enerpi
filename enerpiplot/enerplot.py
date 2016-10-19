@@ -239,18 +239,18 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
         return f, [ax_bar, ax_ts]
 
 
-@timeit('plot_power_consumption_hourly')
-def write_fig_to_svg(fig, name_img):
+@timeit('write_fig_to_svg', verbose=True)
+def write_fig_to_svg(fig, name_img, preserve_ratio=False):
     # plt.close(fig)
     canvas = FigureCanvas(fig)
     output = BytesIO()
     imgformat = 'svg'
     canvas.print_figure(output, format=imgformat, transparent=True)
     svg_out = output.getvalue()
-    # preserve_ratio=True
-    svg_out = REGEXPR_SVG_WIDTH.sub(' width="100%" preserveAspectRatio="none"',
-                                    REGEXPR_SVG_HEIGHT.sub('<svg height="100%"', svg_out.decode(), count=0),
-                                    count=0).encode()
+    if not preserve_ratio:
+        svg_out = REGEXPR_SVG_WIDTH.sub(' width="100%" preserveAspectRatio="none"',
+                                        REGEXPR_SVG_HEIGHT.sub('<svg height="100%"', svg_out.decode(), count=0),
+                                        count=0).encode()
     try:
         with open(name_img, 'wb') as f:
             f.write(svg_out)
