@@ -1,44 +1,35 @@
 # -*- coding: utf-8 -*-
-import locale
-from itertools import cycle
-from math import sqrt, exp
-
-import matplotlib.dates as mpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytz
+from scipy.signal import wiener  # , medfilt, firwin
 import seaborn as sns
+
 from enerpi.api import enerpi_data_catalog
 from enerpi.base import timeit
-from enerpiplot.enerplot import write_fig_to_svg, tableau20
-from numba import jit
+from enerpiprocess.numba_routines import (_rect_smoothing, _std, _peak_interval,
+                                          _fusion_big_events, _new_interval_event_groups)
+from enerpiprocess.processplots import plot_intervalos, filter_time
 from prettyprinting import *
-from scipy.signal import wiener  # , medfilt, firwin
 
-
-# NUMBA BUG http://numba.pydata.org/numba-doc/dev/user/faq.html#llvm-locale-bug
-#   RuntimeError: Failed at nopython (nopython mode backend)
-#   LLVM will produce incorrect floating-point code in the current locale
-# it means you have hit a LLVM bug which causes incorrect handling of floating-point constants.
-# This is known to happen with certain third-party libraries such as the Qt backend to matplotlib.
-locale.setlocale(locale.LC_NUMERIC, 'C')
 
 MARGEN_ABS = 50
 ROLL_WINDOW_STD = 7
 
-FRAC_PLANO_INTERV = .9  # fracción de elementos planos (sin ∆ apreciable) en el intervalo
-N_MIN_FRAC_PLANO = 10  # Nº mínimo de elems en intervalo para aplicar FRAC_PLANO_INTERV
-P_OUTLIER = .95
-P_OUTLIER_SAFE = .99
-
-MIN_EVENT_T = 7
-# MIN_VALIDOS = 3
-# MIN_STD = 20
-
-PATH_TRAIN_DATA_STORE = '/Users/uge/Dropbox/PYTHON/PYPROJECTS/enerpi/notebooks/train.h5'
+PATH_TRAIN_DATA_STORE = '/Users/uge/Dropbox/PYTHON/PYPROJECTS/enerpi/enerpiprocess/train.h5'
 TZ = pytz.timezone('Europe/Madrid')
 FS = (16, 10)
+
+
+def _print_types(*args):
+    str_out = ''
+    for a in args:
+        if type(a) is np.ndarray:
+            str_out += 'A[{}, ({})]; '.format(a.dtype, len(a))
+        else:
+            str_out += '[{}]; '.format(a.__class__)
+    print(str_out)
 
 
 # Catálogo y lectura de todos los datos.
@@ -58,6 +49,7 @@ def load_data():
 @timeit('get_train_data', verbose=True)
 def get_train_data(homog_power=None):
     """
+    TRAIN DATA: (event detection)
     Subconjunto continuo para entrenamiento:
     De '2016-09-08' a '2016-09-21' (2 semanas completas)
     """
@@ -78,28 +70,8 @@ def get_train_data(homog_power=None):
     return train
 
 
-# TRAIN DATA: (event detection)
-@timeit('process_data_for_event_detection', verbose=True)
-def process_data_for_event_detection(train, kernel_size_wiener=15, roll_window_std_mean=ROLL_WINDOW_STD, verbose=False):
-    train_ev = train.copy()
-    train_ev['wiener'] = wiener(train_ev.power, kernel_size_wiener)
-    train_ev['delta_wiener'] = (train_ev.wiener - train_ev.wiener.shift()).fillna(0)
-    train_ev['abs_ch'] = train_ev['delta_wiener'].abs() > MARGEN_ABS
-
-    roll = train_ev['wiener'].rolling(roll_window_std_mean, center=True)
-    shift_roll = -(roll_window_std_mean // 2 + roll_window_std_mean % 2)
-
-    train_ev['r_std'] = roll.std().shift(shift_roll).fillna(method='ffill')
-    train_ev['r_mean'] = roll.mean().shift(shift_roll).fillna(method='ffill')
-    if verbose:
-        train_ev.info()
-        print_ok(train_ev.head())
-    return train_ev
-
-
 @timeit('get_subsets', verbose=True)
 def get_subsets(train_ev):
-    # train_ev = process_data_for_event_detection(train)
     # Subset of train data:
     df_1 = train_ev.loc['2016-09-10'].between_time('8:30', '10:30')
     df_2 = train_ev.loc['2016-09-08'].between_time('8:00', '14:00')
@@ -112,390 +84,176 @@ def get_subsets(train_ev):
     return [df_1, df_2, df_3, df_4, df_5, df_6, df_7]
 
 
-@jit('f8(f8)', nopython=True, cache=True)
-def _phi(x):
-    a1 = 0.254829592
-    a2 = -0.284496736
-    a3 = 1.421413741
-    a4 = -1.453152027
-    a5 = 1.061405429
-    p = 0.3275911
-    sign = 1
-    if x < 0:
-        sign = -1
-    x = abs(x) / sqrt(2)
-    # A&S formula 7.1.26
-    t = 1. / (1. + p * x)
-    y = 1. - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * exp(-x * x)
-    return .5 * (1. + sign * y)
+@timeit('filter_power_data', verbose=True)
+def filter_power_data(train_ev, kernel_size_wiener=15):
+    """
+
+    :param train_ev:
+    :param kernel_size_wiener:
+    :return:
+    """
+    train_ev = train_ev.copy()
+    train_ev['wiener'] = wiener(train_ev.power, kernel_size_wiener).round()  # .astype(np.int)
+    return train_ev
 
 
-@jit('f8(f8,f8,f8)', nopython=True, cache=True)
-def _cdf(p, mean, std):
-    return _phi((p - mean) / std)
-
-
-@jit(['f8(f8[:])', 'f4(f4[:])'], nopython=True, cache=True)
-def _std(x):
-    s0 = x.shape[0]
-    s1 = s2 = 0.
-    for i in range(s0):
-        if x[i] != np.nan:
-            s1 += x[i]
-            s2 += x[i] * x[i]
-        else:
-            s0 -= 1
-    if s0 > 0:
-        return sqrt((s0 * s2 - s1 * s1)/(s0 * s0))
-    else:
-        return 0.
-
-
-@jit(['f4(f4[:])', 'f8(f8[:])'], nopython=True, cache=True)
-def _mean(X):
-    return np.mean(X)
-
-
-@jit(['f4(f4[:])', 'f8(f8[:])'], nopython=True, cache=True)
-def _median(X):
-    return np.median(X)
-
-
-@jit('b1(f8,f8)', nopython=True, cache=True)
-def _es_outlier(pnorm, p_limit=P_OUTLIER):
-    if (pnorm < 1. - p_limit) or (pnorm > p_limit):
-        return True
-    return False
-
-
-@jit('b1(f8,f8,f8,f8)', nopython=True, cache=True)
-def _cambio_futuro(std1, std2, m1, m2):
-    d, dc = abs(m1 - m2), abs(std1 - std2)
-    if ((dc > 100.) or (dc / ((std1 + std2) / 2.) > 5.)) or ((d > 1000.) or (d / ((m1 + m2) / 2.) > 1.)):
-        return True
-    return False
-
-
-@jit('b1(b1,f8,f8,f8,f8,f8,f8,f8,f8)', nopython=True, cache=True)
-def _detect_event_change(hay_ch_abs, incr, next_incr,
-                         mean_final, std_final, next_mean, next_std,
-                         pnorm, pnorm_next):
-    # Lógica de detección de eventos:
-    next_dif_mean_supera_std = (abs(mean_final - next_mean) > std_final) and (std_final > 5)
-
-    es_outlier_safe = _es_outlier(pnorm, P_OUTLIER_SAFE)
-    es_outlier = es_outlier_safe or _es_outlier(pnorm, P_OUTLIER_SAFE)
-    next_es_outlier_safe = _es_outlier(pnorm_next, P_OUTLIER_SAFE)
-
-    hay_cambio_futuro = _cambio_futuro(std_final, next_std, mean_final, next_mean)
-    hay_incr_considerar = (abs(incr) > 10) or (abs(incr + next_incr) > 15)
-
-    vip = ((hay_ch_abs and next_dif_mean_supera_std and es_outlier and next_es_outlier_safe)
-           or ((hay_incr_considerar or hay_cambio_futuro) and es_outlier_safe and next_es_outlier_safe)
-           or (next_dif_mean_supera_std and es_outlier_safe and next_es_outlier_safe))
-    return vip
-
-
-# @jit('i8,i8,i8,f8,f8(f8[:],i8[:],b1,b1,i8,i8,f8,i8,b1,f8,f8,i8,f8,f8,f8,f8,i8[:],i8[:],b1)', nopython=True)
-@jit(nopython=True, cache=True)
-def _process_instant(calc_values, change, hay_ch_abs, hay_ch_min, i, idx_ch_ant, incr, ini_int, is_start_event,
-                     last_std, last_step, n, next_incr, next_mean, next_std, p, step, step_med, sufficient_event):
-    v_planos = calc_values[ini_int:i][np.nonzero(change[ini_int:i] == 0)[0]]
-    n_planos = v_planos.shape[0]
-    if (n_planos > 2 * ROLL_WINDOW_STD) and (n > N_MIN_FRAC_PLANO) and (n_planos / n > FRAC_PLANO_INTERV):
-        std_final = _std(v_planos[-(2 * ROLL_WINDOW_STD):])
-        mean_final = _mean(v_planos[-(2 * ROLL_WINDOW_STD):])
-        err_dist_f = std_final / sqrt(len(v_planos[-(2 * ROLL_WINDOW_STD):]))
-    elif (n_planos > 3) and (n_planos / n > .7):
-        std_final = _std(v_planos)
-        mean_final = _mean(v_planos)
-        err_dist_f = std_final / sqrt(n_planos)
-    else:
-        std_final = _std(calc_values[ini_int + 2:i])
-        mean_final = _mean(calc_values[ini_int + 2:i])
-        err_dist_f = std_final / sqrt(n - 2)
-
-    # Condición de intervalo diferente al anterior para k y k+1:
-    p1, p2, m, s = round(p), round(p + next_incr), round(mean_final), round(min(150, std_final + err_dist_f), 1)
-    pnorm = _cdf(p1, m, s)
-    pnorm_next = _cdf(p2, m, s)
-    # Lógica de detección de eventos:
-    vip = _detect_event_change(hay_ch_abs, incr, next_incr, mean_final, std_final,
-                               next_mean, next_std, pnorm, pnorm_next)
-    if sufficient_event and vip:
-        change[i] = vip
-
-        new_last_step = _mean(calc_values[ini_int + 2:i - 1])
-        new_last_std = _std(calc_values[ini_int + 2:i - 1])
-        new_median = _median(calc_values[ini_int + 2:i - 1])
-
-        last_step_integrate = _mean(calc_values[idx_ch_ant + 2:i - 1])
-        last_std_integrate = _std(calc_values[idx_ch_ant + 2:i - 1])
-        last_median_integrate = _median(calc_values[idx_ch_ant + 2:i - 1])
-
-        # Condición de cierre de intervalo junto al anterior o diferente:
-        cambio_median = np.abs(new_median - last_median_integrate) / last_median_integrate > .05
-
-        if (not cambio_median and (abs(np.max(calc_values[ini_int + 2:i]) - last_step_integrate) < 200) and
-                (abs(last_std - last_std_integrate) < 10) and
-                (abs(last_step - last_step_integrate) < 15) and
-                (abs(new_last_step - last_step_integrate) / last_step_integrate < .1)):
-            is_start_event[ini_int] = False
-            step[idx_ch_ant:i] = int(last_step_integrate)
-            step_med[idx_ch_ant:i] = int(last_median_integrate)
-            is_start_event[i] = True
-            last_step, last_std = last_step_integrate, last_std_integrate
-            ini_int = i
-            n = 1
-        else:
-            step[ini_int:i] = int(new_last_step)
-            step_med[ini_int:i] = int(_median(calc_values[ini_int:i - 1]))
-            is_start_event[i] = True
-            idx_ch_ant, last_step, last_std = ini_int, new_last_step, new_last_std
-            ini_int = i
-            n = 1
-    else:
-        change[i] = hay_ch_min
-        n += 1
-    return ini_int, n, idx_ch_ant, last_step, last_std
-
-
-@jit('(i8[:],i8[:],i1[:],b1[:],f8[:],b1[:],f8[:],f8[:],f8[:],f8[:])', nopython=True, cache=True)
-def _rect_smoothing(step_med, step, change, is_start_event,
-                    calc_values, abs_ch, r_mean, r_std, delta_shift_1, delta_shift_2):
-    N = calc_values.shape[0]
-    idx_ch_ant = ini_int = last_step = last_std = n = 0
-    for i in range(N):
-        (p, hay_ch_abs, incr, next_incr,
-         next_std, next_mean) = (calc_values[i], abs_ch[i], delta_shift_1[i], delta_shift_2[i], r_std[i], r_mean[i])
-        sufficient_event = n > MIN_EVENT_T
-        hay_ch_min = (abs(incr) > 15) or (abs(incr + next_incr) > 20)
-        if i == 0:
-            n += 1
-        elif i ==  - 3:
-            change[i] = hay_ch_min
-            step[ini_int:] = int(_mean(calc_values[ini_int:]))
-            step_med[ini_int:] = int(_median(calc_values[ini_int:]))
-        elif not sufficient_event:
-            change[i] = hay_ch_min
-            n += 1
-        else:
-            ini_int, n, idx_ch_ant, last_step, last_std = _process_instant(
-                calc_values, change, hay_ch_abs, hay_ch_min, i, idx_ch_ant, incr, ini_int,
-                is_start_event, last_std, last_step, n, next_incr, next_mean, next_std, p,
-                step, step_med, sufficient_event)
-    # return step_med, step, change, is_start_event
-
-
-# Detección de intervalos
 @timeit('rect_smoothing', verbose=True)
-def rect_smoothing(df):
-    N = len(df)
-    is_start_event = np.zeros(N, dtype=np.bool)
-    change = np.zeros(N, dtype=np.int8)
-    step = np.zeros(N, dtype=np.int)
-    step_med = np.zeros(N, dtype=np.int)
-    _rect_smoothing(step_med, step, change, is_start_event,
-                    df.wiener.values, df.abs_ch.values, df.r_mean.values, df.r_std.values,
-                    df.delta_wiener.shift(-1).values, df.delta_wiener.rolling(9).sum().shift(-8).values)
-    return pd.DataFrame({'step_median': step_med, 'step_mean': step, 'ch': change, 'is_init': is_start_event},
-                        columns=['step_median', 'step_mean', 'ch', 'is_init'], index=df.index)
+def rect_smoothing(df, roll_window_std_mean=ROLL_WINDOW_STD, margen_abs=MARGEN_ABS, name='wiener'):
+    """
+
+    :param df:
+    :param roll_window_std_mean:
+    :param margen_abs:
+    :param name:
+    :return:
+    """
+    num_total = len(df)
+    delta_wiener = (df[name] - df[name].shift()).fillna(0)
+
+    shift_roll = -(roll_window_std_mean // 2 + roll_window_std_mean % 2)
+    roll = df[name].rolling(roll_window_std_mean, center=True)
+    r_mean = roll.mean().shift(shift_roll).fillna(method='ffill').round().values
+    r_std = roll.std().shift(shift_roll).fillna(method='ffill').values
+
+    control_int = np.zeros(3, dtype=np.int)
+    control_float = np.zeros(2, dtype=np.float)
+    is_start_event = np.zeros(num_total, dtype=np.bool)
+    change, step_med = np.zeros(num_total, dtype=np.float), np.zeros(num_total, dtype=np.float)
+
+    _rect_smoothing(control_int, control_float, step_med, change, is_start_event,
+                    df[name].values,
+                    (delta_wiener.abs() > margen_abs).values,
+                    r_mean, r_std,
+                    delta_wiener.shift(-1).fillna(0).values,
+                    # delta_wiener.rolling(7).sum().shift(-6).fillna(0).values)
+                    delta_wiener.rolling(9).sum().shift(-8).fillna(0).values)
+
+    df_smooth = pd.DataFrame({name: df[name], 'step_median': step_med, 'is_init': is_start_event},
+                             columns=[name, 'step_median', 'is_init'], index=df.index)
+    df_smooth['interv_raw'] = df_smooth['is_init'].cumsum().astype(int)
+    return df_smooth
 
 
-# @jit
-def _std_nonzero(x):
-    N = x.shape[0]
-    # idx_act = np.nonzero(x.ch == 0)[0]
+@timeit('groupby_intervalos', verbose=True)
+def groupby_intervalos(df_step, label_gb='interv_raw', label_raw_big='big_event', label_level='level'):
+    """
 
-    # interv.ix[np.nonzero(x.ch)[0][-1] + 1:].wiener.std()
+    :param df_step:
+    :param label_gb:
+    :param label_raw_big:
+    :param label_level:
+    :return:
+    """
+    # TODO std de intervalo init-center-end
+    # def _tramos_std(x):
+    #     n = x.shape[0]
+    #     if n < 10:
+    #         return ()
 
-    idx_act = np.nonzero(x.ch)[0]
-    if len(idx_act) == 0:
-        # print_red(x.ch)
-        return _std(x.wiener.values)
-    elif idx_act[-1] + 1 < N:
-        v_usar = x.wiener.values[idx_act[-1] + 1:]
-        # print(N, idx_act[-1] + 1, len(v_usar))
-        return _std(v_usar)
-    else:
-        # print(N, idx_act, '\n', x)
-        return -1
+    gb = df_step.tz_convert('UTC').reset_index().groupby(label_gb)
 
+    cols = df_step.columns
+    cols_first = ['step_median', 'ts']
+    cols_first += list(cols[cols.str.contains('interv') & ~cols.str.contains(label_gb)])
+    cols_first += list(cols[cols.str.contains('level') & ~cols.str.contains(label_level)])
 
-def _valid_ch(interv_ch):
-    idx_act = np.nonzero(interv_ch)[0]
-    if (len(idx_act) == 0) or (idx_act[-1] + 1 < len(interv_ch)):
-        return True
-    else:
-        return False
+    interv_first = gb[cols_first].first().rename(columns=dict(ts='ts_ini'))
 
+    how_wiener = {'n': 'count',
+                  'mean_all': 'mean',
+                  'median_all': 'median',
+                  'std_all': 'std',
+                  # 'mean_all': lambda x: _mean(x.values),
+                  # 'median_all': lambda x: _median(x.values),
+                  # 'std_all': lambda x: _std(x.values),
+                  'peak': lambda x: _peak_interval(x.values),
+                  'std_0': lambda x: _std(x[:5].values),
+                  'std_c': lambda x: _std(x[3:-3].values),
+                  'std_f': lambda x: _std(x[5:].values)}
+    interv_wiener = gb['wiener'].agg(how_wiener)
 
-@timeit('genera_df_intervalos', verbose=True)
-def genera_df_intervalos(df_data, df_step, verbose=False):
-    train_step_t = df_data[['wiener']].join(df_step)
-    # train_step_t['interv_simple'] = train_step_t.is_init.cumsum().shift(-1).fillna(method='ffill').astype(int)
-    train_step_t['interv_simple'] = train_step_t.is_init.cumsum().fillna(method='ffill').astype(int)
-    gb = train_step_t.tz_convert('UTC').reset_index().groupby('interv_simple')
-    steps = gb.step_median.first()
+    concatenar = [interv_first,
+                  interv_first['step_median'].diff().fillna(0).rename('delta'),
+                  interv_wiener,
+                  gb.ts.last().rename('ts_fin')]
+    if label_raw_big in df_step:
+        concatenar += [gb[label_raw_big].any().astype(bool)]
+    if 'level' in df_step:
+        concatenar += [gb['level'].min().astype(int).rename(label_level)]
 
-    df_interv = pd.DataFrame(pd.concat(
-        [gb.ch.apply(lambda x: np.sum(np.abs(x))).rename('n_ch'),
-         gb.wiener.count().rename('n'),
-         gb.wiener.median().rename('median_all').round(),
-         gb.wiener.std().rename('std_all').round(1),
-         steps.rename('step_median_0'),
-         steps.rename('delta') - steps.shift().fillna(steps.ix[0]).values,
-         gb.ts.first().rename('ts_ini'),
-         gb.ts.last().rename('ts_fin'),
-         gb.wiener.apply(lambda x: _std(x[:5].values)).rename('std_0'),
-         gb.wiener.apply(lambda x: _std(x[3:-3].values)).rename('std_c'),
-         gb.wiener.apply(lambda x: _std(x[5:].values)).rename('std_f')], axis=1))
-    if verbose:
-        print_magenta(df_interv)
+    df_interv = pd.DataFrame(pd.concat(concatenar, axis=1))
     return df_interv
 
 
-@jit(['b1(f8,f8,f8,f8,f8)', 'b1(f4,f4,f4,f4,f4)'], nopython=True, cache=True)
-def _condition_big_event(d_acum, delta, std_all, median_all, last_level):
-    if (d_acum > 500) or (delta > 500) or ((std_all > 100) and (d_acum > 50)) or (median_all - last_level > 200):
-        return True
-    return False
-
-
-@timeit('fusion_big_events', verbose=True)
-def _fusion_big_events(df_interv, verbose=False):
-    grupos, g_i = [], []
-    levels = []
-    ant_vip = False
-    d_acum = 0
-    level = df_interv.median_all[0]
-    for i, row in df_interv.iterrows():
-        if verbose:
-            print_red('{:5} -> {:%H:%M:%S}, d_acum: {:.0f}; delta: {:.0f}; '
-                      'std_all: {:.0f}; median_all: {:.0f}; level: {:.0f}. G_i={}'
-                      .format(i, row.ts, d_acum, row.delta, row.std_all, row.median_all, level, g_i))
-        if _condition_big_event(d_acum, row.delta, row.std_all, row.median_all, level):
-            if not ant_vip and (len(g_i) == 0):
-                level = row.median_all - row.delta
-                d_acum = row.delta
-                if verbose:
-                    print_info('NEW {} con median_all={:.0f}, delta={:.0f} --> level = {:.0f}'
-                               .format(i, row.median_all, row.delta, level))
-                if len(g_i) > 0:
-                    if verbose:
-                        print_info('se cierra anterior: {}'.format(g_i))
-                    grupos.append(g_i)
-                g_i = [i]
-            else:
-                d_acum += row.delta
-                if abs(d_acum) < 100:
-                    if len(g_i) > 0:
-                        if verbose:
-                            print_cyan('se cierra por d_acum={}, {}'.format(d_acum, g_i))
-                        grupos.append(g_i)
-                    g_i = []
-                    level = row.median_all  # - row.delta
-                    d_acum = 0
-                else:
-                    if verbose:
-                        print_red('se sigue acumulando {} en {}, d_acum={}'.format(i, g_i, d_acum))
-                    g_i.append(i)
-            ant_vip = True
-        else:
-            if len(g_i) > 0:
-                # g_i.append(i)
-                grupos.append(g_i)
-                if verbose:
-                    print_red('se cierra {}, level_ant={:.0f}, ∆={:.0f}, new_level={:.0f}'
-                              .format(g_i, level, row.delta, row.median_all))
-            g_i = []
-            level = row.median_all
-            d_acum = 0
-            ant_vip = False
-        levels.append(level)
-    df_interv['level'] = levels
-    if len(g_i) > 0:
-        grupos.append(g_i)
-    if verbose:
-        print_red(grupos)
-    return df_interv, grupos
-
-
-@timeit('integrate_step_detection', verbose=True)
-def _integrate_step_detection(df, df_step, df_interv, verbose=False):
+@timeit('genera_df_intervalos', verbose=True)
+def genera_df_intervalos(df_step):
     """
-    Concatena la información de la detección de escalones (eventos) y numera los intervalos.
+
+    :param df_step:
+    :return:
     """
-    df_out = df[['power', 'wiener']].join(df_step[['step_median', 'step_mean', 'is_init']]).tz_convert('UTC')
-    df_out['init_event'] = df_out['is_init'] # .shift(-1).fillna(0).astype(bool)
-    df_out['big_event'] = False
 
-    # Big events:
-    df_interv, grupos = _fusion_big_events(df_interv)
-    # df_interv['ts_fin'] = df_interv['ts'].shift(-1).fillna(df.index[-1])
-    df_interv['big_event'] = False
-    for i, idx in enumerate(grupos):
-        df_interv.loc[idx, 'big_event'] = True
-        for idxi in idx[1:]:
-            df_out.loc[df_interv.loc[idxi, 'ts_ini'], 'init_event'] = False
-        df_out.loc[df_interv.loc[idx[0], 'ts_ini'], 'big_event'] = True
+    def _append_fusion_big_events(df_intervalos, columns):
+        # Big events:
+        num_total = len(df_intervalos)
+        levels = np.zeros(num_total, dtype=np.int)
+        intervalo = np.zeros(num_total, dtype=np.int)
+        big_events = np.zeros(num_total, dtype=np.bool)
+        _fusion_big_events(levels, big_events, intervalo,
+                           df_intervalos['n'].values, df_intervalos['delta'].values, df_intervalos['peak'].values,
+                           df_intervalos['median_all'].values, df_intervalos['std_all'].values,
+                           df_intervalos['std_0'].values, df_intervalos['std_c'].values, df_intervalos['std_f'].values)
+        for c, arr in zip(columns, [levels, big_events, intervalo]):
+            df_interv[c] = arr
+        return df_interv
 
-    df_out['intervalo'] = df_out['init_event'].cumsum()
-    if verbose:
-        print_magenta(df_out.tz_convert(TZ))
-    return df_out.tz_convert(TZ)
+    def _append_column_ts(df, df_intervalos, col, c_ini='ts_ini', c_fin='ts_fin'):
+        df_interv_usar = df_intervalos.reset_index()
+        s = pd.Series(pd.concat([df_interv_usar[[c_ini, col]].set_index(c_ini)[col].tz_convert(TZ),
+                                 df_interv_usar[[c_fin, col]].set_index(c_fin)[col].tz_convert(TZ)])).sort_index()
+        df[col] = s
+        df[col] = df[col].fillna(method='ffill').astype(s.dtype)
+        return df
 
+    def _agrupa_eventos(intervalos, len_intervalos, is_big_event, n_max_intersticio=30, frac_min_intersticio=1.2):
+        np.testing.assert_equal(intervalos.shape, len_intervalos.shape)
+        np.testing.assert_equal(intervalos.shape, is_big_event.shape)
 
-def plot_steps_detection(df_data, df_step):
-    ax = df_data.wiener.plot(figsize=FS, lw=.5, alpha=.3, color=tableau20[0])
-    # (df_step.is_init.abs() * 1000).plot(ax=ax, lw=.75, alpha=.3, color=tableau20[6])
-    ax.vlines(df_step[df_step.is_init].index, 0, 500, lw=.75, alpha=.3, color=tableau20[6])
-    df_step.step_median.plot(ax=ax, lw=1, alpha=.9, color=tableau20[4])
-    # (df_step.ch.abs() * 500).plot(ax=ax, lw=.75, alpha=.3, color=tableau20[6])
-    # df_debug.mean_planos.plot(ax=ax, lw=.75, alpha=.7, color=tableau20[8])
-    # df_debug.error_cum.plot(ax=ax, lw=.5, alpha=.9, color=tableau20[2])
-    ax.xaxis.set_major_formatter(mpd.DateFormatter('%H:%M:%S', tz=TZ))
-    plt.setp(ax.xaxis.get_majorticklabels(), rotation=0, ha='center')
-    ax.xaxis.set_tick_params(labelsize=9, pad=3)
-    return ax
+        new_intervalos = np.ones(intervalos.shape[0], dtype=bool)
+        num_intervalos = np.max(intervalos) - np.min(intervalos) + 1
+        result_big_events = np.zeros(num_intervalos, dtype=bool)
+        len_events = np.zeros(num_intervalos, dtype=int)
+        ini_events = np.zeros(num_intervalos, dtype=int)
 
+        _new_interval_event_groups(new_intervalos, result_big_events, len_events, ini_events,
+                                   intervalos, len_intervalos, is_big_event,
+                                   n_max_intersticio, frac_min_intersticio)
+        return new_intervalos.cumsum()
 
-def _plot_intervals(df_out, with_fill_events=True, with_raw_scatter=True, with_vlines=True):
-    """Plot intervalos y big_events por separado, con distintos colores"""
-    dp = df_out.reset_index().set_index('intervalo')
-    f, ax = plt.subplots(1, 1, figsize=(16, 8))
-    # cm = cycle(mpc.get_cmap('viridis').colors[::4])
-    cm = cycle(tableau20[::2])
-    color_small_ev = 'grey'
-    for i in set(dp.index):
-        df_i = dp.loc[i].set_index('ts')
-        if not df_i.empty:
-            is_big = dp.loc[i, 'big_event'].sum() > 0
-            color = next(cm) if is_big else 'k'
-            lw = 1.25 if is_big else .5
-            alpha = .8 if is_big else .5
-            legend = 'Ev{:3d}'.format(i) if is_big else ''
-            if with_vlines:
-                ax.vlines(df_i[df_i.is_init].index, 0, df_i[df_i.is_init].step_median * 2,
-                          lw=.25, alpha=.5, color=color_small_ev, label='')
-            if is_big:
-                if with_fill_events:
-                    ax.fill_between(df_i.index, df_i.wiener, y2=0, lw=0, alpha=.2, color=color, label='')
-                if with_raw_scatter:
-                    ax.scatter(df_i.index, df_i.power, s=10, lw=0, alpha=.4, c=color, label='')
-            elif with_raw_scatter:
-                ax.scatter(df_i.index, df_i.power, s=6, lw=0, alpha=.3, c=color_small_ev, label='')
-            df_i.wiener.plot(ax=ax, lw=lw, alpha=alpha, color=color, label=legend)
-    ax.set_ylim((0, dp.wiener.max() + 200))
-    ax.xaxis.tick_bottom()
-    ax.xaxis.set_major_formatter(mpd.DateFormatter('%H:%M:%S', tz=TZ))
-    xl = ax.get_xlim()
-    if xl[1] - xl[0] < .25:
-        ax.xaxis.set_minor_locator(mpd.MinuteLocator(tz=TZ))
-    plt.setp(ax.xaxis.get_majorticklabels(), rotation=0, ha='center')
-    ax.xaxis.set_tick_params(labelsize=9, pad=3)
-    plt.legend(loc='best')
-    return ax
+    # 1º resumen de intervalos. Groupby por intervalos "raw"
+    df_interv = groupby_intervalos(df_step, label_gb='interv_raw')
+
+    # Detección de big_events y fusión de consecutivos y con intersticios (breves pausas):
+    cols_fusion = ('level', 'big_event', 'intervalo')
+    df_interv = _append_fusion_big_events(df_interv, cols_fusion)
+    df_interv['interv_group'] = _agrupa_eventos(df_interv[cols_fusion[2]].values,
+                                                df_interv['n'].values,
+                                                df_interv[cols_fusion[1]].values,
+                                                n_max_intersticio=40, frac_min_intersticio=1.5)
+
+    # Append columnas de agrupación a time-series original:
+    df_step = _append_column_ts(df_step, df_interv, cols_fusion[0])
+    df_step = _append_column_ts(df_step, df_interv, cols_fusion[1])
+    df_step = _append_column_ts(df_step, df_interv, cols_fusion[2])
+    df_step = _append_column_ts(df_step, df_interv, 'interv_group')
+
+    # 2º resumen de intervalos. Group-by por intervalos 'agrupados':
+    df_interv_group = groupby_intervalos(df_step, label_gb='interv_group', label_level='level_group')
+    df_interv = df_interv.join(df_interv_group.reset_index().set_index('interv_raw')[['level_group']])
+    df_interv['level_group'] = df_interv['level_group'].fillna(method='ffill')
+    df_step = _append_column_ts(df_step, df_interv, 'level_group')
+
+    return df_step, df_interv, df_interv_group
 
 
 @timeit('test_interval_detection', verbose=True)
@@ -505,12 +263,32 @@ def test_interval_detection(regen_train_data=False):
 
     * timming:
     get_train_data TOOK: 0.058 s
-    process_data_for_event_detection TOOK: 0.331 s
+    filter_power_data TOOK: 0.331 s
     rect_smoothing TOOK: 1.393 s
     genera_df_intervalos TOOK: 0.855 s
     fusion_big_events TOOK: 0.203 s
     integrate_step_detection TOOK: 18.759 s
     test_interval_detection TOOK: 21.416 s
+
+    get_train_data TOOK: 0.059 s
+    filter_power_data TOOK: 0.244 s
+    rect_smoothing TOOK: 1.738 s
+    groupby_intervalos TOOK: 0.383 s
+    _append_fusion_big_events TOOK: 0.001 s
+    groupby_intervalos TOOK: 0.397 s
+    _agrupa_eventos TOOK: 0.009 s
+    groupby_intervalos TOOK: 0.335 s
+    genera_df_intervalos TOOK: 1.238 s
+
+    get_train_data TOOK: 0.088 s
+    filter_power_data TOOK: 0.170 s
+    rect_smoothing TOOK: 5.115 s
+    groupby_intervalos TOOK: 1.152 s
+    _append_fusion_big_events TOOK: 0.002 s
+    groupby_intervalos TOOK: 1.210 s
+    _agrupa_eventos TOOK: 0.011 s
+    groupby_intervalos TOOK: 1.003 s
+    genera_df_intervalos TOOK: 3.710 s
 
 
     :param regen_train_data:
@@ -522,74 +300,163 @@ def test_interval_detection(regen_train_data=False):
     else:
         train = get_train_data()
 
-    train_ev = process_data_for_event_detection(train, kernel_size_wiener=15, verbose=False)
+    train_ev = filter_power_data(train, kernel_size_wiener=15)
 
-    df_subset = train_ev.loc['2016-09-10':'2016-09-15']
-    print_info(df_subset.count())
+    df_subset = train_ev
+    # df_subset = train_ev.loc['2016-09-10':'2016-09-14']
+    # df_subset = train_ev.loc['2016-09-10']
+    # print_info(df_subset.dtypes)
 
     df_step = rect_smoothing(df_subset)
-    print_cyan(df_step.count())
+    # print_cyan(df_step.dtypes)
 
-    # INTERVALOS:
-    df_interv = genera_df_intervalos(df_subset, df_step)
-    print_red(df_interv.count())
-    # print_ok(df_interv.head(15))
-    # print_cyan(df_interv.tail(15))
+    # INTERVALOS & BIG EVENTS
+    df_step, intervalos_raw, df_interv_group = genera_df_intervalos(df_step)
+    # print_red(intervalos_raw.dtypes)
+    # print_red(intervalos_raw.describe())
+    # print_magenta(df_interv_group.describe())
+    # print_info(df_step.describe())
 
-    # BIG EVENTS
-    df_out = _integrate_step_detection(df_subset, df_step, df_interv)
-    print_magenta(df_out.count())
+    # print_ok(intervalos_raw.head())
+    # print_ok(df_interv_group.head())
+    # Show
+    # plot_intervalos(df_interv_group, df_step, with_raw_scatter=False, size=12)
+    # plt.show()
+
+    # d_tramo_1 = dict(t0='2016-09-11 12:15', tf='2016-09-11 15:30')
+    # d_tramo_2 = dict(t0='2016-09-11 19:00', tf='2016-09-11 20:30')
+    #
+    # plot_intervalos([intervalos_raw,
+    #                  # df_interv_big,
+    #                  df_interv_group,
+    #                  filter_time(intervalos_raw, **d_tramo_1),
+    #                  # filter_time(df_interv_big, **d_tramo_1),
+    #                  filter_time(df_interv_group, **d_tramo_1),
+    #                  filter_time(intervalos_raw, **d_tramo_2),
+    #                  # filter_time(df_interv_big, **d_tramo_2),
+    #                  filter_time(df_interv_group, **d_tramo_2)],
+    #                 df_step, with_raw_scatter=False, size=4)
+    # fig = plt.gcf()
+    # fig.tight_layout()
+    # plt.show()
+
+    # plot_intervalos([filter_time(intervalos, **d_tramo_1), filter_time(intervalos, **d_tramo_2)],
+    #                 df_out, with_raw_scatter=False)
+    # plt.show()
+
+    # plot_intervalos([filter_time(intervalos_dense, **d_tramo_1), filter_time(intervalos_dense, **d_tramo_2)],
+    #                 df_out, with_raw_scatter=False)
+    # plt.show()
+
+    return df_step, intervalos_raw, df_interv_group
+
+
+@timeit('plot_interval_detection', verbose=True)
+def plot_interval_detection(df_step, intervalos_raw, df_interv_group, verbose=True):
+    """
+    # INTERVALOS & BIG EVENTS
+    """
+    if verbose:
+        print_red(intervalos_raw.dtypes)
+        print_red(intervalos_raw.describe())
+        print_magenta(df_interv_group.describe())
+        print_info(df_step.describe())
+
+        print_cyan(intervalos_raw.head())
+        print_ok(df_interv_group.head())
 
     # Show
-    # plot_steps_detection(df, df_step)
-    _plot_intervals(df_out, with_raw_scatter=False, with_vlines=False)
-    fig = plt.gcf()
-    fig.tight_layout()
-    write_fig_to_svg(fig, 'test_interval_detection.svg')
+    # plot_intervalos(df_interv_group, df_step, with_raw_scatter=False, size=12)
     # plt.show()
+
+    # d_tramo_1 = dict(t0='2016-09-11 12:15', tf='2016-09-11 15:30')
+    # d_tramo_2 = dict(t0='2016-09-11 19:00', tf='2016-09-11 20:30')
+    #
+    # plot_intervalos([intervalos_raw,
+    #                  # df_interv_big,
+    #                  df_interv_group,
+    #                  filter_time(intervalos_raw, **d_tramo_1),
+    #                  # filter_time(df_interv_big, **d_tramo_1),
+    #                  filter_time(df_interv_group, **d_tramo_1),
+    #                  filter_time(intervalos_raw, **d_tramo_2),
+    #                  # filter_time(df_interv_big, **d_tramo_2),
+    #                  filter_time(df_interv_group, **d_tramo_2)],
+    #                 df_step, with_raw_scatter=False, size=4)
+    # fig = plt.gcf()
+    # fig.tight_layout()
+    # plt.show()
+
+    # plot_intervalos([filter_time(intervalos, **d_tramo_1), filter_time(intervalos, **d_tramo_2)],
+    #                 df_out, with_raw_scatter=False)
+    # plt.show()
+
+    # plot_intervalos([filter_time(intervalos_dense, **d_tramo_1), filter_time(intervalos_dense, **d_tramo_2)],
+    #                 df_out, with_raw_scatter=False)
+    # plt.show()
+
+    return df_step, intervalos_raw, df_interv_group
+
+
+def _divide_big_events_en_tramos_para_representacion(df_interv_gr,
+                                                     delta_grupo=pd.Timedelta('1h'), delta_plot=pd.Timedelta('3min'),
+                                                     verbose=True):
+    """Agrupamiento de big_events para representación"""
+    df_solo_big = df_interv_gr[df_interv_gr.big_event]
+    grupos_con_big_events, grupo = [], []
+    inicio = tf_ant = start = df_solo_big.ts_ini[0]
+    fin = df_solo_big.ts_fin[-1]
+    for i, t0, tf in zip(df_solo_big.index, df_solo_big.ts_ini, df_solo_big.ts_fin):
+        if (start + delta_grupo < t0) and (tf_ant + delta_grupo / 10 < t0):
+            grupos_con_big_events.append([grupo[0], grupo[-1],
+                                          df_interv_gr.loc[grupo[0], 'ts_ini'], df_interv_gr.loc[grupo[-1], 'ts_fin']])
+            grupo = [i]
+            start = t0
+        else:
+            grupo.append(i)
+        tf_ant = tf
+    grupos_con_big_events.append([grupo[0], grupo[-1],
+                                  df_interv_gr.loc[grupo[0], 'ts_ini'], df_interv_gr.loc[grupo[-1], 'ts_fin']])
+    if verbose:
+        print_ok("* Los eventos 'importantes' se dividen en {} grupos, para {} días, de {:%d-%b'%y} a {:%d-%b'%y}"
+                .format(len(grupos_con_big_events), (fin - inicio).days, inicio, fin))
+    intervs_plot = [df_interv_gr.loc[g[0] - 2:g[1] + 1] for g in grupos_con_big_events]
+    xlims_plot = [(g[2] - delta_plot, g[3] + delta_plot) for g in grupos_con_big_events]
+    return intervs_plot, xlims_plot, grupos_con_big_events
 
 
 if __name__ == '__main__':
     # Conf
+    import os
+
     pd.set_option('display.width', 240)
     sns.set_style('ticks')
+    p = os.path.dirname(__file__)
 
-    test_interval_detection(regen_train_data=False)
+    df_subset, df_interv, df_interv_group = test_interval_detection(regen_train_data=False)
 
-    # # LOAD Subconjunto continuo para entrenamiento. De '2016-09-08' a '2016-09-21' (2 semanas completas)
-    # # _data, _data_s, _POWER, homog_power = load_data()
-    # # train = get_train_data(homog_power)
-    # train = get_train_data()
-    # train_ev = process_data_for_event_detection(train, kernel_size_wiener=15, verbose=False)
-    #
-    # df_1, df_2, df_3, df_4, df_5, df_6, df_7 = get_subsets(train_ev)
-    #
-    # # Detección de intervalos
-    # lista_dfs = [df_1.between_time('8:51', '9:02'), df_2.between_time('13:45', '15:30'), df_2, df_3, df_4]
-    # # # lista_dfs = [df_2.between_time('13:45', '15:30')]
-    # lista_dfs += [df_5, df_6, df_7]
-    # # lista_dfs = [df_5, df_6, df_7]
-    # # lista_dfs = [df_5.between_time('9:00', '13:00'), df_5]
-    # # # lista_dfs = [df_7.between_time('08:00', '23:00')]
-    # # # lista_dfs = [df_7.between_time('10:40', '12:30')]
-    # # lista_dfs = [train_ev]
-    #
-    # for df in lista_dfs:
-    #     df_step = rect_smoothing(df)
-    #
-    #     # INTERVALOS:
-    #     df_interv = genera_df_intervalos(df, df_step)
-    #     # print_ok(df_interv.head(15))
-    #     # print_cyan(df_interv.tail(15))
-    #
-    #     # BIG EVENTS
-    #     df_out = _integrate_step_detection(df, df_step, df_interv)
-    #
-    #     # Show
-    #     # plot_steps_detection(df, df_step)
-    #     _plot_intervals(df_out)
-    #     plt.gcf().tight_layout()
-    #     plt.show()
+    # plot_interval_detection(df_subset, df_interv, df_interv_group)
 
-
-
+    # intervs_plot, xlims_plot, big_events_plot = _divide_big_events_en_tramos_para_representacion(df_interv_group)
+    # imgs_names = [os.path.join(p, 'big_events_detection_int{:04d}_to_int{:04d}.svg'.format(x[0], x[-1]))
+    #               for x in big_events_plot]
+    # N = len(intervs_plot)
+    # for i in range(N // 9 + (1 if N % 9 != 0 else 0)):
+    #     next_g = min(N, (i+1)*9)
+    #     intervs_plot_i = intervs_plot[i*9:next_g]
+    #     img_name = os.path.join(p, 'big_events_detection_{:%Y%m%d}_int{:04d}_to_int{:04d}.svg'
+    #                             .format(intervs_plot_i[0].ts_ini[0],
+    #                                     intervs_plot_i[0].index[0], intervs_plot_i[-1].index[-1]))
+    #     axes = plot_intervalos(intervs_plot_i, df_subset, with_level=True, major_fmt='%H:%M',
+    #                            xlim=xlims_plot[i*9:next_g], img_name=img_name)
+    #     # plt.show()
+    #
+    # # SAVE DATA
+    # p_debug = os.path.join(p, 'debug_step_detection.h5')
+    # print_yellow(p_debug)
+    # with open(p_debug, 'w'):
+    #     pass
+    # df_subset.to_hdf(p_debug, 'data')
+    # df_interv.to_hdf(p_debug, 'interv')
+    # df_interv_big.to_hdf(p_debug, 'interv_big')
+    # df_interv_group.to_hdf(p_debug, 'interv_group')
+    # print(round(os.path.getsize(p_debug) / 1e6, 1))
