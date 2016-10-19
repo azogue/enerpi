@@ -10,7 +10,7 @@ from enerpi.api import enerpi_data_catalog
 from enerpi.base import timeit
 from enerpiprocess.numba_routines import (_rect_smoothing, _std, _peak_interval,
                                           _fusion_big_events, _new_interval_event_groups)
-from enerpiprocess.processplots import plot_intervalos, filter_time
+from enerpiprocess.processplots import plot_intervalos
 from prettyprinting import *
 
 
@@ -239,7 +239,7 @@ def genera_df_intervalos(df_step):
     df_interv['interv_group'] = _agrupa_eventos(df_interv[cols_fusion[2]].values,
                                                 df_interv['n'].values,
                                                 df_interv[cols_fusion[1]].values,
-                                                n_max_intersticio=40, frac_min_intersticio=1.5)
+                                                n_max_intersticio=60, frac_min_intersticio=3)
 
     # Append columnas de agrupación a time-series original:
     df_step = _append_column_ts(df_step, df_interv, cols_fusion[0])
@@ -259,41 +259,18 @@ def genera_df_intervalos(df_step):
 @timeit('test_interval_detection', verbose=True)
 def test_interval_detection(regen_train_data=False):
     """
-    # LOAD DATA Subconjunto continuo para entrenamiento. De '2016-09-08' a '2016-09-21' (2 semanas completas)
+    Detección de eventos y agrupación de los mismos en el subconjunto de entrenamiento.
+     - LOAD/REGEN Subconjunto continuo para entrenamiento. De '2016-09-08' a '2016-09-21' (2 semanas completas)
+     - Filtrado Wiener
+     - Detección de intervalos mediante 'genera_df_intervalos' sobre 'rect_smoothing' del filtrado Wiener.
+    Devuelve 3 dataframes: df_step, intervalos_raw, df_interv_group. La 1º comparte índice con la secuencia de
+    entrenamiento y posee columnas asociadas al intervalo o al nivel detectado de cada instante. Las 2ª y 3ª son
+    resúmenes (group-by-s sobre el intervalo) de los intervalos detectados, en bruto, y agrupados, respectivamente.
 
-    * timming:
-    get_train_data TOOK: 0.058 s
-    filter_power_data TOOK: 0.331 s
-    rect_smoothing TOOK: 1.393 s
-    genera_df_intervalos TOOK: 0.855 s
-    fusion_big_events TOOK: 0.203 s
-    integrate_step_detection TOOK: 18.759 s
-    test_interval_detection TOOK: 21.416 s
-
-    get_train_data TOOK: 0.059 s
-    filter_power_data TOOK: 0.244 s
-    rect_smoothing TOOK: 1.738 s
-    groupby_intervalos TOOK: 0.383 s
-    _append_fusion_big_events TOOK: 0.001 s
-    groupby_intervalos TOOK: 0.397 s
-    _agrupa_eventos TOOK: 0.009 s
-    groupby_intervalos TOOK: 0.335 s
-    genera_df_intervalos TOOK: 1.238 s
-
-    get_train_data TOOK: 0.088 s
-    filter_power_data TOOK: 0.170 s
-    rect_smoothing TOOK: 5.115 s
-    groupby_intervalos TOOK: 1.152 s
-    _append_fusion_big_events TOOK: 0.002 s
-    groupby_intervalos TOOK: 1.210 s
-    _agrupa_eventos TOOK: 0.011 s
-    groupby_intervalos TOOK: 1.003 s
-    genera_df_intervalos TOOK: 3.710 s
-
-
-    :param regen_train_data:
-    :return:
+    :param regen_train_data: Bool para regenerar el intervalo de entrenamiento
+    :return: df_step, intervalos_raw, df_interv_group
     """
+
     if regen_train_data:
         _data, _data_s, _POWER, homog_power = load_data()
         train = get_train_data(homog_power)
@@ -305,102 +282,21 @@ def test_interval_detection(regen_train_data=False):
     df_subset = train_ev
     # df_subset = train_ev.loc['2016-09-10':'2016-09-14']
     # df_subset = train_ev.loc['2016-09-10']
-    # print_info(df_subset.dtypes)
+    # df_subset = train_ev.loc['2016-09-18':'2016-09-21']
 
-    df_step = rect_smoothing(df_subset)
-    # print_cyan(df_step.dtypes)
-
-    # INTERVALOS & BIG EVENTS
-    df_step, intervalos_raw, df_interv_group = genera_df_intervalos(df_step)
-    # print_red(intervalos_raw.dtypes)
-    # print_red(intervalos_raw.describe())
-    # print_magenta(df_interv_group.describe())
-    # print_info(df_step.describe())
-
-    # print_ok(intervalos_raw.head())
-    # print_ok(df_interv_group.head())
-    # Show
-    # plot_intervalos(df_interv_group, df_step, with_raw_scatter=False, size=12)
-    # plt.show()
-
-    # d_tramo_1 = dict(t0='2016-09-11 12:15', tf='2016-09-11 15:30')
-    # d_tramo_2 = dict(t0='2016-09-11 19:00', tf='2016-09-11 20:30')
-    #
-    # plot_intervalos([intervalos_raw,
-    #                  # df_interv_big,
-    #                  df_interv_group,
-    #                  filter_time(intervalos_raw, **d_tramo_1),
-    #                  # filter_time(df_interv_big, **d_tramo_1),
-    #                  filter_time(df_interv_group, **d_tramo_1),
-    #                  filter_time(intervalos_raw, **d_tramo_2),
-    #                  # filter_time(df_interv_big, **d_tramo_2),
-    #                  filter_time(df_interv_group, **d_tramo_2)],
-    #                 df_step, with_raw_scatter=False, size=4)
-    # fig = plt.gcf()
-    # fig.tight_layout()
-    # plt.show()
-
-    # plot_intervalos([filter_time(intervalos, **d_tramo_1), filter_time(intervalos, **d_tramo_2)],
-    #                 df_out, with_raw_scatter=False)
-    # plt.show()
-
-    # plot_intervalos([filter_time(intervalos_dense, **d_tramo_1), filter_time(intervalos_dense, **d_tramo_2)],
-    #                 df_out, with_raw_scatter=False)
-    # plt.show()
-
-    return df_step, intervalos_raw, df_interv_group
+    return genera_df_intervalos(rect_smoothing(df_subset))
 
 
-@timeit('plot_interval_detection', verbose=True)
-def plot_interval_detection(df_step, intervalos_raw, df_interv_group, verbose=True):
+def _filter_time(df, t0='2016-09-11 12:15', tf='2016-09-11 15:30', label='ts_ini'):
+    return df[(df[label] < tf) & (df[label] > t0)]
+
+
+def _divide_big_events_en_tramos_para_representacion(df_interv_gr, delta_grupo='1h', delta_plot='3min', verbose=True):
     """
-    # INTERVALOS & BIG EVENTS
+    Agrupamiento de big_events para representación
     """
-    if verbose:
-        print_red(intervalos_raw.dtypes)
-        print_red(intervalos_raw.describe())
-        print_magenta(df_interv_group.describe())
-        print_info(df_step.describe())
-
-        print_cyan(intervalos_raw.head())
-        print_ok(df_interv_group.head())
-
-    # Show
-    # plot_intervalos(df_interv_group, df_step, with_raw_scatter=False, size=12)
-    # plt.show()
-
-    # d_tramo_1 = dict(t0='2016-09-11 12:15', tf='2016-09-11 15:30')
-    # d_tramo_2 = dict(t0='2016-09-11 19:00', tf='2016-09-11 20:30')
-    #
-    # plot_intervalos([intervalos_raw,
-    #                  # df_interv_big,
-    #                  df_interv_group,
-    #                  filter_time(intervalos_raw, **d_tramo_1),
-    #                  # filter_time(df_interv_big, **d_tramo_1),
-    #                  filter_time(df_interv_group, **d_tramo_1),
-    #                  filter_time(intervalos_raw, **d_tramo_2),
-    #                  # filter_time(df_interv_big, **d_tramo_2),
-    #                  filter_time(df_interv_group, **d_tramo_2)],
-    #                 df_step, with_raw_scatter=False, size=4)
-    # fig = plt.gcf()
-    # fig.tight_layout()
-    # plt.show()
-
-    # plot_intervalos([filter_time(intervalos, **d_tramo_1), filter_time(intervalos, **d_tramo_2)],
-    #                 df_out, with_raw_scatter=False)
-    # plt.show()
-
-    # plot_intervalos([filter_time(intervalos_dense, **d_tramo_1), filter_time(intervalos_dense, **d_tramo_2)],
-    #                 df_out, with_raw_scatter=False)
-    # plt.show()
-
-    return df_step, intervalos_raw, df_interv_group
-
-
-def _divide_big_events_en_tramos_para_representacion(df_interv_gr,
-                                                     delta_grupo=pd.Timedelta('1h'), delta_plot=pd.Timedelta('3min'),
-                                                     verbose=True):
-    """Agrupamiento de big_events para representación"""
+    delta_grupo = pd.Timedelta(delta_grupo)
+    delta_plot = pd.Timedelta(delta_plot)
     df_solo_big = df_interv_gr[df_interv_gr.big_event]
     grupos_con_big_events, grupo = [], []
     inicio = tf_ant = start = df_solo_big.ts_ini[0]
@@ -424,6 +320,99 @@ def _divide_big_events_en_tramos_para_representacion(df_interv_gr,
     return intervs_plot, xlims_plot, grupos_con_big_events
 
 
+@timeit('test_export_svgs_groups_interval_detection', verbose=True)
+def test_export_svgs_groups_interval_detection(df_subset, df_interv_group,
+                                               num_plots_fig=9, export_figs=True, show_fig=False):
+    """
+    Generación de gráficos y exportación a ficheros 'svg' de intervalos detectados. Requiere como input la salida
+    de la función 'test_interval_detection' o similar.
+    - Divide los intervalos en tramos, prestando atención únicamente a los 'eventos grandes', con objeto de realizar
+    múltiples plots centrados en las zonas con grandes eventos.
+    - Se generan figuras con 'num_plots_fig' cada una, y se les da un nombre mediante la plantilla:
+        'big_events_detection_{:%Y%m%d}_int{:04d}_to_int{:04d}.svg'
+    - Opcionalmente, se muestra cada fig en pantalla (show_fig=True)
+
+    """
+
+    intervs_plot, xlims_plot, big_events_plot = _divide_big_events_en_tramos_para_representacion(df_interv_group)
+
+    N = len(intervs_plot)
+    for i in range(N // num_plots_fig + (1 if N % num_plots_fig != 0 else 0)):
+        next_g = min(N, (i+1)*num_plots_fig)
+        intervs_plot_i = intervs_plot[i*num_plots_fig:next_g]
+        if export_figs:
+            img_name = os.path.join(p, 'big_events_detection_{:%Y%m%d}_int{:04d}_to_int{:04d}.svg'
+                                    .format(intervs_plot_i[0].ts_ini[0],
+                                            intervs_plot_i[0].index[0], intervs_plot_i[-1].index[-1]))
+        else:
+            img_name = None
+        plot_intervalos(intervs_plot_i, df_subset, with_level=True, major_fmt='%H:%M',
+                        xlim=xlims_plot[i*num_plots_fig:next_g], img_name=img_name)
+        if show_fig:
+            fig = plt.gcf()
+            fig.tight_layout()
+            plt.show()
+    return True
+
+
+def show_interval_detection(df_step, intervalos_raw, df_interv_group, verbose=True):
+    """
+    Shows results
+    """
+    if verbose:
+        print_red(intervalos_raw.dtypes)
+        print_red(intervalos_raw.describe())
+        print_magenta(df_interv_group.describe())
+        print_info(df_step.describe())
+
+        print_cyan(intervalos_raw.head())
+        print_ok(df_interv_group.head())
+
+    # Show
+    # plot_intervalos(df_interv_group, df_step, with_raw_scatter=False, size=12)
+
+    d_tramo_1 = dict(t0='2016-09-11 12:15', tf='2016-09-11 15:30')
+    d_tramo_2 = dict(t0='2016-09-11 19:00', tf='2016-09-11 20:30')
+
+    plot_intervalos([_filter_time(intervalos_raw, **d_tramo_1),
+                     _filter_time(df_interv_group, **d_tramo_1),
+                     _filter_time(intervalos_raw, **d_tramo_2),
+                     _filter_time(df_interv_group, **d_tramo_2)],
+                    df_step, with_raw_scatter=False, size=4)
+    fig = plt.gcf()
+    fig.tight_layout()
+    plt.show()
+    return True
+
+
+def save_interval_detection_data(df_subset, df_interv, df_interv_group, file='debug_step_detection.h5'):
+    """
+    # SAVE DATA
+    :return:
+    """
+    p_debug = os.path.join(p, file)
+    with open(p_debug, 'w'):
+        pass
+    df_subset.to_hdf(p_debug, 'data')
+    df_interv.to_hdf(p_debug, 'interv')
+    df_interv_group.to_hdf(p_debug, 'interv_group')
+    print_yellow('Guardados los resultados del "interval_detection" en {}. Tamaño: {:.2f}'
+                 .format(p_debug, os.path.getsize(p_debug) / 1e6))
+    return True
+
+
+def load_interval_detection_data(file='debug_step_detection.h5'):
+    """
+    # LOAD RESULTS DATA
+    :return: df_subset, df_interv, df_interv_group
+    """
+    p_debug = os.path.join(p, file)
+    df_subset = pd.read_hdf(p_debug, 'data')
+    df_interv = pd.read_hdf(p_debug, 'interv')
+    df_interv_group = pd.read_hdf(p_debug, 'interv_group')
+    return df_subset, df_interv, df_interv_group
+
+
 if __name__ == '__main__':
     # Conf
     import os
@@ -434,29 +423,11 @@ if __name__ == '__main__':
 
     df_subset, df_interv, df_interv_group = test_interval_detection(regen_train_data=False)
 
-    # plot_interval_detection(df_subset, df_interv, df_interv_group)
+    # test_export_svgs_groups_interval_detection(df_subset, df_interv_group, export_figs=True, show_fig=False)
+    # test_export_svgs_groups_interval_detection(df_subset, df_interv_group, export_figs=False, show_fig=True)
 
-    # intervs_plot, xlims_plot, big_events_plot = _divide_big_events_en_tramos_para_representacion(df_interv_group)
-    # imgs_names = [os.path.join(p, 'big_events_detection_int{:04d}_to_int{:04d}.svg'.format(x[0], x[-1]))
-    #               for x in big_events_plot]
-    # N = len(intervs_plot)
-    # for i in range(N // 9 + (1 if N % 9 != 0 else 0)):
-    #     next_g = min(N, (i+1)*9)
-    #     intervs_plot_i = intervs_plot[i*9:next_g]
-    #     img_name = os.path.join(p, 'big_events_detection_{:%Y%m%d}_int{:04d}_to_int{:04d}.svg'
-    #                             .format(intervs_plot_i[0].ts_ini[0],
-    #                                     intervs_plot_i[0].index[0], intervs_plot_i[-1].index[-1]))
-    #     axes = plot_intervalos(intervs_plot_i, df_subset, with_level=True, major_fmt='%H:%M',
-    #                            xlim=xlims_plot[i*9:next_g], img_name=img_name)
-    #     # plt.show()
-    #
-    # # SAVE DATA
-    # p_debug = os.path.join(p, 'debug_step_detection.h5')
-    # print_yellow(p_debug)
-    # with open(p_debug, 'w'):
-    #     pass
-    # df_subset.to_hdf(p_debug, 'data')
-    # df_interv.to_hdf(p_debug, 'interv')
-    # df_interv_big.to_hdf(p_debug, 'interv_big')
-    # df_interv_group.to_hdf(p_debug, 'interv_group')
-    # print(round(os.path.getsize(p_debug) / 1e6, 1))
+    # save_interval_detection_data(df_subset, df_interv, df_interv_group, file='debug_step_detection.h5')
+
+    # df_subset, df_interv, df_interv_group = load_interval_detection_data(file='debug_step_detection.h5')
+    show_interval_detection(df_subset, df_interv, df_interv_group, verbose=True)
+
