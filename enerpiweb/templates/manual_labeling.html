@@ -1,0 +1,119 @@
+{% extends "layout.html" %}
+{#{% from 'monitor_tiles.html' import monitor_tiles with context %}#}
+{% from 'macros.html' import styles_bokeh with context %}
+
+{% block styles %}
+    <link href="{{ url_for('static', filename='css/tiles.css') }}" rel="stylesheet">
+    {{ styles_bokeh(b_version) }}
+{% endblock %}
+
+
+{% block content %}
+    <div class="jumbotron" style="padding: 1rem; padding-bottom: 0; margin-bottom: 10px;">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-xs-3 col-sm-2 col-md-1 col-lg-1">
+                    <img class="img-fluid img-rounded pull-xs-left" style="max-width: 100%; height: auto; width: 100% \9;"
+                         src="{{ url_for('static', filename='img/icons/base.svg')}}">
+                </div>
+                <div class="col-xs-6 col-sm-8 col-md-9 col-lg-9">
+                    <h1 class="display-5"><i class="fa fa-tags" aria-hidden="true"></i> Clasificación de consumos eléctricos</h1>
+{#                    <p>Start labeling your appliances</p>#}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="container-fluid">
+{#        <div class="bk-root">#}
+          {{ bokeh_script|safe }}
+{#        </div>#}
+    </div>
+{% endblock %}
+
+
+{% block scripts %}
+<script type="text/javascript">
+    function format_buttons_existent_labels() {
+        console.log('entrando en format_buttons_existent_labels');
+        $("div .bk-widget").each(function () {
+            var id_div = $(this).attr('id');
+            var idx_icon = id_div.indexOf('_icon_');
+            if (idx_icon > 0) {
+                var button = $(this).find('button');
+{#                console.log(button);#}
+                var button_label = button.html();
+{#                console.log(button_label);#}
+                if (button_label.indexOf('<img style') == -1) {
+                    var html_icon = '<img style="max-width: 20px; height: 20px; width: 20px;" src="/enerpi/static/labels_icons/' + id_div.substring(idx_icon + 6, id_div.length) + '.svg">'
+                    button.html(html_icon + ' ' + button_label.trim());
+                } 
+                if (id_div.indexOf('label_used') > 0) {
+                    button.addClass('classif-used-tag');
+                } else if (id_div.indexOf('label_unused') > 0) {
+                    button.addClass('classif-unused-tag');
+                }
+            }
+        });
+        console.log('saliendo de format_buttons_existent_labels');
+    }
+    function set_form_props(remitente) {
+        console.log(remitente);
+        var text_input = $("input[name|='selec_label_name']");
+{#        var check_input = $("input:checkbox[name|='selec_label_continuous']");#}
+        var check_input = $(".bk-bs-checkbox input:checkbox");
+        var select_input = $("select[name|='selec_label_type']");
+
+        console.log(check_input);
+        console.log(select_input.val());
+        console.log(select_input.attr("name"));
+        var new_label_type = $(remitente).attr("label_type");
+        var new_label_name = $(remitente).attr("label_name");
+        var new_label_cont = $(remitente).attr("label_cont");
+        console.log(new_label_type + ', ' + new_label_name + ', ' + new_label_cont);
+
+        select_input.css("border", "3px dotted blue");
+        console.log($("select[name|='selec_label_type'] option:selected"));
+        console.log($("select[name|='selec_label_type'] option[value|='" + new_label_type + "']"));
+        $("select[name|='selec_label_type'] option:selected").removeProp("selected");
+        $("select[name|='selec_label_type'] option[value|='" + new_label_type + "']").prop("selected", "selected").change();
+        console.log($("select[name|='selec_label_type'] option:selected"));
+        console.log($("select[name|='selec_label_type'] option[value|='" + new_label_type + "']"));
+
+{#        select_input.val(new_label_type);#}
+        check_input.val(new_label_cont).change();
+{#        text_input.val(new_label_name).change();#}
+        text_input.prop("value", new_label_name).change();
+
+        text_input.css("border", "3px dotted blue");
+{#        select_input.trigger('change');#}
+        text_input.trigger('change');
+        check_input.trigger('change');
+{#        select_input.trigger('click');#}
+        text_input.trigger('click');
+        check_input.trigger('click');
+        console.log('Vals:');
+        console.log(select_input.val());
+        console.log(text_input.val());
+        console.log(check_input.val());
+        console.log('Objs select_input, text_input, check_input:');
+        console.log(select_input);
+        console.log(text_input);
+        console.log(check_input);
+
+        console.log('TODO OK!');
+    }
+    $(document).ready(function() {
+        setTimeout(format_buttons_existent_labels, 1000);
+        $("div .bk-widget").change(format_buttons_existent_labels());
+        $("input").change(format_buttons_existent_labels());
+        $("select").change(format_buttons_existent_labels());
+    });
+    var resizeId;
+    $(window).resize(function() {
+{#        console.log('resize!')#}
+        clearTimeout(resizeId);
+        resizeId = setTimeout(format_buttons_existent_labels, 500);
+    });
+
+</script>
+{% endblock %}
