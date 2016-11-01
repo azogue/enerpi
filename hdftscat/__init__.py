@@ -10,6 +10,7 @@ import pandas as pd
 import re
 import shutil
 from time import time
+# from memory_profiler import profile
 
 
 '''
@@ -207,11 +208,14 @@ class HDFTimeSeriesCatalog(object):
                       if (f.endswith(STORE_EXT) and (pb_bkp not in f) and
                           (f != self.raw_store) and (f not in paths.values))]
         index['new_ts'] = times
-        try:
-            index['modif'] = index['ts_st'] != index['new_ts']
-        except TypeError as e:
-            logging.error('TypeError "{}" intentando fijar index["modif"] en _check_index'.format(e))
-            index['modif'] = True
+        b_no_existe = index['new_ts'].isnull()
+        index.loc[b_no_existe, 'modif'] = True
+        index.loc[~b_no_existe, 'modif'] = index.loc[~b_no_existe, 'ts_st'] != index.loc[~b_no_existe, 'new_ts']
+        # try:
+        #     index['modif'] = index['ts_st'] != index['new_ts']
+        # except TypeError as e:
+        #     logging.error('TypeError "{}" intentando fijar index["modif"] en _check_index'.format(e))
+        #     index['modif'] = True
         if new_stores:
             logging.warning('NEW STORES WERE FOUND: {}'.format(new_stores))
         new_stores += paths.loc[index['new_ts'].notnull() & index['modif']].drop_duplicates().tolist()
@@ -232,7 +236,7 @@ class HDFTimeSeriesCatalog(object):
         self.index_ts = self._ts_filepath(self.catalog_file)
         return index
 
-    def _load_hdf(self, rel_path, key=None, func_store=None):
+    def _load_hdf(self, rel_path, key=None, func_store=None, columns=None):
         # print('LOADING: {}, key={}, func_st is None? {}'.format(rel_path, key, func_store is None))
         p = os.path.join(self.base_path, rel_path)
         k = key or self.key_raw
@@ -240,7 +244,10 @@ class HDFTimeSeriesCatalog(object):
             # tic = time()
             with pd.HDFStore(p, mode='r') as st:
                 if func_store is None:
-                    data = st[k]
+                    if columns is None:
+                        data = st[k]
+                    else:
+                        data = st.select(k, columns=columns)
                 else:
                     data = func_store(st)
             # print('load_hdf {} in {:.3f}'.format(p, time() - tic))
@@ -303,6 +310,7 @@ class HDFTimeSeriesCatalog(object):
     def _load_today(self):
         return self._load_hdf(ST_TODAY, key=self.key_raw)
 
+    # @profile
     def _load_current_month(self, with_summary_data=True):
         days_cm = list(sorted([p.replace(self.base_path + os.path.sep, '')
                                for p in glob.glob(os.path.join(self.base_path, DIR_CURRENT_MONTH,
@@ -323,6 +331,7 @@ class HDFTimeSeriesCatalog(object):
                 return df, days_cm
             return None, []
 
+    # @profile
     def _classify_data(self, df):
         paths_dfs_dfssum = []
         ahora = pd.Timestamp.now()
@@ -423,7 +432,9 @@ class HDFTimeSeriesCatalog(object):
             return df
         return None
 
-    def load_store(self, path_idx, process_data=False, with_summary=False):
+    # TODO Revisar en RPI
+    # def load_store(self, path_idx, process_data=False, with_summary=False):
+    def load_store(self, path_idx, with_summary=False, column=None):
 
         def _get_data_from_store(st):
             d1 = st[self.key_raw]
@@ -434,16 +445,10 @@ class HDFTimeSeriesCatalog(object):
             return d1, d2
 
         asyncio.sleep(0)
-        if with_summary and process_data:
-            extracted = self._load_hdf(path_idx, key=self.key_raw)
-            if extracted is not None:
-                extracted = self.process_data_summary(self.process_data(extracted))
-        elif with_summary:
+        if with_summary:
             extracted = self._load_hdf(path_idx, func_store=_get_data_from_store)
-        elif process_data:
-            extracted = self.process_data(self._load_hdf(path_idx, key=self.key_raw))
         else:
-            extracted = self._load_hdf(path_idx, key=self.key_raw)
+            extracted = self._load_hdf(path_idx, key=self.key_raw, columns=[column])
         asyncio.sleep(0)
         if (extracted is None) and with_summary:
             return None, None
@@ -476,7 +481,8 @@ class HDFTimeSeriesCatalog(object):
                 shutil.copyfile(os.path.join(self.base_path, p), p_bkp)
                 os.remove(os.path.join(self.base_path, p))
 
-    @timeit('archive_periodic')
+    # @timeit('archive_periodic')
+    # @profile
     def archive_periodic(self, new_data=None, reload_index=False):
         """
         * Archivado periódico:
@@ -515,12 +521,18 @@ class HDFTimeSeriesCatalog(object):
                 logging.debug('MONTH DATA: {}'.format(month.shape))
                 # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0)).sort_index().groupby(level=0).first()
                 if month is not None:
-                    new_data = pd.DataFrame(pd.concat([month, new_data], axis=0))
+                    # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0))
+                    new_data = month.append(new_data)
+                    del month
+
                 # DEBUG TODO Quitar:
+                if not os.path.exists(os.path.join(self.base_path, DIR_BACKUP)):
+                    os.makedirs(os.path.join(self.base_path, DIR_BACKUP))
                 new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
                                              'temp_debug_month_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
 
                 new_stores += self.distribute_data(new_data, mode='w')
+                del new_data
                 self._remove_old_if_archive(old_stores, new_stores, ahora)
             elif hay_cambio_dia:
                 today = self._load_today()
@@ -528,6 +540,7 @@ class HDFTimeSeriesCatalog(object):
                 if today is not None:
                     new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
                 new_stores += self.distribute_data(new_data, mode='w')
+                del new_data
                 self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
             else:
                 new_stores += self.distribute_data(new_data, mode='a')
@@ -541,6 +554,7 @@ class HDFTimeSeriesCatalog(object):
                     month, days_cm = self._load_current_month(with_summary_data=False)
                     logging.info('** ARCHIVE MONTH: {}'.format(days_cm))
                     new_stores += self.distribute_data(month, mode='a')
+                    del month
                     self._remove_old_if_archive(days_cm, new_stores, ahora)
                     monthly_archive = len(new_stores) > 0
             ts_today = self._ts_filepath(ST_TODAY)
@@ -583,7 +597,6 @@ class HDFTimeSeriesCatalog(object):
         with pd.HDFStore(p, 'w'):
             info = 'Temporal data has been archived. Reset of "{}" is done. Store new size: {:.1f} KB'
             logging.debug(info.format(p, os.path.getsize(p) / 1000))
-            # print_red(info.format(p, os.path.getsize(p) / 1000))
 
     def get_index(self, check_index=True):
         """
@@ -601,7 +614,8 @@ class HDFTimeSeriesCatalog(object):
             index = self._check_index(index)
         return index
 
-    @timeit('_distribute_data')
+    # @timeit('_distribute_data')
+    # @profile
     def distribute_data(self, data, mode='a'):
         paths_dfs_dfssum = self._classify_data(data)
         mod_paths = []
@@ -620,9 +634,19 @@ class HDFTimeSeriesCatalog(object):
             self._save_hdf(dfs, p, keys, mode='w', **KWARGS_SAVE)
         return mod_paths
 
-    @timeit('get')
-    def get(self, start=None, end=None, last_hours=None, with_summary=False, async_get=True):
+    # @timeit('get')
+    def get(self, start=None, end=None, last_hours=None, column=None, with_summary=False, async_get=True):
+        """
+        Loads catalog data from disk.
 
+        :param start:   pd.Timestamp
+        :param end:     pd.Timestamp
+        :param last_hours: int num_hours
+        :param column: desired key in pd.DataFrame
+        :param with_summary: bool
+        :param async_get: bool
+        :return: data (opc: , data_summary)
+        """
         def _concat_loaded_data(dfs, ini, fin=None):
             try:
                 dataframe = pd.DataFrame(pd.concat([df for df in dfs if df is not None], axis=0)).sort_index()
@@ -648,19 +672,19 @@ class HDFTimeSeriesCatalog(object):
                                                 or ((end is not None)
                                                     and (self.tree.ts_fin.max() >= pd.Timestamp(end)))):
                 paths_idx = paths_idx[:-1]
-                today = self.load_store(ST_TODAY)
-                plus = self.process_data(self.load_store(self.raw_store))
+                today = self.load_store(ST_TODAY, column=column)
+                plus = self.process_data(self.load_store(self.raw_store))[column]
                 if with_summary:
                     last, last_s = self.process_data_summary(pd.concat([today, plus]))
                 else:
                     last = pd.DataFrame(pd.concat([today, plus]))
             if async_get and len(paths_idx) > 2:
                 with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
-                    future_loads = {executor.submit(self.load_store, p, with_summary=with_summary): p
+                    future_loads = {executor.submit(self.load_store, p, with_summary=with_summary, column=column): p
                                     for p in paths_idx}
                     extracted = [future.result() for future in futures.as_completed(future_loads)]
             else:
-                extracted = [self.load_store(p, with_summary=with_summary) for p in paths_idx]
+                extracted = [self.load_store(p, with_summary=with_summary, column=column) for p in paths_idx]
             if with_summary:
                 dfs, dfs_s = list(zip(*extracted))
                 data = _concat_loaded_data(list(dfs) + [last], start, end)
