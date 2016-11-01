@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
+from collections import deque
 import datetime as dt
+from flask import Response, request, redirect, url_for
 import json
 import logging
 import os
 import pandas as pd
 import pytz
-from collections import deque
-from flask import render_template, Response, request, redirect, url_for
 from threading import Thread, current_thread
 from time import sleep, time
 
@@ -17,6 +17,9 @@ from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
 
 from enerpiweb import app, basedir, SERVER_FILE_LOGGING
 
+
+# WITH_WEB = CONFIG.get('ENERPI_WEBSERVER', 'WITH_WEBSERVER', fallback='False') == 'True'
+WITH_ML_SUBSYSTEM = CONFIG.get('ENERPI_WEBSERVER', 'WITH_ML', fallback='False') == 'True'
 
 TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
 DATA_PATH = CONFIG.get('ENERPI_DATA', 'DATA_PATH')
@@ -34,6 +37,15 @@ BOKEH_VERSION = get_bokeh_version()
 last_data = {}
 buffer_last_data = deque([], maxlen=BUFFER_MAX_SAMPLES)
 thread_receiver = None
+
+
+if WITH_ML_SUBSYSTEM:
+    from enerpiweb.views_labeling import *
+else:
+    @app.route('/learning')
+    def index_learning():
+        # TODO Usar redirect a 'control'
+        return render_template('control_panel.html')
 
 
 def format_event_stream(d_msg, timeout_retry=None, msg_id=None):
@@ -282,8 +294,6 @@ def tablelast():
 
 @app.route('/control')
 def control():
-    # return render_template('control_panel.html',
-    #                        url_table=url_for('bokeh_table_buffer'), b_version=BOKEH_VERSION)
     return render_template('control_panel.html')
 
 

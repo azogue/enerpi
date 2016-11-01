@@ -6,7 +6,7 @@ import pandas as pd
 import bokeh
 from bokeh.plotting import figure
 from bokeh.embed import components
-from bokeh.models import BoxAnnotation, HoverTool, ColumnDataSource, LinearAxis, Range1d  # , NumeralTickFormatter
+from bokeh.models import HoverTool, ColumnDataSource, LinearAxis, Range1d  # , NumeralTickFormatter, BoxAnnotation,
 from bokeh.io import reset_output
 
 
@@ -226,7 +226,8 @@ def _plot_bokeh_hourly(data_plot, **fig_kwargs):
     p = _get_figure_plot(extremos, minmax_ejes[0], **fig_kwargs)
 
     tooltip_rows = TOOLTIP_ROWS
-    for c, color, unit, label, fmt in zip(COLS_DATA_KWH, COLORS_DATA_KWH, UNITS_DATA_KWH, LABELS_DATA_KWH, FMT_TOOLTIP_DATA_KWH):
+    for c, color, unit, label, fmt in zip(COLS_DATA_KWH, COLORS_DATA_KWH,
+                                          UNITS_DATA_KWH, LABELS_DATA_KWH, FMT_TOOLTIP_DATA_KWH):
         tooltip_rows += HTML_TROW.format('{}:'.format(label), '@{}{} {}'.format(c, fmt, unit), color)
     p.add_tools(HoverTool(tooltips='<div><table>{}</table></div>'.format(tooltip_rows)))
 
@@ -234,8 +235,8 @@ def _plot_bokeh_hourly(data_plot, **fig_kwargs):
     _format_axis_plot(p, COLORS_DATA_KWH[0], LABELS_DATA_KWH[0], UNITS_DATA_KWH[0])
     if len(ejes) > 1:
         positions = (['right', 'left'] * 2)[:len(ejes[1:])]
-        for extra_eje, pos, minmax, color, label, unit in zip(ejes[1:], positions, minmax_ejes[1:],
-                                                              COLORS_DATA_KWH[1:], LABELS_DATA_KWH[1:], UNITS_DATA_KWH[1:]):
+        for extra_eje, pos, minmax, color, label, unit in zip(ejes[1:], positions, minmax_ejes[1:], COLORS_DATA_KWH[1:],
+                                                              LABELS_DATA_KWH[1:], UNITS_DATA_KWH[1:]):
             p.extra_y_ranges[extra_eje] = Range1d(*minmax)
             axkw = dict(y_range_name=extra_eje,
                         axis_label='{} ({})'.format(label, unit),

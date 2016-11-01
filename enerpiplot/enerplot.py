@@ -100,10 +100,10 @@ def _fix_time_series_bar_mix(ax_ts, ax_bar, rango_ts, index_ts_bar, bar_width=.8
 
 
 def _format_timeseries_axis(ax_bar, ax_ts, rango_ts,
-                           fmt='%-H:%M', ini=0, fin=None, axis_label='',
-                           fmt_mayor=" %-d %h'%y, %-Hh", mayor_divisor=12,
-                           fmt_mayor_day="%A %-d %h'%y",
-                           delta_ticks=dt.timedelta(minutes=0)):
+                            fmt='%-H:%M', ini=0, fin=None, axis_label='',
+                            fmt_mayor=" %-d %h'%y, %-Hh", mayor_divisor=12,
+                            fmt_mayor_day="%A %-d %h'%y",
+                            delta_ticks=dt.timedelta(minutes=0)):
 
     def _gen_mayor(x, fmt_label, fmt_label_d):
         label = ' ' + x.strftime(fmt_label_d).capitalize() if x.hour == 0 else x.strftime(fmt_label)
@@ -346,10 +346,10 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
 
 def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
 
-    def _cut_axes_and_save_svgs(figure, axes, xlim, delta_total, data_name):
+    def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name):
         for lh in last_hours:
             file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_name, lh))
-            axes.set_xlim((xlim[0] + delta_total * (1 - lh / total_hours), xlim[1]))
+            axes.set_xlim((x_lim[0] + delta_total * (1 - lh / total_hours), x_lim[1]))
             figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
             write_fig_to_svg(figure, name_img=file)
 
