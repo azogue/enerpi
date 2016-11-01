@@ -90,4 +90,6 @@ setup(
             'enerpiweb = enerpiweb.__main__:main'
         ]
     },
+    test_suite='nose.collector',
+    tests_require=['nose'],
 )

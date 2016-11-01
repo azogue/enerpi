@@ -17,4 +17,5 @@ FILTRO: "enerpi"
 
 BASE_PATH = os.path.abspath(os.path.dirname(__file__))
 
-VERSION = '0.8.5'
+VERSION = '0.8.6'
+__version__ = VERSION

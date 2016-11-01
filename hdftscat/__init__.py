@@ -323,11 +323,10 @@ class HDFTimeSeriesCatalog(object):
             return df, df_s, days_cm
         else:
             if days_cm:
-                df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw)
-                                            for p in days_cm], axis=0))  # .sort_index()
-                logging.debug('Current month data stats: {} rows, from {:%c} to {:%c}, index: unique={}, monotonic={}'
-                              .format(df.shape[0], df.index[0], df.index[-1],
-                                      df.index.is_unique, df.index.is_monotonic_increasing))
+                df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw) for p in days_cm], axis=0))
+                # logging.debug('Current month data stats: {} rows, from {:%c} to {:%c}, index: unique={}, monotonic={}'
+                #               .format(df.shape[0], df.index[0], df.index[-1],
+                #                       df.index.is_unique, df.index.is_monotonic_increasing))
                 return df, days_cm
             return None, []
 
@@ -377,6 +376,12 @@ class HDFTimeSeriesCatalog(object):
         return False
 
     def _gen_index_entries(self, paths=None):
+
+        def _get_frame_data(store):
+            return [(relat_path, key, store.select(key, stop=1).index[0], store.select(key, start=-1).index[0],
+                     st_mtime, store[key].shape[0], key == self.key_raw, list(store[key].columns))
+                    for key in store.keys()]
+
         dataframes = []
         pb_bkp = os.path.join(self.base_path, DIR_BACKUP)
         if paths is None:
@@ -386,10 +391,7 @@ class HDFTimeSeriesCatalog(object):
             if f.endswith(STORE_EXT) and (pb_bkp not in f) and (f != self.raw_store):
                 relat_path = f.replace(self.base_path + os.path.sep, '')
                 st_mtime = self._ts_filepath(relat_path)
-                new = self._load_hdf(f, self.key_raw,
-                                     func_store=lambda st: [(relat_path, k, st[k].index[0], st[k].index[-1], st_mtime,
-                                                             len(st[k]), k == self.key_raw, list(st[k].columns))
-                                                            for k in st.keys()])
+                new = self._load_hdf(f, self.key_raw, func_store=_get_frame_data)
                 if new:
                     dataframes += new
         df = pd.DataFrame(dataframes, columns=['st', 'key', 'ts_ini', 'ts_fin', 'ts_st', 'n_rows', 'is_raw', 'cols']
@@ -404,7 +406,8 @@ class HDFTimeSeriesCatalog(object):
             return df.sort_values(by='ts_ini')
         return df.T.append(pd.Series([], name='ts_cat').T).T
 
-    @timeit('_make_index')
+    # @timeit('_make_index')
+    # @profile
     def _make_index(self, distribute_existent=True, paths=None):
         df = self._gen_index_entries(paths=paths)
         if distribute_existent and not df.empty:
@@ -517,22 +520,19 @@ class HDFTimeSeriesCatalog(object):
             if hay_cambio_mes:
                 monthly_archive = True
                 month, old_stores = self._load_current_month(with_summary_data=False)
-                logging.info('** ARCHIVE MONTH: {}'.format(old_stores))
-                logging.debug('MONTH DATA: {}'.format(month.shape))
+                logging.info('** ARCHIVE MONTH: {}, SHAPE: {}'.format(old_stores, month.shape))
                 # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0)).sort_index().groupby(level=0).first()
                 if month is not None:
                     # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0))
                     new_data = month.append(new_data)
-                    del month
-
-                # DEBUG TODO Quitar:
-                if not os.path.exists(os.path.join(self.base_path, DIR_BACKUP)):
-                    os.makedirs(os.path.join(self.base_path, DIR_BACKUP))
-                new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
-                                             'temp_debug_month_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
-
+                    month = None
+                # # DEBUG TODO Quitar:
+                # if not os.path.exists(os.path.join(self.base_path, DIR_BACKUP)):
+                #     os.makedirs(os.path.join(self.base_path, DIR_BACKUP))
+                # new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
+                #                              'temp_debug_month_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
                 new_stores += self.distribute_data(new_data, mode='w')
-                del new_data
+                new_data = None
                 self._remove_old_if_archive(old_stores, new_stores, ahora)
             elif hay_cambio_dia:
                 today = self._load_today()
@@ -540,7 +540,7 @@ class HDFTimeSeriesCatalog(object):
                 if today is not None:
                     new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
                 new_stores += self.distribute_data(new_data, mode='w')
-                del new_data
+                new_data = None
                 self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
             else:
                 new_stores += self.distribute_data(new_data, mode='a')
@@ -554,7 +554,7 @@ class HDFTimeSeriesCatalog(object):
                     month, days_cm = self._load_current_month(with_summary_data=False)
                     logging.info('** ARCHIVE MONTH: {}'.format(days_cm))
                     new_stores += self.distribute_data(month, mode='a')
-                    del month
+                    month = None
                     self._remove_old_if_archive(days_cm, new_stores, ahora)
                     monthly_archive = len(new_stores) > 0
             ts_today = self._ts_filepath(ST_TODAY)
@@ -647,9 +647,9 @@ class HDFTimeSeriesCatalog(object):
         :param async_get: bool
         :return: data (opc: , data_summary)
         """
-        def _concat_loaded_data(dfs, ini, fin=None):
+        def _concat_loaded_data(dataframes, ini, fin=None):
             try:
-                dataframe = pd.DataFrame(pd.concat([df for df in dfs if df is not None], axis=0)).sort_index()
+                dataframe = pd.DataFrame(pd.concat([df for df in dataframes if df is not None], axis=0)).sort_index()
                 if fin is not None:
                     return dataframe.loc[ini:fin]
                 return dataframe.loc[ini:]

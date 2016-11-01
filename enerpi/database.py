@@ -7,7 +7,6 @@ import re
 from shutil import copy as copy_file
 from enerpi.base import CONFIG, log, funcs_tipo_output, timeit
 from enerpi.catalog import EnerpiCatalog
-from enerpi.pisampler import COL_TS, COLS_DATA
 
 
 # Config:
@@ -15,6 +14,8 @@ INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT ENE
 DATA_PATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'DATA_PATH'))
 HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
 
+COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
+COLS_DATA = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA', fallback='power, noise, ref, ldr').split(', ')
 KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
 KEY_ANT = '/raw'
 CONFIG_CATALOG = dict(preffix='DATA',
@@ -98,7 +99,12 @@ def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
                     log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)),
                         'debug', verb)
             if catalog is not None:
-                catalog.update_catalog(data=df_tot)
+                try:
+                    catalog.update_catalog(data=df_tot)
+                except Exception as e:
+                    log('Exception "{}" [{}] en update_catalog (save_in_store)'
+                        .format(e, e.__class__), 'error', True)
+                    # TODO Notificación del error!
         return True
     except ValueError as e:
         log('ValueError en save_in_store: {}'.format(e), 'error', True)
@@ -169,7 +175,8 @@ if __name__ == '__main__':
 
     # TEST UPDATE
     # base = '/Users/uge/Dropbox/PYTHON/PYPROJECTS/respaldo_enerpi_rpi3/ENERPIDATA/'
-    # cat = enerpi_data_catalog(base_path=base, raw_file=os.path.join(base, 'enerpi_data.h5'), check_integrity=False, verbose=True)
+    # cat = enerpi_data_catalog(base_path=base, raw_file=os.path.join(base, 'enerpi_data.h5'),
+    # check_integrity=False, verbose=True)
     # print_info(cat.tree)
     #
     # raw = pd.read_hdf(os.path.join(base, 'enerpi_data.h5'), 'rms')

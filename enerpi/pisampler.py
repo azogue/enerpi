@@ -35,15 +35,19 @@ DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
 N_SAMPLES_BUFFER = 250  # Nº de samples tenidos en cuenta para calcular el RMS instantáneo
 PREC_SAMPLING = dt.timedelta(microseconds=500)
 
-
 # Sampling a texto y viceversa
 HOST = check_output('hostname').decode().splitlines()[0]
 MSG_MASK = '{} __ {:%Y-%m-%d %H:%M:%S.%f} __ {:.0f} W __ Noise: {:.6f} W __ REF: {:.3f} __ LDR: {:.4f}'
 RG_MSG_MASK = re.compile('^(?P<host>.*) __ (?P<ts>.*) __ (?P<power>.*) W __ Noise: (?P<noise>.*) W __ '
                          'REF: (?P<ref>.*) __ LDR: (?P<ldr>.*)')
-COL_TS = 'ts'
-FMT_TS = '%Y-%m-%d %H:%M:%S.%f'
-COLS_DATA = ['power', 'noise', 'ref', 'ldr']
+
+# Nombres de columna en pd.DataFrames y formato de fecha
+# COL_TS = 'ts'
+# FMT_TS = '%Y-%m-%d %H:%M:%S.%f'
+# COLS_DATA = ['power', 'noise', 'ref', 'ldr']
+COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
+FMT_TS = CONFIG.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
+COLS_DATA = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA', fallback='power, noise, ref, ldr').split(', ')
 
 
 def tuple_to_msg(data_tuple):
