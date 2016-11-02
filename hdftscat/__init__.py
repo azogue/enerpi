@@ -108,6 +108,7 @@ class HDFTimeSeriesCatalog(object):
                  key_summary_extra='/days',
                  catalog_file=INDEX,
                  check_integrity=True,
+                 archive_existent=False,
                  verbose=True,
                  backup_original=True):
         self.base_path = os.path.abspath(base_path)
@@ -125,12 +126,14 @@ class HDFTimeSeriesCatalog(object):
 
         # Index:
         self.catalog_file = catalog_file
-        self.tree = self.get_index(check_index=check_integrity)
+
+        if archive_existent:
+            self.update_catalog()
+        else:
+            self.tree = self.get_index(check_index=check_integrity)
         self.min_ts = self.tree['ts_ini'].min() if self._exist() else np.nan
         self.index_ts = self._ts_filepath(self.catalog_file)
 
-        if check_integrity:
-            self.archive_periodic(new_data=None, reload_index=False)
         # if self.verbose:
         #     print_ok(self.tree)
 
@@ -331,8 +334,8 @@ class HDFTimeSeriesCatalog(object):
             return None, []
 
     # @profile
-    def _classify_data(self, df):
-        paths_dfs_dfssum = []
+    def _classify_data(self, df, func_save_data):
+        paths = []
         ahora = pd.Timestamp.now()
         # ts_ini, ts_fin = df.index[0], df.index[-1]
         gb_años = df.groupby(pd.TimeGrouper(freq='A'))
@@ -350,20 +353,23 @@ class HDFTimeSeriesCatalog(object):
                                     if ts_day.day == ahora.day:
                                         # TODAY
                                         logging.debug(ST_TODAY + '\n{}\n{}'.format(d_day.dtypes, d_day.head()))
-                                        paths_dfs_dfssum.append((ST_TODAY, d_day, None, None))
+                                        func_save_data(ST_TODAY, d_day, None, None)
+                                        paths.append(ST_TODAY)
                                     else:
                                         # ARCHIVE DAY
                                         p = self._make_index_path(ts_day, w_day=True)
                                         logging.debug('# ARCHIVE DAY {:%Y-%m-%d} -> {}'.format(ts_day, p))
                                         d_day_p, c_day = self.process_data_summary(d_day)
-                                        paths_dfs_dfssum.append((p, d_day_p, c_day, None))
+                                        func_save_data(p, d_day_p, c_day, None)
+                                        paths.append(p)
                         else:
                             # ARCHIVE MONTH
                             p = self._make_index_path(ts_month, w_day=False)
-                            logging.debug('# ARCHIVE MONTH --> {}'.format(p))
+                            logging.debug('# ARCHIVE MONTH --> {}. GOING TO process_data_summary_extra'.format(p))
                             d_month_p, c_month, c_month_extra = self.process_data_summary_extra(d_month)
-                            paths_dfs_dfssum.append((p, d_month_p, c_month, c_month_extra))
-        return sorted(paths_dfs_dfssum, key=lambda x: x[0])
+                            func_save_data(p, d_month_p, c_month, c_month_extra)
+                            paths.append(p)
+        return list(sorted(paths))
 
     def _is_catalog_path(self, st, ts_ini, ts_fin):
         if st == ST_TODAY:
@@ -413,7 +419,7 @@ class HDFTimeSeriesCatalog(object):
         if distribute_existent and not df.empty:
             if not df[df.is_raw & ~df.is_cat].empty:
                 raw_to_distr = df[df.is_raw & ~df.is_cat]
-                logging.debug('Distribuyendo datos desde:\n{}'.format(raw_to_distr))
+                # logging.debug('Distribuyendo datos desde:\n{}'.format(raw_to_distr))
                 data = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw)
                                                for p in raw_to_distr['st']])).sort_index()
                 if self.is_raw_data(data):
@@ -520,17 +526,11 @@ class HDFTimeSeriesCatalog(object):
             if hay_cambio_mes:
                 monthly_archive = True
                 month, old_stores = self._load_current_month(with_summary_data=False)
-                logging.info('** ARCHIVE MONTH: {}, SHAPE: {}'.format(old_stores, month.shape))
-                # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0)).sort_index().groupby(level=0).first()
+                logging.info('** ARCHIVE MONTH: {}, SHAPE: {}'
+                             .format(old_stores, month.shape if month is not None else 'None'))
                 if month is not None:
-                    # new_data = pd.DataFrame(pd.concat([month, new_data], axis=0))
                     new_data = month.append(new_data)
                     month = None
-                # # DEBUG TODO Quitar:
-                # if not os.path.exists(os.path.join(self.base_path, DIR_BACKUP)):
-                #     os.makedirs(os.path.join(self.base_path, DIR_BACKUP))
-                # new_data.to_hdf(os.path.join(self.base_path, DIR_BACKUP,
-                #                              'temp_debug_month_{:%Y%m_%d_%H_%M}.h5'.format(ahora)), self.key_raw)
                 new_stores += self.distribute_data(new_data, mode='w')
                 new_data = None
                 self._remove_old_if_archive(old_stores, new_stores, ahora)
@@ -617,22 +617,23 @@ class HDFTimeSeriesCatalog(object):
     # @timeit('_distribute_data')
     # @profile
     def distribute_data(self, data, mode='a'):
-        paths_dfs_dfssum = self._classify_data(data)
-        mod_paths = []
-        for p, d1, d2, d3 in paths_dfs_dfssum:
-            mod_paths.append(p)
+
+        def _save_distributed_data(p, d1, d2, d3):
             f = list(filter(lambda x: x[0] is not None, zip([d1, d2, d3],
                                                             [self.key_raw, self.key_summary, self.key_summary_extra])))
             dfs, keys = list(zip(*f))[0], list(zip(*f))[1]
             p_abs = os.path.join(self.base_path, p)
             if mode == 'a' and os.path.exists(p_abs):  # 1º se lee, se concatena, y se eliminan duplicados
-                # print('** Leyendo información previa del STORE: {}'.format(p_abs))
+                logging.debug('** Leyendo información previa del STORE: {}'.format(p_abs))
                 old_dfs = self._load_hdf(p, func_store=lambda st: [st[k] for k in keys])
                 dfs = [pd.DataFrame(pd.concat([old, df], axis=0)
                                     ).sort_index().reset_index().drop_duplicates(subset='ts').set_index('ts')
                        for old, df in zip(old_dfs, dfs)]
             self._save_hdf(dfs, p, keys, mode='w', **KWARGS_SAVE)
-        return mod_paths
+
+        paths = self._classify_data(data, _save_distributed_data)
+        logging.debug('** Data classified on paths: {}'.format(len(paths)))
+        return paths
 
     # @timeit('get')
     def get(self, start=None, end=None, last_hours=None, column=None, with_summary=False, async_get=True):

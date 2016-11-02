@@ -14,8 +14,9 @@ UDP_PORT = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
 DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}".format(UDP_IP, UDP_PORT)
 
 # Encrypting msg with symmetric encryption. URL-safe base64-encoded 32-byte key
-# KEY_FILE = os.path.join(BASE_PATH, '.secret_key')
-KEY_FILE = os.path.expanduser(CONFIG.get('BROADCAST', 'KEY_FILE', fallback='~/.secret_key'))
+KEY_FILE = os.path.expanduser(CONFIG.get('BROADCAST',
+                                         'KEY_FILE_OSX' if sys.platform == 'darwin' else 'KEY_FILE',
+                                         fallback='~/.secret_key'))
 
 
 try:

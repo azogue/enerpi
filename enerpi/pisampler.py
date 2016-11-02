@@ -4,12 +4,11 @@ import datetime as dt
 from gpiozero import MCP3008
 from math import sqrt
 import numpy as np
-import pytz
 import random
 import re
 from subprocess import check_output
 from time import sleep, time
-from enerpi.base import CONFIG
+from enerpi.base import CONFIG, TZ
 
 
 # Conexiones analógicas vía MCP3008
@@ -26,8 +25,6 @@ VOLTAJE = CONFIG.getint('ENERPI_SAMPLER', 'VOLTAJE', fallback=236)
 A_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'A_REF', fallback=30.)
 # V, V_ref RPI GPIO
 V_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
-
-TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
 
 DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
 

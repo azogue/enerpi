@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
-from enerpi.base import CONFIG
+from enerpi.base import CONFIG, TZ, DATA_PATH
 from enerpi.database import init_catalog, get_ts_last_save, extract_log_file
 from enerpi.enerpimeter import receiver_msg_generator, msg_to_dict
 
 
 # Config:
-DATA_PATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'DATA_PATH'))
 HDF_STORE = CONFIG.get('ENERPI_DATA', 'HDF_STORE')
 # Current meter
 TS_DATA_MS = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)

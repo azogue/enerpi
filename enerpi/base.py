@@ -2,13 +2,17 @@
 import configparser
 import logging
 import os
+import pytz
 import subprocess
 from time import time, sleep
+import sys
 from enerpi import BASE_PATH
 
 
 CONFIG = configparser.RawConfigParser()
 CONFIG.read(os.path.join(BASE_PATH, 'config_enerpi.ini'))
+TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
+DATA_PATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'DATA_PATH_OSX' if sys.platform == 'darwin' else 'DATA_PATH'))
 
 
 HAY_PP = True

@@ -14,11 +14,12 @@ import matplotlib.patches as mp
 import numpy as np
 import os
 import re
+import sys
 from enerpi.base import CONFIG, timeit
-# import seaborn as sns
 
 
-IMG_BASEPATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
+IMG_BASEPATH = os.path.expanduser(CONFIG.get('ENERPI_DATA',
+                                             'IMG_BASEPATH_OSX' if sys.platform == 'darwin' else 'IMG_BASEPATH'))
 DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK')
 
 

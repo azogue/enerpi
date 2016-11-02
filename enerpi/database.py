@@ -5,13 +5,12 @@ import pandas as pd
 from time import time
 import re
 from shutil import copy as copy_file
-from enerpi.base import CONFIG, log, funcs_tipo_output, timeit
+from enerpi.base import CONFIG, DATA_PATH, log, funcs_tipo_output, timeit
 from enerpi.catalog import EnerpiCatalog
 
 
 # Config:
 INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT ENERPI')
-DATA_PATH = os.path.expanduser(CONFIG.get('ENERPI_DATA', 'DATA_PATH'))
 HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
 
 COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
@@ -25,6 +24,7 @@ CONFIG_CATALOG = dict(preffix='DATA',
                       key_summary_extra='/days',
                       # catalog_file=INDEX,
                       check_integrity=True,
+                      archive_existent=False,
                       verbose=True,
                       backup_original=True)
 

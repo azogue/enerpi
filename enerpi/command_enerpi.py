@@ -8,9 +8,9 @@ from threading import Timer
 from time import time, sleep
 
 from enerpi import PRETTY_NAME, DESCRIPTION, BASE_PATH
-from enerpi.base import CONFIG, log, show_pi_temperature
+from enerpi.base import CONFIG, DATA_PATH, log, show_pi_temperature
 from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
-                             extract_log_file, delete_log_file, DATA_PATH, HDF_STORE)
+                             extract_log_file, delete_log_file, HDF_STORE)
 from enerpi.enerpimeter import enerpi_logger, receiver, sender_random, DELTA_SEC_DATA, TS_DATA_MS, RMS_ROLL_WINDOW_SEC
 
 

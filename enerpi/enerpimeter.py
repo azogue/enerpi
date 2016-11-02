@@ -7,8 +7,8 @@ import pandas as pd
 from threading import Timer
 from time import sleep, time
 from enerpi import BASE_PATH
-from enerpi.base import CONFIG, log
-from enerpi.database import init_catalog, save_raw_data, DATA_PATH, HDF_STORE
+from enerpi.base import CONFIG, DATA_PATH, log
+from enerpi.database import init_catalog, save_raw_data, HDF_STORE
 from enerpi.pisampler import random_generator, enerpi_sampler_rms, msg_to_dict, tuple_to_msg, COL_TS, COLS_DATA
 from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
 from enerpi.ledrgb import get_rgbled, led_info, led_alarm, blink_color
@@ -152,7 +152,7 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
     paleta_rgbled = _get_paleta_rgb_led()
     socket, counter_unreachable = None, np.array([0, 0])
 
-    catalog = init_catalog(base_path=DATA_PATH, raw_file=path_st)
+    catalog = init_catalog(base_path=DATA_PATH, raw_file=path_st, archive_existent=True)
 
     l_ini = [np.nan] * N_COLS_SAMPLER
     l_ini[0] = dt.datetime.now()

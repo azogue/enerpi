@@ -6,13 +6,12 @@ import json
 import logging
 import os
 import pandas as pd
-import pytz
 from threading import Thread, current_thread
 from time import sleep, time
 
 from enerpi import BASE_PATH
 from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
-from enerpi.base import CONFIG, get_lines_file
+from enerpi.base import CONFIG, TZ, DATA_PATH, get_lines_file
 from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
 
 from enerpiweb import app, basedir, SERVER_FILE_LOGGING
@@ -21,8 +20,6 @@ from enerpiweb import app, basedir, SERVER_FILE_LOGGING
 # WITH_WEB = CONFIG.get('ENERPI_WEBSERVER', 'WITH_WEBSERVER', fallback='False') == 'True'
 WITH_ML_SUBSYSTEM = CONFIG.get('ENERPI_WEBSERVER', 'WITH_ML', fallback='False') == 'True'
 
-TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
-DATA_PATH = CONFIG.get('ENERPI_DATA', 'DATA_PATH')
 ENERPI_FILE_LOGGING = CONFIG.get('ENERPI_DATA', 'FILE_LOGGING')
 ENERPI_FILE_LOGGING = os.path.join(DATA_PATH, ENERPI_FILE_LOGGING)
 PALETA = pd.read_csv(os.path.join(BASE_PATH, 'rsc', 'paleta_power_w.csv')
