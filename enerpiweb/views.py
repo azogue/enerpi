@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from collections import deque
 import datetime as dt
-from flask import Response, request, redirect, url_for
+from flask import Response, request, redirect, url_for, render_template, send_file
 import json
 import logging
 import os
@@ -14,7 +14,7 @@ from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
 from enerpi.base import CONFIG, TZ, DATA_PATH, get_lines_file
 from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
 
-from enerpiweb import app, basedir, SERVER_FILE_LOGGING
+from enerpiweb import app, SERVER_FILE_LOGGING, STATIC_PATH
 
 
 # WITH_WEB = CONFIG.get('ENERPI_WEBSERVER', 'WITH_WEBSERVER', fallback='False') == 'True'
@@ -22,6 +22,7 @@ WITH_ML_SUBSYSTEM = CONFIG.get('ENERPI_WEBSERVER', 'WITH_ML', fallback='False') 
 
 ENERPI_FILE_LOGGING = CONFIG.get('ENERPI_DATA', 'FILE_LOGGING')
 ENERPI_FILE_LOGGING = os.path.join(DATA_PATH, ENERPI_FILE_LOGGING)
+RSC_GEN_FILE_LOGGING = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
 PALETA = pd.read_csv(os.path.join(BASE_PATH, 'rsc', 'paleta_power_w.csv')
                      ).set_index('Unnamed: 0')['0'].str[1:-1].str.split(', ').apply(lambda x: [float(i) for i in x])
 COLOR_BASE = app.config['BASECOLOR']
@@ -36,13 +37,38 @@ buffer_last_data = deque([], maxlen=BUFFER_MAX_SAMPLES)
 thread_receiver = None
 
 
+# Interesting files / logs to show:
+def _get_filepath_from_file_id(file_id):
+    if 'flask' == file_id:
+        filename = SERVER_FILE_LOGGING
+    elif 'rsc' == file_id:
+        filename = RSC_GEN_FILE_LOGGING
+    elif 'nginx_err' == file_id:
+        filename = '/var/log/nginx/error.log'
+    elif 'nginx' == file_id:
+        filename = '/var/log/nginx/access.log'
+    elif 'enerpi' == file_id:
+        filename = ENERPI_FILE_LOGGING
+    elif 'uwsgi' == file_id:
+        filename = '/var/log/uwsgi/enerpiweb.log'
+    else:  # Fichero derivado del catálogo
+        cat = enerpi_data_catalog(check_integrity=False)
+        if 'raw_store' == file_id:
+            filename = os.path.join(cat.base_path, cat.raw_store)
+        elif 'catalog' == file_id:
+            filename = os.path.join(cat.base_path, cat.catalog_file)
+        else:
+            logging.error('FILE_ID No reconocido: {}'.format(file_id))
+            filename = SERVER_FILE_LOGGING
+    return filename
+
+
 if WITH_ML_SUBSYSTEM:
     from enerpiweb.views_labeling import *
 else:
     @app.route('/learning')
     def index_learning():
-        # TODO Usar redirect a 'control'
-        return render_template('control_panel.html')
+        return redirect(url_for('control'))
 
 
 def format_event_stream(d_msg, timeout_retry=None, msg_id=None):
@@ -69,6 +95,13 @@ def text_date(str_date):
         elif str_date == 'yesterday':
             return (dt.date.today() - dt.timedelta(days=1)).strftime('%Y-%m-%d')
         return dt.date.today().strftime('Err_%Y-%m-%d')
+
+
+@app.template_filter('ts_strftime')
+def ts_strftime(ts):
+    if (ts.hour == 0) and (ts.minute == 0):
+        return ts.strftime('%d/%m/%y')
+    return ts.strftime('%d/%m/%y %H:%M')
 
 
 def _get_dataframe_buffer_data():
@@ -108,18 +141,25 @@ def _get_html_table_buffer_data(df_print=None):
 
 def _gen_stream_data_bokeh(start=None, end=None, last_hours=None, rs_data=None, rm_data=None,
                            use_median=False, kwh=False):
+    # if sys.platform == 'darwin':
+    #     sleep(1)
     tic = time()
     if start or end or last_hours:
         cat = enerpi_data_catalog(check_integrity=False)
         if kwh:
             df = cat.get_summary(start=start, end=end, last_hours=last_hours, async_get=False)
         else:
-            df = cat.get(start=start, end=end, last_hours=last_hours, async_get=False)[['power', 'ldr', 'ref']]
-            df.ldr = df.ldr.astype(float) / 10.
-            if last_hours is not None:
-                df = pd.DataFrame(pd.concat([df, _get_dataframe_buffer_data().tz_localize(None)], axis=0)
-                                  ).sort_index().drop_duplicates(keep='last')
-            df = cat.resample_data(df, rs_data=rs_data, rm_data=rm_data, use_median=use_median)
+            df = cat.get(start=start, end=end, last_hours=last_hours, async_get=False)
+            if (df is not None) and not df.empty:
+                df = df[['power', 'ldr', 'ref']]
+                df.ldr = df.ldr.astype(float) / 10.
+                if last_hours is not None:
+                    df_last_data = _get_dataframe_buffer_data()
+                    if df_last_data is not None:
+                        df_last_data = df_last_data.tz_localize(None)
+                        df = pd.DataFrame(pd.concat([df, df_last_data], axis=0)
+                                          ).sort_index().drop_duplicates(keep='last')
+                df = cat.resample_data(df, rs_data=rs_data, rm_data=rm_data, use_median=use_median)
     else:
         df = _get_dataframe_buffer_data()
     toc_df = time()
@@ -132,10 +172,15 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None, rs_data=None, 
                                            b_version=version, script_bokeh=script, bokeh_div=divs[0],
                                            took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
         except Exception as e:
-            print('ERROR: ', e, e.__class__)
-            yield format_event_stream(dict(success=False, error=e))
+            msg = 'ERROR en: BOKEH PLOT: {} [{}]'.format(e, e.__class__)
+            print(msg)
+            yield format_event_stream(dict(success=False, error=msg))
     else:
-        yield format_event_stream(dict(success=False))
+        msg = ('No hay datos para BOKEH PLOT: start={}, end={}, last_hours={}, '
+               'rs_data={}, rm_data={}, use_median={}, kwh={}<br>--> DATA: {}'
+               .format(start, end, last_hours, rs_data, rm_data, use_median, kwh, df))
+        # print(msg.replace('<br>', '\n'))
+        yield format_event_stream(dict(success=False, error=msg))
     yield format_event_stream('CLOSE')
 
 
@@ -289,9 +334,57 @@ def tablelast():
     return render_template('table_buffer.html', url_table=url_for('table_buffer'))
 
 
+@app.route('/api/hdfstores/<relpath_store>', methods=['GET'])
+def download_hdfstore_file(relpath_store=None):
+    """
+    Devuelve el fichero HDFStore del catálogo de ENERPI pasado como ruta relativa (nombre de fichero .h5).
+    * File Download *
+    :param relpath_store:
+    """
+    cat = enerpi_data_catalog(check_integrity=False)
+    path_file = cat.get_path_hdf_store_binaries(relpath_store)
+    # send_file(), send_from_directory
+    return send_file(path_file, as_attachment='as_attachment' in request.args)
+
+
+@app.route('/api/filedownload/<file_id>', methods=['GET'])
+def download_file(file_id):
+    """
+    * File Download *
+    :param file_id:
+    """
+    filename = _get_filepath_from_file_id(file_id)
+    return send_file(filename, as_attachment='as_attachment' in request.args)
+
+
 @app.route('/control')
 def control():
-    return render_template('control_panel.html')
+    """
+    Panel de control con links a visores de LOG's, bokeh plots
+    y descarga de ficheros de DATA_PATH (para backup remoto)
+    """
+    global last_data
+    last = last_data.copy()
+    # last_ts, last_power, host_logger = last_data['ts'], last_data['power'], last_data['host']
+    try:
+        is_sender_active = (pd.Timestamp.now(tz=TZ) - last['ts']) < pd.Timedelta('1min')
+    except KeyError:
+        is_sender_active = False
+        last = {'host': '?', 'power': -1, 'ts': pd.Timestamp.now(tz=TZ)}
+    cat = enerpi_data_catalog(check_integrity=False)
+    df = cat.tree
+    if df is not None:
+        df = df[df.is_cat & df.is_raw].sort_values(by='ts_ini', ascending=False)
+        paths_rel = [(os.path.basename(p), t0.strftime('%d/%m/%y'), tf.strftime('%d/%m/%y'), n)
+                     for p, t0, tf, n in zip(df['st'], df['ts_ini'], df['ts_fin'], df['n_rows'])]
+    else:
+        paths_rel = []
+    return render_template('control_panel.html',
+                           d_catalog={'path_raw_store': os.path.join(cat.base_path, cat.raw_store),
+                                      'path_catalog': os.path.join(cat.base_path, cat.catalog_file),
+                                      'ts_init': cat.min_ts,
+                                      'ts_catalog': cat.index_ts},
+                           d_last_msg=last, is_sender_active=is_sender_active, list_stores=paths_rel)
 
 
 @app.route('/showfile')
@@ -302,22 +395,7 @@ def showfile(file='flask'):
     reverse = request.args.get('reverse', False)
     tail_lines = request.args.get('tail', None)
 
-    select_log = file
-    if 'flask' in select_log:
-        filename = SERVER_FILE_LOGGING
-    elif 'rsc' in select_log:
-        filename = os.path.join(basedir, 'static', 'enerpiweb_rscgen.log')
-    elif 'nginx_err' in select_log:
-        filename = '/var/log/nginx/error.log'
-    elif 'nginx' in select_log:
-        filename = '/var/log/nginx/access.log'
-    elif 'enerpi' in select_log:
-        filename = ENERPI_FILE_LOGGING
-    elif 'uwsgi' in select_log:
-        filename = '/var/log/uwsgi/enerpiweb.log'
-    else:
-        filename = SERVER_FILE_LOGGING
-
+    filename = _get_filepath_from_file_id(file)
     if alerta:
         alerta = json.loads(alerta)
     if not alerta and delete:
@@ -325,9 +403,9 @@ def showfile(file='flask'):
             f.close()
         cad_delete = 'LOGFILE {} DELETED'.format(filename.upper())
         logging.warning(cad_delete)
-        return redirect(url_for('showfile', file=select_log, alerta=json.dumps({'alert_type': 'warning',
-                                                                                'texto_alerta': cad_delete})))
+        return redirect(url_for('showfile', file=file,
+                                alerta=json.dumps({'alert_type': 'warning', 'texto_alerta': cad_delete})))
     data = get_lines_file(filename, tail=tail_lines, reverse=reverse)
-    return render_template('text_file.html', titulo='LOG File:', file_id=select_log,
+    return render_template('text_file.html', titulo='LOG File:', file_id=file,
                            subtitulo='<strong>{}</strong>'.format(filename),
                            file_content=data, filename=os.path.basename(filename), alerta=alerta)

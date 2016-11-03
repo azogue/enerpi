@@ -55,7 +55,7 @@ setup(
     package_data={
         'enerpi': ['rsc/paleta_power_w.csv', 'config_enerpi.ini', 'enerdaemon.sh'],
         'enerpiweb': ['enerpiweb.ini', 'uwsgi_mac.ini', 'enerpiweb_nginx.conf',
-                      'templates/*', 'static/css/*', 'static/img/icons/*', 'static/css/*'],
+                      'templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
 
     # Alternatively, if you want to distribute just a my_module.py, uncomment

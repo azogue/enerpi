@@ -144,8 +144,8 @@ def _format_legend_plot(p):
     p.legend.label_height = 12
     p.legend.glyph_height = 10
     p.legend.label_standoff = 5
-    p.legend.legend_padding = 8
-    p.legend.legend_spacing = 3
+    p.legend.padding = 8
+    p.legend.spacing = 3
 
 
 def _plot_bokeh_multi_index(data_plot, **fig_kwargs):

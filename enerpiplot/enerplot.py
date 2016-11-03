@@ -4,9 +4,6 @@ from io import BytesIO
 import locale
 import logging
 import matplotlib
-# do this before importing pylab or pyplot
-# matplotlib.use('Agg')
-# noinspection PyPep8
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import matplotlib.dates as mpd
@@ -240,7 +237,7 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
         return f, [ax_bar, ax_ts]
 
 
-@timeit('write_fig_to_svg', verbose=True)
+# @timeit('write_fig_to_svg', verbose=True)
 def write_fig_to_svg(fig, name_img, preserve_ratio=False):
     # plt.close(fig)
     canvas = FigureCanvas(fig)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import asyncio
-import concurrent.futures as futures
+# import asyncio
+# import concurrent.futures as futures
 import glob
 import json
 import logging
@@ -214,11 +214,6 @@ class HDFTimeSeriesCatalog(object):
         b_no_existe = index['new_ts'].isnull()
         index.loc[b_no_existe, 'modif'] = True
         index.loc[~b_no_existe, 'modif'] = index.loc[~b_no_existe, 'ts_st'] != index.loc[~b_no_existe, 'new_ts']
-        # try:
-        #     index['modif'] = index['ts_st'] != index['new_ts']
-        # except TypeError as e:
-        #     logging.error('TypeError "{}" intentando fijar index["modif"] en _check_index'.format(e))
-        #     index['modif'] = True
         if new_stores:
             logging.warning('NEW STORES WERE FOUND: {}'.format(new_stores))
         new_stores += paths.loc[index['new_ts'].notnull() & index['modif']].drop_duplicates().tolist()
@@ -254,6 +249,7 @@ class HDFTimeSeriesCatalog(object):
                 else:
                     data = func_store(st)
             # print('load_hdf {} in {:.3f}'.format(p, time() - tic))
+            # data.info()
             return data
         except KeyError as e:
             logging.error('load_hdf KEYERROR -> ST:"{}", KEY:{}; -> {}'.format(p, k, e))
@@ -310,6 +306,21 @@ class HDFTimeSeriesCatalog(object):
                 paths.append(self._make_index_path(i, w_day=False))
         return paths
 
+    def _get_time_slice(self, start=None, end=None, last_hours=None):
+        if last_hours is not None:
+            if type(last_hours) is str:
+                last_hours = int(last_hours)
+            start = pd.Timestamp.now().replace(minute=0, second=0, microsecond=0) - pd.Timedelta(hours=last_hours)
+            return start, None
+        else:
+            if start is None:
+                start = self.min_ts
+            return start, end
+
+    def get_paths(self, start=None, end=None, last_hours=None):
+        t0, tf = self._get_time_slice(start, end, last_hours)
+        return self._get_paths_interval(ts_ini=t0, ts_fin=tf)
+
     def _load_today(self):
         return self._load_hdf(ST_TODAY, key=self.key_raw)
 
@@ -333,6 +344,23 @@ class HDFTimeSeriesCatalog(object):
                 return df, days_cm
             return None, []
 
+    @staticmethod
+    def _concat_loaded_data(dataframes, ini, fin=None):
+        try:
+            valid_dfs = list(filter(lambda df: df is not None, dataframes))
+            if valid_dfs:
+                dataframe = pd.DataFrame(pd.concat(valid_dfs, axis=0)).sort_index()
+                if fin is not None:
+                    return dataframe.loc[ini:fin]
+                return dataframe.loc[ini:]
+            else:
+                logging.warning('GET DATA WARNING -> No valid dfs (were {})'.format(len(dataframes)))
+                # print('GET DATA WARNING -> No valid dfs (were {})'.format(len(dataframes)))
+        except ValueError as e:
+            logging.error('GET DATA ERROR: {}'.format(e))
+            # print('GET DATA ERROR: {}'.format(e))
+        return None
+
     # @profile
     def _classify_data(self, df, func_save_data):
         paths = []
@@ -352,7 +380,7 @@ class HDFTimeSeriesCatalog(object):
                                 if not d_day.empty:
                                     if ts_day.day == ahora.day:
                                         # TODAY
-                                        logging.debug(ST_TODAY + '\n{}\n{}'.format(d_day.dtypes, d_day.head()))
+                                        # logging.debug(ST_TODAY + '\n{}\n{}'.format(d_day.dtypes, d_day.head()))
                                         func_save_data(ST_TODAY, d_day, None, None)
                                         paths.append(ST_TODAY)
                                     else:
@@ -453,12 +481,14 @@ class HDFTimeSeriesCatalog(object):
                 d1, d2 = self.process_data_summary(d1)
             return d1, d2
 
-        asyncio.sleep(0)
+        # asyncio.sleep(0)
         if with_summary:
             extracted = self._load_hdf(path_idx, func_store=_get_data_from_store)
-        else:
+        elif column is not None:
             extracted = self._load_hdf(path_idx, key=self.key_raw, columns=[column])
-        asyncio.sleep(0)
+        else:
+            extracted = self._load_hdf(path_idx, key=self.key_raw)
+        # asyncio.sleep(0)
         if (extracted is None) and with_summary:
             return None, None
         return extracted
@@ -472,7 +502,7 @@ class HDFTimeSeriesCatalog(object):
                 _, d2 = self.process_data_summary(st[self.key_raw])
             return d2
 
-        asyncio.sleep(0)
+        # asyncio.sleep(0)
         return self._load_hdf(path_idx, func_store=_get_summary_from_store)
 
     def _remove_old_if_archive(self, old_stores, new_stores, ahora):
@@ -632,7 +662,6 @@ class HDFTimeSeriesCatalog(object):
             self._save_hdf(dfs, p, keys, mode='w', **KWARGS_SAVE)
 
         paths = self._classify_data(data, _save_distributed_data)
-        logging.debug('** Data classified on paths: {}'.format(len(paths)))
         return paths
 
     # @timeit('get')
@@ -648,24 +677,9 @@ class HDFTimeSeriesCatalog(object):
         :param async_get: bool
         :return: data (opc: , data_summary)
         """
-        def _concat_loaded_data(dataframes, ini, fin=None):
-            try:
-                dataframe = pd.DataFrame(pd.concat([df for df in dataframes if df is not None], axis=0)).sort_index()
-                if fin is not None:
-                    return dataframe.loc[ini:fin]
-                return dataframe.loc[ini:]
-            except ValueError as e:
-                logging.error('GET DATA ERROR: {}'.format(e))
-                print('GET DATA ERROR: {}'.format(e))
-                return None
 
-        if last_hours is not None:
-            start = pd.Timestamp.now().replace(minute=0, second=0, microsecond=0) - pd.Timedelta(hours=int(last_hours))
-            paths_idx = self._get_paths_interval(ts_ini=start)
-        else:
-            if start is None:
-                start = self.min_ts
-            paths_idx = self._get_paths_interval(ts_ini=start, ts_fin=end)
+        start, end = self._get_time_slice(start, end, last_hours)
+        paths_idx = self.get_paths(start, end)
         if paths_idx:
             last, last_s = None, None
             # Incluir RAW:
@@ -674,56 +688,43 @@ class HDFTimeSeriesCatalog(object):
                                                     and (self.tree.ts_fin.max() >= pd.Timestamp(end)))):
                 paths_idx = paths_idx[:-1]
                 today = self.load_store(ST_TODAY, column=column)
-                plus = self.process_data(self.load_store(self.raw_store))[column]
+                plus = self.process_data(self.load_store(self.raw_store))
+                if column is not None:
+                    plus = plus[column]
                 if with_summary:
                     last, last_s = self.process_data_summary(pd.concat([today, plus]))
-                else:
+                elif today is not None and plus is not None:
                     last = pd.DataFrame(pd.concat([today, plus]))
-            if async_get and len(paths_idx) > 2:
-                with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
-                    future_loads = {executor.submit(self.load_store, p, with_summary=with_summary, column=column): p
-                                    for p in paths_idx}
-                    extracted = [future.result() for future in futures.as_completed(future_loads)]
-            else:
-                extracted = [self.load_store(p, with_summary=with_summary, column=column) for p in paths_idx]
+                else:
+                    last = None
+            # if async_get and len(paths_idx) > 2:
+            #     with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
+            #         future_loads = {executor.submit(self.load_store, p, with_summary=with_summary, column=column): p
+            #                         for p in paths_idx}
+            #         extracted = [future.result() for future in futures.as_completed(future_loads)]
+            # else:
+            extracted = [self.load_store(p, with_summary=with_summary, column=column) for p in paths_idx]
             if with_summary:
                 dfs, dfs_s = list(zip(*extracted))
-                data = _concat_loaded_data(list(dfs) + [last], start, end)
-                data_s = _concat_loaded_data(list(dfs_s) + [last_s], start, end)
+                data = self._concat_loaded_data(list(dfs) + [last], start, end)
+                data_s = self._concat_loaded_data(list(dfs_s) + [last_s], start, end)
                 return data, data_s
-            return _concat_loaded_data(extracted + [last], start, end)
+            return self._concat_loaded_data(extracted + [last], start, end)
         if with_summary:
             return None, None
         return None
 
     @timeit('get_summary')
     def get_summary(self, start=None, end=None, last_hours=None, async_get=True):
-
-        def _concat_loaded_data(dfs, ini, fin=None):
-            try:
-                dataframe = pd.DataFrame(pd.concat([df for df in dfs if df is not None], axis=0)).sort_index()
-                if fin is not None:
-                    return dataframe.loc[ini:fin]
-                return dataframe.loc[ini:]
-            except ValueError as e:
-                logging.error('GET DATA ERROR: {}'.format(e))
-                return None
-
-        if last_hours is not None:
-            start = pd.Timestamp.now().replace(minute=0, second=0, microsecond=0) - pd.Timedelta(hours=last_hours)
-            paths_idx = self._get_paths_interval(ts_ini=start)
-        else:
-            if start is None:
-                start = self.min_ts
-            paths_idx = self._get_paths_interval(ts_ini=start, ts_fin=end)
+        paths_idx = self.get_paths(start, end, last_hours)
         if paths_idx:
-            if async_get and len(paths_idx) > 2:
-                with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
-                    future_loads = {executor.submit(self.load_summary, p): p for p in paths_idx}
-                    extracted = [future.result() for future in futures.as_completed(future_loads)]
-            else:
-                extracted = [self.load_summary(p) for p in paths_idx]
-            data_s = _concat_loaded_data(extracted, start, end)
+            # if async_get and len(paths_idx) > 2:
+            #     with futures.ProcessPoolExecutor(max_workers=min(4, len(paths_idx))) as executor:
+            #         future_loads = {executor.submit(self.load_summary, p): p for p in paths_idx}
+            #         extracted = [future.result() for future in futures.as_completed(future_loads)]
+            # else:
+            extracted = [self.load_summary(p) for p in paths_idx]
+            data_s = self._concat_loaded_data(extracted, start, end)
             return data_s
         return None
 
@@ -754,6 +755,14 @@ class HDFTimeSeriesCatalog(object):
             df_bis, df_s = self.process_data_summary(df)
             assert((df == df_bis).all().all())
             self._save_hdf([df_bis, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
+
+    def get_path_hdf_store_binaries(self, rel_path=ST_TODAY):
+        subset = self.tree[self.tree.st.str.contains(rel_path)].st.values
+        if len(subset) > 0:
+            p = os.path.join(self.base_path, subset[0])
+            # print(os.path.exists(p), os.path.getsize(p), rel_path)
+            return p
+        return None
 
     # def info_catalog(self):
     #     # TODO Tabla de información del catálogo: ruta, archivo, n_rows, ts_ini, ts_fin, medidas de completitud

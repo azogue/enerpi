@@ -2,6 +2,16 @@
 {% from 'monitor_tiles.html' import monitor_tiles with context %}
 {% from 'macros.html' import styles_bokeh with context %}
 
+{% macro tag_file_download(p, t0, tf, ns, btn_type)%}
+    <a href="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
+       download="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
+       style="margin-left: 10px; margin-right: 10px;">
+        <span class="tag tag-pill tag-{{ btn_type }}">
+            <i class="fa fa-file-archive-o" aria-hidden="true"></i><strong> {{ p }}</strong> <small>({{ t0 }}->{{ tf }}, N={{ ns }})</small>
+        </span>
+    </a>
+{% endmacro %}
+
 {% block content %}
     <div class="jumbotron">
         <div class="container-fluid">
@@ -12,6 +22,11 @@
                 </div>
                 <div class="col-xs-6 col-sm-8 col-md-9 col-lg-9">
                     <h1 class="display-5">EnerPi Control</h1>
+                    {% if is_sender_active %}
+                        <h6>Status: <strong class="tag tag-pill tag-success">ACTIVE</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
+                    {% else %}
+                        <h6>Status: <strong class="tag tag-pill tag-danger">OFF</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
+                    {% endif %}
                 </div>
                 <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">
                     <br class="hidden-sm hidden-xs">
@@ -23,6 +38,7 @@
                       <div class="btn-group" role="group" aria-label="ENERPI LOG">
                         <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='enerpi', tail=200, reverse=True)}}" role="button">EnerPi LOG</a>
                       </div>
+                      <br class="hidden-sm hidden-xs">
                       <div class="btn-group" role="group" aria-label="UWSGI+NGINX LOGs">
                         <a class="btn btn-sm btn-secondary btn-outline-warning" href="{{ url_for('showfile', file='uwsgi', tail=200, reverse=True)}}" role="button">UWSGI LOG</a>
                         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('showfile', file='nginx', tail=200, reverse=True)}}" role="button">NGINX Access</a>
@@ -43,4 +59,36 @@
             </div>
         </div>
     </div>
+    <hr>
+    <div class="container-fluid">
+        <h3><strong><i class="fa fa-database" aria-hidden="true"></i> HDF Data Stores</strong> for download <small>(from {{ d_catalog['ts_init']|ts_strftime }})</small></h3>
+        <hr>
+        <h6 style="line-height: 1.5em;">
+            <a href="{{ url_for('download_file', file_id='catalog') }}"
+               download="{{ url_for('download_file', file_id='catalog') }}" style="margin-left: 10px; margin-right: 10px;">
+                <span class="tag tag-pill tag-warning">
+                    <i class="fa fa-list" aria-hidden="true"></i><strong> Data CATALOG</strong> <small>({{ d_catalog['ts_catalog']|ts_strftime }})</small>
+                </span>
+            </a>
+            <a href="{{ url_for('download_file', file_id='raw_store', as_attachment=True) }}"
+               download="{{ url_for('download_file', file_id='raw_store', as_attachment=True) }}" style="margin-left: 10px; margin-right: 10px;">
+                <span class="tag tag-pill tag-danger">
+                    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i><small> RAW Data</small>
+                </span>
+            </a>
+        </h6>
+        <hr>
+        <h4 style="line-height: 1.7em;">
+            {% for (p, t0, tf, ns) in list_stores %}
+                {% if 'MONTH' in p %}
+                    {{ tag_file_download(p, t0, tf, ns, 'success') }}
+                {% elif 'TODAY' in p %}
+                    {{ tag_file_download(p, t0, tf, ns, 'warning') }}
+                {% else %}
+                    {{ tag_file_download(p, t0, tf, ns, 'primary') }}
+                {% endif %}
+            {% endfor %}
+        </h4>
+        </div>
+    <hr>
 {% endblock %}

@@ -2,18 +2,29 @@
 import logging
 import os
 from time import time, sleep
-
-from enerpi.database import init_catalog, DATA_PATH, HDF_STORE
-from enerpiplot.enerplot import gen_svg_tiles
-
+import sys
 # from multiprocessing import Process
 # from threading import Thread
 
+# do this before importing pylab or pyplot
+import matplotlib
+matplotlib.use('Agg')
 
-basedir = os.path.abspath(os.path.dirname(__file__))
+from enerpi.database import init_catalog, DATA_PATH, HDF_STORE, CONFIG
+from enerpiplot.enerplot import gen_svg_tiles
 
-SERVER_FILE_LOGGING = os.path.join(basedir, 'static', 'enerpiweb_rscgen.log')
-IMG_TILES_BASEPATH = os.path.join(basedir, 'static', 'img', 'generated')
+
+STATIC_PATH = os.path.expanduser(CONFIG.get('ENERPI_WEBSERVER',
+                                            'STATIC_PATH_OSX' if sys.platform == 'darwin' else 'STATIC_PATH'))
+SERVER_FILE_LOGGING = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
+IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
+if not os.path.exists(STATIC_PATH):
+    import shutil
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    shutil.copytree(os.path.join(basedir, 'static'), STATIC_PATH)
+if not os.path.exists(IMG_TILES_BASEPATH):
+    os.makedirs(IMG_TILES_BASEPATH)
+
 TILES_GENERATION_INTERVAL = 180
 LOGGING_LEVEL_SERVER = 'DEBUG'
 

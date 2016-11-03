@@ -1,8 +1,10 @@
 {% extends "layout.html" %}
 {% from 'macros.html' import styles_bokeh with context %}
+{% from 'monitor_tiles.html' import monitor_tiles_styles%}
 
 {% block styles %}
     {{ styles_bokeh(b_version) }}
+    {{ monitor_tiles_styles() }}
     <link href="{{ url_for('static', filename='css/bootstrap-switch.min.css') }}" rel="stylesheet">
     <style type="text/css">
     .bootstrap-switch .bootstrap-switch-handle-off.bootstrap-switch-enerpi {
@@ -22,30 +24,40 @@
     <script src="{{ url_for('static', filename='js/bootstrap-switch.min.js') }}"></script>
     <script>
     function updateBokehPlot(url_stream) {
+        console.log('Se procede a actualizar el plot con URL=' + url_stream);
+        $("#bokeh-plot-took").addClass('invisible');
+        $('#div-plot-bokeh').html('<div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>');
+        var div_plot = $('#hueco-div-plot-bokeh');
+        var cw = div_plot.width();
+        div_plot.css({'height': cw * 5 / 9 + 'px'});
         sse = new EventSource(url_stream);
         sse.onmessage = function(message) {
-            console.log('Mensaje recibido!')
+            console.log('Mensaje recibido!');
             if (message.data == '"CLOSE"') {
+                console.log('Cerrando EventSource (CLOSE Event)');
                 sse.close();
             } else {
                 var data = JSON.parse(message.data);
                 if (data['success']) {
-                    console.log('Mensaje recibido con success!')
+                    console.log('Mensaje recibido con success!');
                     if (data.hasOwnProperty('bokeh_div') && data.hasOwnProperty('took'))
                     {
-                        console.log('Mensaje plot!')
+                        console.log('Mensaje plot!');
                         $('#div-plot-bokeh').html(data['bokeh_div']);
                         $("body").append(data['script_bokeh']);
-                        $("#bokeh-plot-took").html(' (Took ' + data['took'] + ' secs, df: ' + data['took_df'] +')');
-                        $("#bokeh-plot-took").removeClass('invisible');
+                        $("#bokeh-plot-took").html(' (Took ' + data['took'] + ' secs, df: ' + data['took_df'] +')').removeClass('invisible');
                         $('#titulo-graph').removeClass('btn-outline-warning').addClass('btn-outline-success');
                     }
                 } else {
                     $('#titulo-graph').removeClass('btn-outline-success').addClass('btn-outline-warning');
+                    console.log(data);
+                    if (data.hasOwnProperty('error')) {
+                        $("#bokeh-plot-took").html(data['error']).removeClass('invisible').css({'background-color': 'red', 'color': 'white'});;
+                    }
                 }
             }
         };
-    };
+    }
     function submitQuery() {
         var from = $('form #selectFrom').val();
         var to = $('form #selectTo').val();
@@ -62,7 +74,7 @@
         url_query_plot += "kwh=" + get_summary;
         console.log(url_query_plot);
         updateBokehPlot(url_query_plot);
-    };
+    }
     $(document).ready(function() {
         var switch_selecct_summary = {
             size: "mini",
@@ -70,13 +82,9 @@
             offColor: "enerpi",
             offText: "W",
             onText: "kWh",
-            animate: true,
+            animate: true
         };
         $("#switchSummaryData").bootstrapSwitch(switch_selecct_summary);
-        var div_plot = $('#hueco-div-plot-bokeh');
-        var cw = div_plot.width();
-        div_plot.css({'height': cw * 5 / 9 + 'px'});
-        div_plot.css({'background-color': 'grey'});
         updateBokehPlot("{{ url_stream_bokeh|safe }}")
     });
     </script>
@@ -91,7 +99,7 @@
         </div>
     </div>
     <div id="div-plot-bokeh" class="bokeh_div_plot">
-        <div id="hueco-div-plot-bokeh" style="width: 100%"></div>
+        <div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>
     </div>
     <div class="container-fluid">
         <hr>

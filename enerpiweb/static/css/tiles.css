@@ -8,6 +8,27 @@
     background-image: radial-gradient(farthest-corner at 70% 70%, rgba(244, 216, 63, 0.83), rgba(219, 221, 13, 0.33));}
 .tile-enerpi_data-ldr-text { color: #333718; }
 
+div.flex-img-container {
+    background-color: rgba(13, 85, 35, 0.41);
+    position: relative;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex; /* add */
+    text-align: center;
+    justify-content: center; /* add to align horizontal */
+    align-items: center; /* add to align vertical */
+}
+img.hv-centered-image {
+    vertical-align: middle;
+    text-align: center;
+    display: inline-block;
+    height: auto;
+    max-width: 65%;
+	min-width: 35%;
+}
+
 /*.bk-root .bk-widget button .bk-bs-btn.bk-bs-btn-primary {*/
 button.bk-bs-btn.bk-bs-btn-primary {
     border-color: #8C27D3 !important;
