@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
-from enerpi.base import CONFIG
+from enerpi.base import CONFIG, log, CONFIG_FILENAME
 
 
 # PINOUT RGB_LED
+WITH_RGBLED = CONFIG.getboolean('RGBLED', 'WITH_RGBLED', fallback=False)
 PIN_R = CONFIG.getint('RGBLED', 'PIN_R', fallback=19)
 PIN_G = CONFIG.getint('RGBLED', 'PIN_G', fallback=20)
 PIN_B = CONFIG.getint('RGBLED', 'PIN_B', fallback=16)
 
 
 def get_rgbled(verbose=True):
-    try:
-        from gpiozero import RGBLED
+    led = None
+    if WITH_RGBLED:
+        try:
+            from gpiozero import RGBLED
 
-        led = RGBLED(PIN_R, PIN_G, PIN_B, active_high=True)
-        led.blink(.25, .25, on_color=(0, 1, 1), n=5)
-    except (OSError, RuntimeError, ImportError) as e:
-        if verbose:
-            print('** No se utiliza GPIOZERO ({})'.format(e))
-        led = None
+            led = RGBLED(PIN_R, PIN_G, PIN_B, active_high=True)
+            led.blink(.25, .25, on_color=(0, 1, 1), n=5)
+        except (OSError, RuntimeError, ImportError) as e:
+            log('** Not using RGBLED with GPIOZERO ({}). Check your {} file.'
+                .format(e, CONFIG_FILENAME), 'warn', verbose)
     return led
 
 

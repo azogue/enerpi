@@ -2,20 +2,20 @@
 from setuptools import setup, find_packages
 from codecs import open
 import os
-from enerpi import VERSION
+from enerpi import __version__ as version
 
 
 with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst'), encoding='utf-8') as f:
-    LONG_DESCRIPTION = f.read()
+    long_description = f.read()
 
 PACKAGES = find_packages()
 
 setup(
     # ext_modules=cythonize("extractlog.pyx"),
     name='enerpi',
-    version=VERSION,
+    version=version,
     description='AC Current Meter for Raspberry PI with GPIOZERO and MCP3008',
-    long_description=LONG_DESCRIPTION,
+    long_description=long_description,
     keywords='enerpi current gpiozero raspberry analog',
     # Author details
     author='Eugenio Panadero',
@@ -53,9 +53,9 @@ setup(
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
     package_data={
-        'enerpi': ['rsc/paleta_power_w.csv', 'config_enerpi.ini', 'enerdaemon.sh'],
-        'enerpiweb': ['enerpiweb.ini', 'uwsgi_mac.ini', 'enerpiweb_nginx.conf',
-                      'templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
+        'enerpi': ['rsc/paleta_power_w.csv', 'enerdaemon.sh',
+                   'config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
+        'enerpiweb': ['templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
 
     # Alternatively, if you want to distribute just a my_module.py, uncomment
@@ -66,7 +66,7 @@ setup(
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=['numpy', 'pandas', 'pytz', 'cryptography', 'gpiozero', 'matplotlib', 'termcolor', 'flask',
-                      'werkzeug', 'jinja2', 'bokeh'],
+                      'werkzeug', 'jinja2', 'bokeh', 'python-crontab'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
@@ -85,8 +85,9 @@ setup(
     entry_points={
         'console_scripts': [
             'enerpi = enerpi.__main__:enerpi_main_cli',
-            'pitemps = pitemps.__main__:main',
+            'pitemps = enerpi.pitemps.__main__:main',
             'enerpi-daemon = enerpi.enerdaemon:enerpi_daemon',
+            'enerpi-rscgen= enerpiplot.mule_rscgen:main',
             'enerpiweb = enerpiweb.__main__:main'
         ]
     },

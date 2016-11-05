@@ -26,6 +26,8 @@ LABELS_DATA_KWH = ['Consumption', 'Max Power', 'Min Power', 'Sampled']
 FMT_TOOLTIP_DATA_KWH = ['{0.000}', '{0}', '{0}', '{0.000}']
 
 locale.setlocale(locale.LC_ALL, locale.getlocale())
+# locale.setlocale(locale.LC_ALL, CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale())))
+
 TOOLS = "pan,xwheel_zoom,box_zoom,reset,save,crosshair"
 P_WIDTH = 900
 P_HEIGHT = 500
@@ -215,7 +217,7 @@ def _plot_bokeh_hourly(data_plot, **fig_kwargs):
     data_plot = data_plot.tz_localize(None)
 
     data_plot['ts_mid'] = data_plot.index + pd.Timedelta('30min')
-    data_plot.index = data_plot.index + pd.Timedelta('30min')
+    data_plot.index += pd.Timedelta('30min')
 
     y_range = [0, max(1, np.ceil(data_plot[COLS_DATA_KWH[0]].max().max() / ROUND_KWH) * ROUND_KWH)]
     minmax_ejes = [y_range, [0, max(500, int(np.ceil(data_plot[COLS_DATA_KWH[1]].max().max() / ROUND_W) * ROUND_W))]]

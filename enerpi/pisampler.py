@@ -8,7 +8,7 @@ import random
 import re
 from subprocess import check_output
 from time import sleep, time
-from enerpi.base import CONFIG, TZ
+from enerpi.base import CONFIG, TZ, log
 
 
 # Conexiones analógicas vía MCP3008
@@ -25,7 +25,7 @@ VOLTAJE = CONFIG.getint('ENERPI_SAMPLER', 'VOLTAJE', fallback=236)
 A_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'A_REF', fallback=30.)
 # V, V_ref RPI GPIO
 V_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
-
+# ∆T en segundos entre envíos de información (yielding)
 DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
 
 # RMS_ROLL_WINDOW_SEC = 2  # ∆T para el deque donde se acumulan frames
@@ -39,9 +39,6 @@ RG_MSG_MASK = re.compile('^(?P<host>.*) __ (?P<ts>.*) __ (?P<power>.*) W __ Nois
                          'REF: (?P<ref>.*) __ LDR: (?P<ldr>.*)')
 
 # Nombres de columna en pd.DataFrames y formato de fecha
-# COL_TS = 'ts'
-# FMT_TS = '%Y-%m-%d %H:%M:%S.%f'
-# COLS_DATA = ['power', 'noise', 'ref', 'ldr']
 COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
 FMT_TS = CONFIG.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
 COLS_DATA = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA', fallback='power, noise, ref, ldr').split(', ')
@@ -51,8 +48,8 @@ def tuple_to_msg(data_tuple):
     return MSG_MASK.format(HOST, *data_tuple)
 
 
-def tuple_to_dict(data_tuple):
-    return dict(zip([COL_TS] + COLS_DATA, data_tuple))
+# def tuple_to_dict(data_tuple):
+#     return dict(zip([COL_TS] + COLS_DATA, data_tuple))
 
 
 def msg_to_dict(msg, func_err=print, *args_err):
@@ -76,10 +73,10 @@ def random_generator():
         p = random.randint(p_min, p_max)
         yield dt.datetime.now(), p, 1, 0, .5
         count += 1
-    print('PARADA PROGRAMADA DE RANDOM_GENERATOR')
+    log('PARADA PROGRAMADA DE RANDOM_GENERATOR', 'info', True, False)
 
 
-def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, min_ts_ms=0):
+def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, min_ts_ms=0, verbose=False):
     """
     Generador de valores RMS de las conexiones analógicas vía MCP3008.
         - Esta función realiza el sampling de alta frecuencia y va calculando los valores RMS con un buffer (como una
@@ -93,6 +90,7 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
     :param n_samples_buffer: Nº de samples tenidos en cuenta para calcular el RMS instantáneo.
     :param delta_sampling: ∆T en segundos entre envíos de información (yielding)
     :param min_ts_ms: ∆T en ms mínimo entre samples. Por defecto a 0: el máximo nº de frames que pueda computarse.
+    :param verbose: Salida de msgs de error por sys.stdout.
 
     :yield: (ts_datetime, power_rms, noise_rms, counter_buffer, ldr_rms)
     """
@@ -149,8 +147,8 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
             # if counter_frames > 100:
             #     raise RuntimeError
     except OSError as e:
-        print('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e))
+        log('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e), 'error', verbose)
         raise KeyboardInterrupt
     except (RuntimeError, AttributeError) as e:
-        print('{} en PISAMPLER: "{}". Terminando el generador.'.format(e.__class__, e))
+        log('{} en PISAMPLER: "{}". Terminando el generador.'.format(e.__class__, e), 'error', verbose)
     yield None

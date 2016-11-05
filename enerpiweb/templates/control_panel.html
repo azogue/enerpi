@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from 'monitor_tiles.html' import monitor_tiles with context %}
-{% from 'macros.html' import styles_bokeh with context %}
+{% from 'macros.html' import styles_bokeh, alert_dismiss with context %}
 
 {% macro tag_file_download(p, t0, tf, ns, btn_type)%}
     <a href="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
@@ -59,13 +59,17 @@
             </div>
         </div>
     </div>
+    {% if alerta %}
+{#        <br>#}
+        {{ alert_dismiss(alerta) }}
+    {% endif %}
     <hr>
     <div class="container-fluid">
         <h3><strong><i class="fa fa-database" aria-hidden="true"></i> HDF Data Stores</strong> for download <small>(from {{ d_catalog['ts_init']|ts_strftime }})</small></h3>
         <hr>
         <h6 style="line-height: 1.5em;">
-            <a href="{{ url_for('download_file', file_id='catalog') }}"
-               download="{{ url_for('download_file', file_id='catalog') }}" style="margin-left: 10px; margin-right: 10px;">
+            <a href="{{ url_for('download_file', file_id='catalog', as_attachment=True) }}"
+               download="{{ url_for('download_file', file_id='catalog', as_attachment=True) }}" style="margin-left: 10px; margin-right: 10px;">
                 <span class="tag tag-pill tag-warning">
                     <i class="fa fa-list" aria-hidden="true"></i><strong> Data CATALOG</strong> <small>({{ d_catalog['ts_catalog']|ts_strftime }})</small>
                 </span>

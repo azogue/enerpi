@@ -11,9 +11,11 @@
                 <strong><i class="fa fa-area-chart" aria-hidden="true"></i></strong></a>
             <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('tablelast') }}">
                 <strong><i class="fa fa-table" aria-hidden="true"></i></strong></a>
-            <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('index_learning') }}">
-                <strong><i class="fa fa-cogs" aria-hidden="true"></i></strong></a>
-            <a class="navbar-brand active" href="#"></a>
+            {% if config['WITH_ML_SUBSYSTEM'] %}
+                <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('index_learning') }}">
+                    <strong><i class="fa fa-cogs" aria-hidden="true"></i></strong></a>
+            {% endif %}
+{#            <a class="navbar-brand active" href="#"></a>#}
 {#          <input class="form-control" type="text" placeholder="Search">#}
 {#          <button class="btn btn-outline-primary" type="submit">Search</button>#}
             <a class="nav pull-right navbar-link hidden-xs" href="{{ url_for('control') }}">

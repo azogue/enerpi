@@ -1,31 +1,39 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 import os
-import logging
 import sys
-from enerpi.base import log
-from enerpi.command_enerpi import enerpi_main_logger, set_logging_conf  # , enerpi_main_logger_demo
+from enerpi.base import log, FILE_LOGGING, LOGGING_LEVEL, set_logging_conf
+from enerpi.command_enerpi import enerpi_main_logger  # , enerpi_main_logger_demo
 from enerpi.daemon import Daemon
 
 
-class MyDaemon(Daemon):
+class EnerPiDaemon(Daemon):
+    """
+    Clase Daemon para la ejecución de enerpi_main_logger en background
+    """
     def run(self):
-        enerpi_main_logger(set_logging=True)
+        enerpi_main_logger()
         # enerpi_main_logger_demo()
 
 
 def enerpi_daemon():
-    set_logging_conf(verbose=True)
-    logging.info('Iniciando DAEMON')
-    # TODO Eliminar stdout y stderr!
-    # if sys.platform == 'linux':
-    daemon = MyDaemon('/tmp/enerpilogger.pid',
-                      stdout=os.path.expanduser('/tmp/enerpi_out.txt'),
-                      stderr=os.path.expanduser('/tmp/enerpi_err.txt'))
-    # else:
-    #     daemon = MyDaemon('/tmp/enerpilogger.pid',
-    #                       stdout=os.path.expanduser('~/enerpi_out.txt'),
-    #                       stderr=os.path.expanduser('~/enerpi_err.txt'))
+    """
+    Main logic para el demonio de ejecución de enerpi_main_logger
+
+    Ej de uso:
+    sudo -u www-data /home/pi/PYTHON/py35/bin/enerpi-daemon start|stop|status|restart
+    enerpi-daemon start|stop|status|restart
+    Opciones:
+        - start
+        - stop
+        - status
+        - restart
+    """
+    set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
+    # TODO Eliminar stdout y stderr! (o diferenciar su uso según LOGGING_LEVEL)
+    daemon = EnerPiDaemon('/tmp/enerpilogger.pid',
+                          stdout=os.path.expanduser('/tmp/enerpi_out.txt'),
+                          stderr=os.path.expanduser('/tmp/enerpi_err.txt'))
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
             log('ENERPI Logger daemon started', 'info', False)

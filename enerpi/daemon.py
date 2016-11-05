@@ -84,9 +84,8 @@ class Daemon:
         #     sys.exit(-1)
 
     def delpid(self):
-        print('Eliminando PIDFILE {}'.format(self.pidfile))
-        os.remove(self.pidfile)
-        print('PIDFILE? {}'.format(os.path.exists(self.pidfile)))
+        if os.path.exists(self.pidfile):
+            os.remove(self.pidfile)
 
     def start(self):
         """
@@ -122,11 +121,9 @@ class Daemon:
         except OSError as err:
             err = str(err)
             if err.find("No such process") > 0:
-                if os.path.exists(self.pidfile):
-                    os.remove(self.pidfile)
+                self.delpid()
             else:
-                # print
-                str(err)
+                print('OSError: ', err)
                 sys.exit(1)
 
     def status(self):

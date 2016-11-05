@@ -26,7 +26,13 @@
     function updateBokehPlot(url_stream) {
         console.log('Se procede a actualizar el plot con URL=' + url_stream);
         $("#bokeh-plot-took").addClass('invisible');
-        $('#div-plot-bokeh').html('<div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>');
+        var div_subst = '<div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" ';
+        var url_wait_src = "{{ url_for("static", filename="img/icons/waiting2.svg")}}";
+        url_wait_src = url_wait_src.replace(/.svg(\?)?([0-9]*)?/i, ".svg?" + String(new Date().getTime()));
+        div_subst = div_subst + 'src="' + url_wait_src + '"></div>';
+        console.log(div_subst);
+{#        $('#div-plot-bokeh').html('<div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>');#}
+        $('#div-plot-bokeh').html(div_subst);
         var div_plot = $('#hueco-div-plot-bokeh');
         var cw = div_plot.width();
         div_plot.css({'height': cw * 5 / 9 + 'px'});

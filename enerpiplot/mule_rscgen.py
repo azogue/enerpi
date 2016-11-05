@@ -1,37 +1,28 @@
 # -*- coding: utf-8 -*-
+import argparse
 import logging
 import os
 from time import time, sleep
-import sys
-# from multiprocessing import Process
-# from threading import Thread
-
 # do this before importing pylab or pyplot
 import matplotlib
 matplotlib.use('Agg')
-
-from enerpi.database import init_catalog, DATA_PATH, HDF_STORE, CONFIG
+from enerpi.base import DATA_PATH, CONFIG, check_resource_files, set_logging_conf
+from enerpi.database import init_catalog
 from enerpiplot.enerplot import gen_svg_tiles
 
 
-STATIC_PATH = os.path.expanduser(CONFIG.get('ENERPI_WEBSERVER',
-                                            'STATIC_PATH_OSX' if sys.platform == 'darwin' else 'STATIC_PATH'))
-SERVER_FILE_LOGGING = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
+basedir_enerweb = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'enerpiweb')
+STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH'))
+SERVER_FILE_LOGGING_RSCGEN = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
 IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
-if not os.path.exists(STATIC_PATH):
-    import shutil
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    shutil.copytree(os.path.join(basedir, 'static'), STATIC_PATH)
-if not os.path.exists(IMG_TILES_BASEPATH):
-    os.makedirs(IMG_TILES_BASEPATH)
-
+check_resource_files(STATIC_PATH, os.path.join(basedir_enerweb, 'static'))
+check_resource_files(IMG_TILES_BASEPATH)
 TILES_GENERATION_INTERVAL = 180
 LOGGING_LEVEL_SERVER = 'DEBUG'
 
 # Establecemos logging
-logging.basicConfig(filename=SERVER_FILE_LOGGING, level=LOGGING_LEVEL_SERVER, datefmt='%d/%m/%Y %H:%M:%S',
-                    format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
-# logging.debug('(MULE)->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGING))
+set_logging_conf(SERVER_FILE_LOGGING_RSCGEN, LOGGING_LEVEL_SERVER, with_initial_log=False)
+# logging.debug('(MULE_RSCGEN)->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGING_RSCGEN))
 
 
 ###############################
@@ -60,9 +51,10 @@ def _loop_rsc_generator(catalog, sleep_time):
         # uwsgi.async_sleep(max(sleep_time - took, 20))
 
 
-if __name__ == '__main__':
-    import argparse
-
+def main():
+    """
+    CLI Manager for generate svg plots as resources for the web app
+    """
     p = argparse.ArgumentParser(description="EnerPI Web Resource generator")
     p.add_argument('-o', '--one', action='store_true', help='Run only one time.')
     p.add_argument('-t', '--timer', action='store', type=int, metavar='∆T', default=TILES_GENERATION_INTERVAL,
@@ -70,8 +62,8 @@ if __name__ == '__main__':
     args = p.parse_args()
     # logging.debug('(MULE)-> main con args={}'.format(args))
 
-    # Cargamos catálogo
-    cat = init_catalog(base_path=DATA_PATH, raw_file=HDF_STORE, check_integrity=False)
+    # Cargamos catálogo para consulta:
+    cat = init_catalog(check_integrity=False)
 
     if args.one:
         _rsc_generator(cat)
@@ -84,3 +76,7 @@ if __name__ == '__main__':
     # p.start()
     # p.join()
     # _rsc_generator(cat)
+
+
+if __name__ == '__main__':
+    main()

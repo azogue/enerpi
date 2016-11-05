@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
-
 import datetime as dt
-import logging
 import os
 import re
 from threading import Timer
 from time import time, sleep
-
-from enerpi import PRETTY_NAME, DESCRIPTION, BASE_PATH
-from enerpi.base import CONFIG, DATA_PATH, log, show_pi_temperature
+import sys
+from enerpi import PRETTY_NAME, DESCRIPTION
+from enerpi.base import (BASE_PATH, CONFIG, DATA_PATH, show_pi_temperature,
+                         FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log)
 from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
                              extract_log_file, delete_log_file, HDF_STORE)
 from enerpi.enerpimeter import enerpi_logger, receiver, sender_random, DELTA_SEC_DATA, TS_DATA_MS, RMS_ROLL_WINDOW_SEC
@@ -16,42 +15,19 @@ from enerpi.enerpimeter import enerpi_logger, receiver, sender_random, DELTA_SEC
 
 # Config:
 DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK', fallback='enerpi_plot_{:%Y%m%d_%H%M}.png')
-
-FILE_LOGGING = CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log')
-FILE_LOGGING = os.path.join(DATA_PATH, FILE_LOGGING)
-LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
-
 IMG_TILES_BASEPATH = os.path.join(BASE_PATH, '..', 'enerpiweb', 'static', 'img', 'generated')
 
 
-def set_logging_conf(filename=FILE_LOGGING, level=LOGGING_LEVEL, verbose=True):
-    # Logging configuration
-    os.makedirs(DATA_PATH, exist_ok=True)
-    logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
-                        format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
-    log(PRETTY_NAME, 'ok', verbose)
-
-
 def _run_logger(is_demo=True, verbose=True, path_st=None, **kwargs_sender):
-    # Logging configuration
-    logfile = FILE_LOGGING + '_demo.log' if is_demo else FILE_LOGGING
+    """
+    Starts ENERPI Logger loop.
+    """
 
-    set_logging_conf(logfile, LOGGING_LEVEL, verbose)
-    print(logfile)
-
-    # Data Store Config
-    if is_demo:
-        path_st = os.path.join(DATA_PATH, 'debug_buffer_disk.h5')
-    elif path_st is None:
-        path_st = operate_hdf_database(HDF_STORE, path_backup=None, clear_database=False)
-
-    # Starts ENERPI Logger loop
     n_execs = 0
     tic = time()
     while True:
         if is_demo:
             ok = sender_random(path_st=path_st, verbose=verbose, **kwargs_sender)
-            # break
         else:
             ok = enerpi_logger(path_st=path_st, verbose=verbose, **kwargs_sender)
         if not ok:
@@ -77,6 +53,8 @@ def _enerpi_arguments():
     g_m.add_argument('-e', '-s', '--enerpi', action='store_true', help='⚡  SET ENERPI LOGGER & BROADCAST MODE')
     g_m.add_argument('-r', '--receive', action='store_true', help='⚡  SET Broadcast Receiver mode (by default)')
     g_m.add_argument('-d', '--demo', action='store_true', help='☮️  SET Demo Mode (broadcast random values)')
+    g_m.add_argument('--install', action='store_true', help='⚒  Install CRON task for exec ENERPI LOGGER as daemon')
+    g_m.add_argument('--uninstall', action='store_true', help='⚒  Delete all CRON tasks from ENERPI')
 
     g_p = p.add_argument_group(title='︎ℹ️  \033[4mQUERY & REPORT DATA\033[24m')
     filter_24h = (dt.datetime.now().replace(microsecond=0) - dt.timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
@@ -127,9 +105,30 @@ def _enerpi_arguments():
     return p.parse_args()
 
 
-def enerpi_main_cli():
-    import matplotlib
+def _make_cron_command_task_daemon():
+    """
+    CRON periodic task for exec ENERPI LOGGER as daemon at every boot
+    Example command:
+    */15 * * * * sudo -u www-data /home/pi/PYTHON/py35/bin/python
+        /home/pi/PYTHON/py35/lib/python3.5/site-packages/enerpiweb/mule_rscgen.py -o
 
+    :return: :str: cron_command
+    """
+    # cmd_logger = '@reboot sudo -u {user_logger} {python_pathbin}/enerpi-daemon start'
+    cmd_logger = 'sudo -u {user_logger} {python_pathbin}/enerpi-daemon start'
+    local_params = dict(user_logger=CONFIG.get('ENERPI_DATA', 'USER_LOGGER', fallback='pi'),
+                        python_pathbin=os.path.dirname(sys.executable))
+    return cmd_logger.format(**local_params)
+
+
+def enerpi_main_cli():
+    """
+    Uso de ENERPI desde CLI
+
+    enerpi -h para mostrar las diferentes opciones
+
+    """
+    import matplotlib
     matplotlib.use('Agg')
     # CLI Arguments
     args = _enerpi_arguments()
@@ -139,10 +138,20 @@ def enerpi_main_cli():
         # Shows RPI Temps
         Timer(3, show_pi_temperature, args=(3,)).start()
 
-    if (args.enerpi or args.info or args.compact or args.backup or args.clear or
+    if args.install or args.uninstall:
+        from enerpi.config.crontasks import set_command_on_reboot, clear_cron_commands
+        # INSTALL / UNINSTALL CRON TASKS & KEY
+        cmd_logger = _make_cron_command_task_daemon()
+        if args.install:
+            log('** Installing CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'ok', True, False)
+            set_command_on_reboot(cmd_logger, verbose=True)
+        else:
+            log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
+            clear_cron_commands([cmd_logger], verbose=True)
+    elif (args.enerpi or args.info or args.compact or args.backup or args.clear or
             args.last or args.clearlog or args.filter or args.plot or args.plot_tiles):
         # Logging configuration
-        set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, args.verbose)
+        set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, True)
 
         # Delete LOG File
         if args.clearlog:
@@ -155,11 +164,10 @@ def enerpi_main_cli():
         if args.enerpi:
             # TODO Raw mode
             _run_logger(is_demo=False, verbose=args.verbose, path_st=path_st,
-                        delta_sampling=args.delta, roll_time=args.window, sampling_ms=args.ts,
-                        debug=args.debug)
+                        delta_sampling=args.delta, roll_time=args.window, sampling_ms=args.ts, debug=args.debug)
         # Shows database info
         elif args.info or args.filter or args.plot or args.plot_tiles:
-            catalog = init_catalog(base_path=DATA_PATH, raw_file=path_st, check_integrity=False)
+            catalog = init_catalog(raw_file=path_st, check_integrity=False)
             if args.plot_tiles:
                 from enerpiplot.enerplot import gen_svg_tiles
 
@@ -173,17 +181,17 @@ def enerpi_main_cli():
                     loc_data = args.filter.split('::')
                     if len(loc_data) > 1:
                         if len(loc_data[0]) > 0:
-                            data, consumption = catalog.get(start=loc_data[0], end=loc_data[1], with_summary_data=True)
+                            data, consumption = catalog.get(start=loc_data[0], end=loc_data[1], with_summary=True)
                         else:
-                            data, consumption = catalog.get(end=loc_data[1], with_summary_data=True)
+                            data, consumption = catalog.get(end=loc_data[1], with_summary=True)
                     else:
                         last_hours = re.findall('(\d{1,5})h', loc_data[0], flags=re.IGNORECASE)
                         if last_hours:
-                            data, consumption = catalog.get(last_hours=int(last_hours[0]), with_summary_data=True)
+                            data, consumption = catalog.get(last_hours=int(last_hours[0]), with_summary=True)
                         else:
-                            data, consumption = catalog.get(start=loc_data[0], with_summary_data=True)
+                            data, consumption = catalog.get(start=loc_data[0], with_summary=True)
                 else:
-                    data, consumption = catalog.get(start=catalog.min_ts, with_summary_data=True)
+                    data, consumption = catalog.get(start=catalog.min_ts, with_summary=True)
                 if args.info and data is not None and not data.empty:
                     show_info_data(data, consumption)
                 if (args.plot and data is not None and not data.empty and consumption is not None and
@@ -212,24 +220,31 @@ def enerpi_main_cli():
             print('No se encuentran datos de Tª de RPI en el LOG')
     # Demo sender
     elif args.demo:
-        _run_logger(is_demo=True, verbose=args.verbose, ts_data=args.delta, debug=args.debug)
+        set_logging_conf(FILE_LOGGING + '_demo.log', LOGGING_LEVEL, True)
+        path_st = os.path.join(DATA_PATH, 'debug_buffer_disk.h5')
+        _run_logger(is_demo=True, verbose=args.verbose, path_st=path_st, ts_data=args.delta, debug=args.debug)
     # Receiver
     else:  # elif args.receive:
         log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', args.verbose, False)
         receiver(verbose=args.verbose, debug=args.debug)
 
 
-def enerpi_main_logger(set_logging=False):
-    if set_logging:
-        set_logging_conf(verbose=False)
-    # Shows RPI Temps
-    # Timer(3, show_pi_temperature, args=(3,)).start()
-    _run_logger(is_demo=False, verbose=False,
-                delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, debug=False)
+def enerpi_main_logger(with_pitemps=False):
+    """
+    Punto de entrada directa a ENERPI Logger (:= 'enerpi -e') con la configuración de DATA_PATH/config_enerpi.ini.
 
+    Se utiliza para iniciar ENERPI como daemon mediante 'enerpi-daemon start|stop|restart'
+    (en conjunción con enerpiweb: 'sudo -u www-data %(path_env_bin)/enerpi-daemon start')
 
-def enerpi_main_logger_demo():
-    _run_logger(is_demo=True, verbose=True, ts_data=DELTA_SEC_DATA, debug=False)
+    :param with_pitemps: :bool: Logs RPI temperature every 3 seconds
+    """
+
+    set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
+    if with_pitemps:
+        # Shows RPI Temps
+        Timer(3, show_pi_temperature, args=(3,)).start()
+    _run_logger(is_demo=False, verbose=False, path_st=HDF_STORE, debug=False,
+                delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS)
 
 
 if __name__ == '__main__':

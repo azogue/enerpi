@@ -16,7 +16,6 @@ HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
 COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
 COLS_DATA = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA', fallback='power, noise, ref, ldr').split(', ')
 KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
-KEY_ANT = '/raw'
 CONFIG_CATALOG = dict(preffix='DATA',
                       raw_file=HDF_STORE,
                       key_raw_data=KEY,
@@ -25,7 +24,7 @@ CONFIG_CATALOG = dict(preffix='DATA',
                       # catalog_file=INDEX,
                       check_integrity=True,
                       archive_existent=False,
-                      verbose=True,
+                      verbose=False,
                       backup_original=True)
 
 
@@ -64,7 +63,7 @@ def show_info_data(df, df_consumo=None):
         f_print('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias))
 
 
-# TODO Rehacer backups y clears en catalog
+# TODO Rehacer backups y clears en catalog vía CLI
 def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
     # HDF Store Config
     path_st = _clean_store_path(raw_path_st)
@@ -87,6 +86,15 @@ def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
 
 
 def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
+    """
+    Used in a subprocess launched from enerpimeter, this functions appends new *raw data* to the HDF raw store,
+     and, if data-catalog is not None, updates it.
+    :param data:
+    :param path_st:
+    :param catalog:
+    :param verb:
+    :return:
+    """
     df_tot = None
     try:
         if data is not None and type(data) is not pd.DataFrame:

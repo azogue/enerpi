@@ -1,0 +1,36 @@
+# ENERPIWEB UWSGI INI Config:
+
+# CLI: uwsgi --http :8000 --wsgi-file {path_enerpiweb}/__main__.py  --callable application
+# --venv {path_venv} --log-date --pp pythonpath --processes 1 --threads 2 --uid www-data --gid www-data
+
+# Para depositar la configuración de UWSGI-Emperor:
+# sudo ln -s {file_location}/{filename} /etc/uwsgi-emperor/vassals/
+
+[uwsgi]
+;base = pythonpath
+master = true
+enable-threads = true
+processes = 1
+threads = 4
+
+;chdir = %(base)
+virtualenv = {path_venv}
+wsgi-file = {path_enerpiweb}/__main__.py
+callable = application
+home = {path_venv}
+;pythonpath = %(base)
+
+socket = /tmp/%n.sock
+chmod-socket = 666
+uid = www-data
+gid = www-data
+;chown-socket = www-data
+;vacuum = true
+;limit-as = 512
+
+;mule={path_enerpiplot}/mule_rscgen.py
+
+logto = /var/log/uwsgi/%n.log
+logdate = True
+stats = 0.0.0.0:9192
+memory-report = true

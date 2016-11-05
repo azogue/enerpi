@@ -11,12 +11,10 @@ import matplotlib.patches as mp
 import numpy as np
 import os
 import re
-import sys
-from enerpi.base import CONFIG, timeit
+from enerpi.base import CONFIG, DATA_PATH, CUSTOM_LOCALE, timeit
 
 
-IMG_BASEPATH = os.path.expanduser(CONFIG.get('ENERPI_DATA',
-                                             'IMG_BASEPATH_OSX' if sys.platform == 'darwin' else 'IMG_BASEPATH'))
+IMG_BASEPATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
 DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK')
 
 
@@ -37,11 +35,7 @@ def _gen_tableau20():
 # semaforo_4 = [sns.palettes.crayons[k] for k in ['Green', 'Sea Green', 'Mango Tango', 'Razzmatazz']]
 # These are the "Tableau 20" colors as RGB.
 tableau20 = _gen_tableau20()
-
-lang, codec = locale.getlocale()
-use_locale = '{}.{}'.format(lang, codec)
-locale.setlocale(locale.LC_ALL, use_locale)
-
+locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
 # sns.set_style('whitegrid')
 
 REGEXPR_SVG_HEIGHT = re.compile(r'<svg height="\d{1,4}pt"')

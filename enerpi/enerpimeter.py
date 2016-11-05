@@ -6,8 +6,7 @@ import os
 import pandas as pd
 from threading import Timer
 from time import sleep, time
-from enerpi import BASE_PATH
-from enerpi.base import CONFIG, DATA_PATH, log
+from enerpi.base import BASE_PATH, CONFIG, DATA_PATH, log
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE
 from enerpi.pisampler import random_generator, enerpi_sampler_rms, msg_to_dict, tuple_to_msg, COL_TS, COLS_DATA
 from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
@@ -115,23 +114,43 @@ def _receiver(debug=False, verbose=True):
     n_cols_bar = _get_console_cols_size() - leng_intro
     v_max = 3500
     while True:
-        msg, delta_msg, delta_decrypt = next(gen)
-        if msg != last_msg:
-            counter_msgs += 1
-            d_data = msg_to_dict(msg)
-            if verbose and (v_max < d_data[COLS_DATA[0]]):
-                v_max = np.ceil(d_data[COLS_DATA[0]] / 500) * 500
-                log('Se cambia la escala del CLI_bar_graph a P_MAX={:.0f} W'.format(v_max), tipo='info')
-            if verbose:
-                _show_cli_bargraph(d_data, debug, ancho_disp=n_cols_bar, v_max=v_max)
-            if debug:
-                DEBUG_TIMES.append([1000 * f for f in (delta_msg, delta_decrypt)] + [d_data['msg']])
-            if counter_msgs % 10 == 0:  # Actualiza tamaño de consola cada 10 samples
-                n_cols_bar = _get_console_cols_size() - leng_intro
-            last_msg = msg
+        try:
+            msg, delta_msg, delta_decrypt = next(gen)
+            if msg != last_msg:
+                counter_msgs += 1
+                d_data = msg_to_dict(msg)
+                if verbose and (v_max < d_data[COLS_DATA[0]]):
+                    v_max = np.ceil(d_data[COLS_DATA[0]] / 500) * 500
+                    log('Se cambia la escala del CLI_bar_graph a P_MAX={:.0f} W'.format(v_max), tipo='info')
+                if verbose:
+                    _show_cli_bargraph(d_data, debug, ancho_disp=n_cols_bar, v_max=v_max)
+                if debug:
+                    DEBUG_TIMES.append([1000 * f for f in (delta_msg, delta_decrypt)] + [d_data['msg']])
+                if counter_msgs % 10 == 0:  # Actualiza tamaño de consola cada 10 samples
+                    n_cols_bar = _get_console_cols_size() - leng_intro
+                last_msg = msg
+        except StopIteration:
+            log('Terminada la recepción...', 'debug', verbose, True)
+            break
 
 
 def receiver(verbose=True, debug=False):
+    """
+    Runs ENERPI CLI receiver
+
+    Sample output:
+    ⚡⚡ ︎ENERPI AC CURRENT SENSOR ⚡⚡
+    AC Current Meter for Raspberry PI with GPIOZERO and MCP3008
+    SENDER - RECEIVER vía UDP. Broadcast IP: 192.168.1.255, PORT: 57775
+    01:18:02.683: 336 W; LDR=0.039 ◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎⇡︎⇡︎
+    01:18:03.694: 338 W; LDR=0.039 ◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎⇡︎⇡︎
+    01:18:04.704: 335 W; LDR=0.040 ◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎◼︎⇡︎⇡︎
+    ...
+    press CTRL+C to exit
+
+    :param verbose:
+    :param debug:
+    """
     _execfunc(_receiver, COLS_DEB_RECV, debug=debug, verbose=verbose)
 
 
@@ -152,7 +171,7 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
     paleta_rgbled = _get_paleta_rgb_led()
     socket, counter_unreachable = None, np.array([0, 0])
 
-    catalog = init_catalog(base_path=DATA_PATH, raw_file=path_st, archive_existent=True)
+    catalog = init_catalog(raw_file=path_st, check_integrity=True, archive_existent=True)
 
     l_ini = [np.nan] * N_COLS_SAMPLER
     l_ini[0] = dt.datetime.now()
@@ -216,6 +235,15 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
 
 
 def sender_random(ts_data=1, verbose=True, debug=True, path_st=HDF_STORE):
+    """
+    Runs Enerpi Logger in demo mode (sends random values)
+
+    :param ts_data:
+    :param verbose:
+    :param debug:
+    :param path_st:
+    :return:
+    """
     ok = _execfunc(_sender, COLS_DEB_SEND, debug, random_generator(), ts_data=ts_data, path_st=path_st, verbose=verbose)
     log('SALIENDO DE SENDER_RANDOM', 'info')
     return ok
@@ -224,16 +252,27 @@ def sender_random(ts_data=1, verbose=True, debug=True, path_st=HDF_STORE):
 def enerpi_logger(path_st=HDF_STORE,
                   delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS,
                   verbose=True, debug=False):
+    """
+    Runs ENERPI Sensor & Logger
+
+    :param path_st:
+    :param delta_sampling:
+    :param roll_time:
+    :param sampling_ms:
+    :param verbose:
+    :param debug:
+    :return:
+    """
     s_calc = sampling_ms if sampling_ms > 0 else 8
     n_samples = int(round(roll_time * 1000 / s_calc))
-    intro = (INIT_LOG_MARK + '\n  *** Haciendo RMS con window de {} frames (∆T={} s, sampling: {} ms)'
+    intro = (INIT_LOG_MARK + '\n  *** Haciendo RMS con window de {} frames (deltaT={} s, sampling: {} ms)'
              .format(n_samples, roll_time, sampling_ms))
     if debug:
         intro += '\n  ** DEBUG Mode ON (se grabarán tiempos) **'
     log(intro, 'ok', True)
     ok = _execfunc(_sender, COLS_DEB_SEND, debug, enerpi_sampler_rms(n_samples_buffer=n_samples,
                                                                      delta_sampling=delta_sampling,
-                                                                     min_ts_ms=sampling_ms),
+                                                                     min_ts_ms=sampling_ms, verbose=verbose),
                    ts_data=0, path_st=path_st, verbose=verbose)
-    log('SALIENDO DE ENERPI_LOGGER', 'info')
+    log('SALIENDO DE ENERPI_LOGGER', 'info', verbose)
     return ok

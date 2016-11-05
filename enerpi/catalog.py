@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-from hdftscat import HDFTimeSeriesCatalog
+from enerpi.hdftscat import HDFTimeSeriesCatalog
 
 
 '''
@@ -31,7 +31,7 @@ def _compress_data(data, verbose=False):
             data = data.copy().astype('float32')
             data['ref'] = data['ref'].astype('int16')
             # data['ldr'] *= 1000.
-            data['ldr'] = pd.Series(1000. * data['ldr']).round(0).astype('int16')
+            data['ldr'] = pd.Series(1000. * data['ldr']).round().astype('int16')
             if verbose:
                 data.info()
     return data
