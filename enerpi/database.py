@@ -126,10 +126,14 @@ def get_ts_last_save(path_st=HDF_STORE, get_last_sample=False, verbose=True, n=3
         size_kb = os.path.getsize(path_st) / 1000
         if get_last_sample:
             with pd.HDFStore(path_st, mode='r') as st:
-                df = st.select(KEY, start=-n)
-                log('Store UPDATE: {:%c} , SIZE = {:.2f} KB. TOOK {:.3f} s'.format(ts, size_kb, time() - tic),
-                    'debug', verbose)
-                return df
+                try:
+                    df = st.select(KEY, start=-n)
+                    log('Store UPDATE: {:%c} , SIZE = {:.2f} KB. TOOK {:.3f} s'.format(ts, size_kb, time() - tic),
+                        'debug', verbose)
+                    return df
+                except KeyError:
+                    log('ERROR: Data "{}" not found in store "{}"'.format(KEY, path_st), 'err', True)
+                    return ts
         log('Store UPDATE: {:%c} , SIZE = {:.2f} KB. TOOK {:.3f} s'.format(ts, size_kb, time() - tic), 'debug', verbose)
         return ts
     except FileNotFoundError:
@@ -144,33 +148,37 @@ def delete_log_file(log_file, verbose=True):
 
 @timeit('extract_log_file')
 def extract_log_file(log_file, extract_temps=True, verbose=True):
-    rg_log_msg = re.compile('(?P<tipo>INFO|WARNING|DEBUG|ERROR) \[(?P<func>.+?)\] '
-                            '- (?P<ts>\d{1,2}/\d\d/\d\d\d\d \d\d:\d\d:\d\d): (?P<msg>.*?)\n', re.DOTALL)
-    with open(log_file, 'r') as log_f:
-        df_log = pd.DataFrame(rg_log_msg.findall(log_f.read()),
-                              columns=['tipo', 'func', 'ts', 'msg'])
-    df_log.drop('func', axis=1, inplace=True)
-    df_log['tipo'] = df_log['tipo'].astype('category')
-    df_log['ts'] = df_log['ts'].apply(lambda x: dt.datetime.strptime(x, '%d/%m/%Y %H:%M:%S'))
-    df_log.loc[df_log.msg.str.startswith('Tªs --> '), 'temp'] = True
-    df_log.loc[df_log.msg.str.startswith('SENDED: '), 'debug_send'] = True
-    b_warn = df_log['tipo'] == 'WARNING'
-    df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError: [Errno 101]; C_UNREACHABLE:')
-    # df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError:  La red es inaccesible')
-    df_log['exec'] = df_log['msg'].str.contains(INIT_LOG_MARK).cumsum().astype(int)
-    df_log = df_log.set_index('ts')
-    if extract_temps:
-        rg_temps = 'Tªs --> (?P<CPU>\d{1,2}\.\d) / (?P<GPU>\d{1,2}\.\d) ºC'
-        df_log = df_log.join(df_log[df_log['temp'].notnull()].msg.str.extract(rg_temps, expand=True).astype(float))
-    if verbose:
-        clasific = df_log.groupby(['exec', 'tipo']).count().dropna(how='all').astype(int)
-        log(clasific, 'ok', True, False)
-        conteo_tipos = df_log.groupby('tipo').count()
-        if 'ERROR' in conteo_tipos.index:
-            log(df_log[df_log.tipo == 'ERROR'].dropna(how='all', axis=1), 'error', True, False)
-        if 'INFO' in conteo_tipos.index:
-            log(df_log[df_log.tipo == 'INFO'].dropna(how='all', axis=1), 'info', True, False)
-    return df_log
+    if os.path.exists(log_file):
+        rg_log_msg = re.compile('(?P<tipo>INFO|WARNING|DEBUG|ERROR) \[(?P<func>.+?)\] '
+                                '- (?P<ts>\d{1,2}/\d\d/\d\d\d\d \d\d:\d\d:\d\d): (?P<msg>.*?)\n', re.DOTALL)
+        with open(log_file, 'r') as log_f:
+            df_log = pd.DataFrame(rg_log_msg.findall(log_f.read()),
+                                  columns=['tipo', 'func', 'ts', 'msg'])
+        df_log.drop('func', axis=1, inplace=True)
+        df_log['tipo'] = df_log['tipo'].astype('category')
+        df_log['ts'] = df_log['ts'].apply(lambda x: dt.datetime.strptime(x, '%d/%m/%Y %H:%M:%S'))
+        df_log.loc[df_log.msg.str.startswith('Tªs --> '), 'temp'] = True
+        df_log.loc[df_log.msg.str.startswith('SENDED: '), 'debug_send'] = True
+        b_warn = df_log['tipo'] == 'WARNING'
+        df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError: [Errno 101]; C_UNREACHABLE:')
+        # df_log.loc[b_warn, 'no_red'] = df_log[b_warn].msg.str.startswith('OSError:  La red es inaccesible')
+        df_log['exec'] = df_log['msg'].str.contains(INIT_LOG_MARK).cumsum().astype(int)
+        df_log = df_log.set_index('ts')
+        if extract_temps:
+            rg_temps = 'Tªs --> (?P<CPU>\d{1,2}\.\d) / (?P<GPU>\d{1,2}\.\d) ºC'
+            df_log = df_log.join(df_log[df_log['temp'].notnull()].msg.str.extract(rg_temps, expand=True).astype(float))
+        if verbose:
+            clasific = df_log.groupby(['exec', 'tipo']).count().dropna(how='all').astype(int)
+            log(clasific, 'ok', True, False)
+            conteo_tipos = df_log.groupby('tipo').count()
+            if 'ERROR' in conteo_tipos.index:
+                log(df_log[df_log.tipo == 'ERROR'].dropna(how='all', axis=1), 'error', True, False)
+            if 'INFO' in conteo_tipos.index:
+                log(df_log[df_log.tipo == 'INFO'].dropna(how='all', axis=1), 'info', True, False)
+        return df_log
+    else:
+        log("extract_log_file: '{}' doesn't exists".format(log_file), 'error', verbose, False)
+        return pd.DataFrame([], columns=['tipo', 'func', 'ts', 'msg'])
 
 
 # if __name__ == '__main__':

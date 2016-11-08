@@ -6,7 +6,7 @@ from threading import Timer
 from time import time, sleep
 import sys
 from enerpi import PRETTY_NAME, DESCRIPTION
-from enerpi.base import (BASE_PATH, CONFIG, DATA_PATH, show_pi_temperature,
+from enerpi.base import (BASE_PATH, CONFIG, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
                          FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log)
 from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
                              extract_log_file, delete_log_file, HDF_STORE)
@@ -53,6 +53,7 @@ def _enerpi_arguments():
     g_m.add_argument('-e', '-s', '--enerpi', action='store_true', help='⚡  SET ENERPI LOGGER & BROADCAST MODE')
     g_m.add_argument('-r', '--receive', action='store_true', help='⚡  SET Broadcast Receiver mode (by default)')
     g_m.add_argument('-d', '--demo', action='store_true', help='☮️  SET Demo Mode (broadcast random values)')
+    g_m.add_argument('--config', action='store_true', help='⚒  Shows configuration in INI file')
     g_m.add_argument('--install', action='store_true', help='⚒  Install CRON task for exec ENERPI LOGGER as daemon')
     g_m.add_argument('--uninstall', action='store_true', help='⚒  Delete all CRON tasks from ENERPI')
 
@@ -148,10 +149,20 @@ def enerpi_main_cli():
         else:
             log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
             clear_cron_commands([cmd_logger], verbose=True)
-    elif (args.enerpi or args.info or args.compact or args.backup or args.clear or
+    elif (args.enerpi or args.info or args.compact or args.backup or args.clear or args.config or
             args.last or args.clearlog or args.filter or args.plot or args.plot_tiles):
         # Logging configuration
         set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, True)
+
+        # Shows INI config
+        if args.config:
+            log('ENERPI Configuration (from INI file in "{}"):'
+                .format(os.path.join(DATA_PATH, CONFIG_FILENAME)), 'ok', True, False)
+            for s in CONFIG.sections():
+                log('* Section {}:'.format(s), 'info', True, False)
+                for opt in CONFIG.options(s):
+                    log('{:27} -->\t{}'.format(opt.upper(), CONFIG.get(s, opt)), 'debug', True, False)
+            log('*' * 80 + '\n', 'ok', True, False)
 
         # Delete LOG File
         if args.clearlog:
@@ -204,12 +215,15 @@ def enerpi_main_cli():
         # Shows database info
         else:  # Shows last 10 entries
             last = get_ts_last_save(path_st, get_last_sample=True, verbose=True, n=10)
-            print(last)
+            log('Showing last 10 entries in {}:\n{}'.format(path_st, last), 'info', True, False)
     # Shows & extract info from LOG File
     elif args.log:
+        import pandas as pd
+
+        pd.set_option('display.width', 200)
         data_log = extract_log_file(FILE_LOGGING, extract_temps=True, verbose=True)
         try:
-            df_temps = data_log[data_log.temp.notnull()].dropna(axis=1).drop(['tipo', 'msg', 'debug_send'], axis=1)
+            df_temps = data_log[data_log.temp.notnull()].drop(['tipo', 'msg', 'debug_send'], axis=1).dropna(axis=1)
             if len(set(df_temps['exec'])) == 1:
                 df_temps = df_temps.drop(['exec'], axis=1)
             path_csv = os.path.join(DATA_PATH, 'debug_rpitemps.csv')
