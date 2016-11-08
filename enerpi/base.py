@@ -8,7 +8,6 @@ import shutil
 import subprocess
 from time import time, sleep
 import traceback
-
 from enerpi import BASE_PATH, PRETTY_NAME
 
 
@@ -16,8 +15,8 @@ ENCODING = 'UTF-8'
 CONFIG_FILENAME = 'config_enerpi.ini'
 HAY_PP = True
 try:
-    # noinspection PyUnresolvedReferences
-    from prettyprinting import print_err, print_red, print_info, print_ok, print_warn, print_yellowb, print_magenta
+    from enerpi.prettyprinting import (print_err, print_red, print_info, print_ok, print_warn,
+                                       print_yellowb, print_magenta)
 except ImportError:
     HAY_PP = False
 

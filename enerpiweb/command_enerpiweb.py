@@ -3,10 +3,9 @@ import argparse
 import os
 import sys
 
-from enerpiweb import basedir, CONFIG, DATA_PATH, check_resource_files, app as application
 from enerpi.base import BASE_PATH, log
-from prettyprinting import print_secc, print_cyan, print_red
-
+from enerpiweb import basedir, CONFIG, DATA_PATH, check_resource_files, app as application
+from enerpi.prettyprinting import print_secc, print_cyan, print_red
 
 FLASK_WEBSERVER_PORT = CONFIG.getint('ENERPI_WEBSERVER', 'FLASK_WEBSERVER_PORT', fallback=7777)
 PERIOD_MINUTES_RSC_GEN = CONFIG.getint('ENERPI_WEBSERVER', 'RSC_GEN_EVERY_MINUTES', fallback=15)

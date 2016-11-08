@@ -5,10 +5,16 @@ import os
 from enerpi import __version__ as version
 
 
+# Failed building wheel for cryptography, cffi
+# Si error de cffi en install:
+# sudo apt-get install build-essential libssl-dev libffi-dev python-dev
+
 with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-PACKAGES = find_packages()
+# PACKAGES = find_packages()
+# print('SETUP PACKAGES: ', PACKAGES)
+PACKAGES = ['enerpi', 'enerpiplot', 'enerpiweb', 'enerpi.hdftscat', 'enerpi.pitemps', 'enerpi.prettyprinting']
 
 setup(
     # ext_modules=cythonize("extractlog.pyx"),
@@ -53,8 +59,7 @@ setup(
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
     package_data={
-        'enerpi': ['rsc/paleta_power_w.csv', 'enerdaemon.sh',
-                   'config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
+        'enerpi': ['config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
         'enerpiweb': ['templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
 
