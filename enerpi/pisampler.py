@@ -17,6 +17,9 @@ CH_VREF = CONFIG.getint('MCP3008', 'CH_VREF', fallback=0)
 CH_PROBE = CONFIG.getint('MCP3008', 'CH_PROBE', fallback=4)
 CH_NOISE = CONFIG.getint('MCP3008', 'CH_NOISE', fallback=3)
 CH_LDR = CONFIG.getint('MCP3008', 'CH_LDR', fallback=7)
+USE_NUMPY_BUFFER = CONFIG.getboolean('MCP3008', 'USE_NUMPY_BUFFER', fallback=False)
+MEASURE_LDR_WITH_RMS = CONFIG.getboolean('MCP3008', 'MEASURE_LDR_WITH_RMS', fallback=False)
+MEASURE_LDR_DIVISOR = CONFIG.getint('MCP3008', 'MEASURE_LDR_DIVISOR', fallback=10)
 
 # Current meter
 # Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
@@ -42,6 +45,42 @@ RG_MSG_MASK = re.compile('^(?P<host>.*) __ (?P<ts>.*) __ (?P<power>.*) W __ Nois
 COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
 FMT_TS = CONFIG.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
 COLS_DATA = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA', fallback='power, noise, ref, ldr').split(', ')
+
+
+class NumpyBuffer(object):
+    """1D ring buffer using numpy arrays for RMS & M sensing"""
+
+    def __init__(self, length, rms_sensor=True, dtype='f'):
+        self.size_max = length
+        self.rms_sensor = rms_sensor
+        self.size = 0
+        self._data = np.zeros(length, dtype=dtype)
+        self._last_out = 0.
+        self._last_mean = 0.
+
+    def append(self, x):
+        """append an element to obtain future Root-Mean-Squared (RMS) value or future simple Mean value"""
+        if self.rms_sensor:
+            new = x**2
+        else:
+            new = x
+        if self.size < self.size_max:
+            self._last_out = self._data[self.size]
+            self.size += 1
+            self._last_mean += new / self.size_max
+        else:
+            self._last_out = self._data[-1]
+            self._last_mean += (new - self._last_out) / self.size_max
+        self._data = np.roll(self._data, 1)
+        self._data[0] = new
+
+    def mean(self):
+        """Returns the mean of data in the ring buffer"""
+        # if self.size == self.size_max:
+        #     return np.mean(self._data)
+        # else:
+        #     return np.mean(self._data[:self.size])
+        return self._last_mean
 
 
 def tuple_to_msg(data_tuple):
@@ -96,51 +135,85 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
     """
     delta_sampling_calc = dt.timedelta(seconds=delta_sampling)
     con_pausa = min_ts_ms > 0
+    niveles = 2 ** MCP3008_DAC_PREC - 1
+    resta_bias = (niveles // 2) / niveles
+    reading_probe = reading_ldr = reading_noise = None
     try:
         reading_probe = MCP3008(channel=CH_PROBE)
-        reading_ref = MCP3008(channel=CH_VREF)
+        # reading_ref = MCP3008(channel=CH_VREF)
         reading_ldr = MCP3008(channel=CH_LDR)
         reading_noise = MCP3008(channel=CH_NOISE)
-        buffer = deque(np.zeros(n_samples_buffer), n_samples_buffer)
-        buffer_ref = deque(np.zeros(n_samples_buffer), n_samples_buffer)
-        buffer_ldr = deque(np.zeros(n_samples_buffer), n_samples_buffer)
-        buffer_noise = deque(np.zeros(n_samples_buffer), n_samples_buffer)
-        niveles = 2 ** MCP3008_DAC_PREC - 1
-        resta_bias = (niveles // 2) / niveles
-        counter_frames = counter_buffer = cumsum = cumsum_ref = cumsum_ldr = cumsum_noise = 0
+
+        if MEASURE_LDR_WITH_RMS:
+            n_samples_buffer_ldr = n_samples_buffer
+        else:
+            n_samples_buffer_ldr = n_samples_buffer // MEASURE_LDR_DIVISOR
+        if USE_NUMPY_BUFFER:
+            buffer = NumpyBuffer(n_samples_buffer, dtype='f')
+            # buffer_ref = NumpyBuffer(n_samples_buffer, dtype='f')
+            buffer_ldr = NumpyBuffer(n_samples_buffer_ldr, rms_sensor=MEASURE_LDR_WITH_RMS, dtype='f')
+            buffer_noise = NumpyBuffer(n_samples_buffer, dtype='f')
+        else:
+            buffer = deque(np.zeros(n_samples_buffer), n_samples_buffer)
+            # buffer_ref = deque(np.zeros(n_samples_buffer), n_samples_buffer)
+            buffer_ldr = deque(np.zeros(n_samples_buffer_ldr), n_samples_buffer_ldr)
+            buffer_noise = deque(np.zeros(n_samples_buffer), n_samples_buffer)
+
+        # counter_frames = counter_buffer = cumsum = cumsum_ref = cumsum_ldr = cumsum_noise = 0
+        counter_frames = counter_buffer = cumsum = cumsum_ldr = cumsum_noise = 0
         stop = dt.datetime.now()
         tic = time()
         while True:
             counter_buffer += 1
             counter_frames += 1
             # v = (reading_probe.value - resta_bias) / reading_ref.value
-            v = (reading_probe.value - resta_bias)
-            v_ref = reading_ref.value
-            v_ldr = reading_ldr.value
+            v = reading_probe.value
+            v -= resta_bias
+            # v_ref = reading_ref.value
+            if MEASURE_LDR_WITH_RMS or counter_buffer % MEASURE_LDR_DIVISOR == 0:
+                v_ldr = reading_ldr.value
             v_noise = reading_noise.value
             ts = dt.datetime.now()
-            buffer.append(v ** 2)
-            buffer_ref.append(v_ref ** 2)
-            buffer_ldr.append(v_ldr ** 2)
-            buffer_noise.append(v_noise ** 2)
-            if counter_frames < n_samples_buffer:
-                cumsum += np.mean([buffer[i] for i in range(-counter_frames, 0)])
-                cumsum_ref += np.mean([buffer_ref[i] for i in range(-counter_frames, 0)])
-                cumsum_ldr += np.mean([buffer_ldr[i] for i in range(-counter_frames, 0)])
-                cumsum_noise += np.mean([buffer_noise[i] for i in range(-counter_frames, 0)])
+            if USE_NUMPY_BUFFER:
+                buffer.append(v)
+                cumsum += buffer.mean()
+                buffer_noise.append(v_noise)
+                cumsum_noise += buffer_noise.mean()
+                # buffer_ref.append(v_ref)
+                # cumsum_ref += buffer_ref.mean()
+                if MEASURE_LDR_WITH_RMS or counter_buffer % MEASURE_LDR_DIVISOR == 0:
+                    buffer_ldr.append(v_ldr)
+                    cumsum_ldr += buffer_ldr.mean()
             else:
-                cumsum += np.mean(buffer)
-                cumsum_ref += np.mean(buffer_ref)
-                cumsum_ldr += np.mean(buffer_ldr)
-                cumsum_noise += np.mean(buffer_noise)
+                buffer.append(v ** 2)
+                buffer_noise.append(v_noise ** 2)
+                # buffer_ref.append(v_ref ** 2)
+                if MEASURE_LDR_WITH_RMS or counter_buffer % MEASURE_LDR_DIVISOR == 0:
+                    buffer_ldr.append(v_ldr ** 2)
+
+                if counter_frames < n_samples_buffer:
+                    cumsum += np.mean([buffer[i] for i in range(-counter_frames, 0)])
+                    # cumsum_ref += np.mean([buffer_ref[i] for i in range(-counter_frames, 0)])
+                    if MEASURE_LDR_WITH_RMS or counter_buffer % MEASURE_LDR_DIVISOR == 0:
+                        cumsum_ldr += np.mean([buffer_ldr[i] for i in range(-(counter_frames // MEASURE_LDR_DIVISOR), 0)])
+                    cumsum_noise += np.mean([buffer_noise[i] for i in range(-counter_frames, 0)])
+                else:
+                    cumsum += np.mean(buffer)
+                    # cumsum_ref += np.mean(buffer_ref)
+                    if MEASURE_LDR_WITH_RMS or counter_buffer % MEASURE_LDR_DIVISOR == 0:
+                        cumsum_ldr += np.mean(buffer_ldr)
+                    cumsum_noise += np.mean(buffer_noise)
             if ts - stop > delta_sampling_calc - PREC_SAMPLING:
                 stop = ts
-                power = sqrt(cumsum / counter_buffer) * VOLTAJE * A_REF * V_REF
-                # yield (ts, power, sqrt(cumsum_noise / counter_buffer),
-                #        np.sqrt(cumsum_ref / counter_buffer), np.sqrt(cumsum_ldr / counter_buffer))
-                yield (ts, power, sqrt(cumsum_noise / counter_buffer),
-                       counter_buffer, sqrt(cumsum_ldr / counter_buffer))
-                counter_buffer = cumsum = cumsum_ref = cumsum_ldr = cumsum_noise = 0
+                power_rms = sqrt(cumsum / counter_buffer) * VOLTAJE * A_REF * V_REF
+                noise_rms = sqrt(cumsum_noise / counter_buffer) * VOLTAJE * A_REF * V_REF
+                if MEASURE_LDR_WITH_RMS:
+                    ldr = sqrt(cumsum_ldr / counter_buffer)
+                else:
+                    ldr = cumsum_ldr / (counter_buffer // MEASURE_LDR_DIVISOR)
+                yield (ts, power_rms, noise_rms, counter_buffer, ldr)
+                counter_buffer = cumsum = cumsum_ldr = cumsum_noise = 0
+                # counter_buffer = cumsum = cumsum_ref = cumsum_ldr = cumsum_noise = 0
             if con_pausa:
                 sleep(max(.00001, (min_ts_ms - .05) / 1000 - (time() - tic)))
                 tic = time()
@@ -148,6 +221,17 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
             #     raise RuntimeError
     except OSError as e:
         log('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e), 'error', verbose)
+        try:
+            if reading_probe is not None:
+                reading_probe.close()
+            # reading_ref.close()
+            if reading_ldr is not None:
+                reading_ldr.close()
+            if reading_noise is not None:
+                reading_noise.close()
+        except Exception as e:
+            log('ERROR "{}" en PISAMPLER intentando cerrar los sensores analógicos: "{}"'
+                .format(e.__class__, e), 'error', verbose)
         raise KeyboardInterrupt
     except (RuntimeError, AttributeError) as e:
         log('{} en PISAMPLER: "{}". Terminando el generador.'.format(e.__class__, e), 'error', verbose)

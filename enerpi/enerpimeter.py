@@ -6,7 +6,7 @@ import os
 import pandas as pd
 from threading import Timer
 from time import sleep, time
-from enerpi.base import BASE_PATH, CONFIG, DATA_PATH, log
+from enerpi.base import CONFIG, DATA_PATH, log
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE
 from enerpi.pisampler import random_generator, enerpi_sampler_rms, msg_to_dict, tuple_to_msg, COL_TS, COLS_DATA
 from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
@@ -34,12 +34,42 @@ COLS_DEB_SEND = ['N', 'T_msg', 'T_send', 'T_buffer', 'T_disk']
 COLS_DEB_RECV = ['T_msg', 'T_crypt', 'msg']
 DEBUG_TIMES = []
 
+# RGBLED CONTROL & COLORS
+# def _get_paleta_rgb_led():
+#     # color = paleta.loc[:valor_w].iloc[-1]
+#     return pd.read_csv(os.path.join(BASE_PATH, 'rsc', 'paleta_power_w.csv')
+#                        ).set_index('Unnamed: 0')['0'].str[1:-1].str.split(', ').apply(lambda x: [float(i) for i in x])
+PALETA = dict(off=(0, (0, 0, 1)),
+              standby=(250, (0, 1, 0)),
+              medium=(750, (1, .5, 0)),
+              high=(3500, (1, 0, 0)),
+              max=(4500, (1, 0, 1)))
 
-# LED CONTROL
-def _get_paleta_rgb_led():
-    # color = paleta.loc[:valor_w].iloc[-1]
-    return pd.read_csv(os.path.join(BASE_PATH, 'rsc', 'paleta_power_w.csv')
-                       ).set_index('Unnamed: 0')['0'].str[1:-1].str.split(', ').apply(lambda x: [float(i) for i in x])
+
+def _interp_colors(c1, c2, ini_v, fin_v, value):
+    color = [0] * 3
+    d = value - ini_v
+    assert (fin_v != ini_v)
+    for i in range(3):
+        p = (c2[i] - c1[i]) / (fin_v - ini_v)
+        color[i] = round(c1[i] + d * p, 3)
+    return tuple(color)
+
+
+def _get_color(value, paleta=PALETA):
+    if value >= paleta['max'][0]:
+        return paleta['max'][1]
+    elif value >= paleta['high'][0]:
+        c_ini, c_fin = 'high', 'max'
+    elif value >= paleta['medium'][0]:
+        c_ini, c_fin = 'medium', 'high'
+    elif value >= paleta['standby'][0]:
+        c_ini, c_fin = 'standby', 'medium'
+    else:
+        c_ini, c_fin = 'off', 'standby'
+    ini, fin = paleta[c_ini][1], paleta[c_fin][1]
+    ini_v, fin_v = paleta[c_ini][0], paleta[c_fin][0]
+    return _interp_colors(ini, fin, ini_v, fin_v, value)
 
 
 def _reset_led_state():
@@ -64,10 +94,11 @@ def _set_led_state_info(led, n_blinks=3):
     Timer(n_blinks + .1, _reset_led_state).start()
 
 
-def _set_led_blink_paleta(led, paleta, valor_w):
+def _set_led_blink_rgbled(led, valor_w):
     if led is not None:
         # log('blink_led POWER = {:.0f} W, color={}'.format(valor_w, PALETA_P.loc[:valor_w].iloc[-1]), 'debug', True)
-        blink_color(led, color=paleta.loc[:valor_w].iloc[-1], n=1)
+        # blink_color(led, color=paleta.loc[:valor_w].iloc[-1], n=1)
+        blink_color(led, color=_get_color(valor_w, paleta=PALETA), n=1)
 
 
 # General
@@ -168,7 +199,7 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
     LED_STATE = 0
     counter, p_save = 0, None
     led = get_rgbled(verbose=True)
-    paleta_rgbled = _get_paleta_rgb_led()
+    # paleta_rgbled = _get_paleta_rgb_led()
     socket, counter_unreachable = None, np.array([0, 0])
 
     catalog = init_catalog(raw_file=path_st, check_integrity=True, archive_existent=True)
@@ -202,7 +233,7 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
 
             # Blink LED cada 2 seg
             if (LED_STATE == 0) and (counter % 2 == 0):
-                _set_led_blink_paleta(led, paleta_rgbled, data[1])
+                _set_led_blink_rgbled(led, data[1])
 
             # Almacenamiento en disco del buffer
             if counter >= N_SAMPLES_BUFFER_DISK:
@@ -232,6 +263,8 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
         raise KeyboardInterrupt
     if socket is not None:
         socket.close()
+    if led is not None:
+        led.close()
 
 
 def sender_random(ts_data=1, verbose=True, debug=True, path_st=HDF_STORE):
