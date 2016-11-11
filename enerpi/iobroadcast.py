@@ -8,7 +8,7 @@ from time import time
 from enerpi.base import DATA_PATH, CONFIG, log
 
 
-def get_codec():
+def _get_codec():
     # Encrypting msg with symmetric encryption. URL-safe base64-encoded 32-byte key
     key_file = os.path.join(DATA_PATH, CONFIG.get('BROADCAST', 'KEY_FILE', fallback='.secret_key'))
     try:
@@ -41,7 +41,7 @@ UDP_IP = CONFIG.get('BROADCAST', 'UDP_IP', fallback="192.168.1.255")
 UDP_PORT = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
 DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}".format(UDP_IP, UDP_PORT)
 
-CODEC, SECRET_KEY = get_codec()
+CODEC, SECRET_KEY = _get_codec()
 
 
 def receiver_msg_generator(verbose=True):
@@ -97,7 +97,6 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, verbose=True):
     if sock_send is None:
         sock_send = _get_broadcast_socket()
     encrypted_msg_b = CODEC.encrypt(msg.encode())
-    # ¿Separar en subprocess/subthread? (según la sobrecarga que imponga al logger, parece q muy poca -> NO)
     try:
         sock_send.sendto(encrypted_msg_b, (UDP_IP, UDP_PORT))
         counter_unreachable[0] = 0

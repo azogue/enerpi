@@ -7,18 +7,16 @@ import pytz
 import shutil
 import subprocess
 from time import time, sleep
-import traceback
 from enerpi import BASE_PATH, PRETTY_NAME
 
 
 ENCODING = 'UTF-8'
 CONFIG_FILENAME = 'config_enerpi.ini'
-HAY_PP = True
 try:
     from enerpi.prettyprinting import (print_err, print_red, print_info, print_ok, print_warn,
                                        print_yellowb, print_magenta)
 except ImportError:
-    HAY_PP = False
+    print_err = print_red = print_info = print_ok = print_warn = print_yellowb = print_magenta = print
 
 HAY_TEMPS = True
 try:
@@ -29,41 +27,27 @@ except ImportError:
     HAY_TEMPS = False
 
 
-def funcs_tipo_output(tipo_log):
+def _funcs_tipo_output(tipo_log):
     """
     Functions for printing and logging based on type.
 
     :param tipo_log: :enum: error, debug, ok, info, warn, magenta
     :return: print_func, logging_func
     """
-    if HAY_PP:
-        if tipo_log == 'error':
-            return print_err, logging.error
-        elif tipo_log == 'debug':
-            return print_red, logging.debug
-        elif tipo_log == 'ok':
-            return print_ok, logging.info
-        elif tipo_log == 'info':
-            return print_info, logging.info
-        elif tipo_log == 'warn':
-            return print_warn, logging.warning
-        elif tipo_log == 'magenta':
-            return print_magenta, logging.warning
-        else:
-            return print_yellowb, logging.debug
+    if tipo_log == 'error':
+        return print_err, logging.error
+    elif tipo_log == 'debug':
+        return print_red, logging.debug
+    elif tipo_log == 'ok':
+        return print_ok, logging.info
+    elif tipo_log == 'info':
+        return print_info, logging.info
+    elif tipo_log == 'warn':
+        return print_warn, logging.warning
+    elif tipo_log == 'magenta':
+        return print_magenta, logging.warning
     else:
-        if tipo_log == 'error':
-            return print, logging.error
-        elif tipo_log == 'debug':
-            return print, logging.debug
-        elif tipo_log == 'ok':
-            return print, logging.info
-        elif tipo_log == 'info':
-            return print, logging.info
-        elif tipo_log == 'warn':
-            return print, logging.warning
-        else:
-            return print, logging.debug
+        return print_yellowb, logging.debug
 
 
 def log(msg, tipo, verbose=True, log_msg=True):
@@ -75,20 +59,15 @@ def log(msg, tipo, verbose=True, log_msg=True):
     :param verbose: :bool:
     :param log_msg: :bool:
     """
-    f1, f2 = funcs_tipo_output(tipo)
-    try:
-        if verbose:
-            f1(msg)
-        if log_msg:
-            f2(msg)
-    except UnicodeEncodeError as e:
-        print('ERROR UnicodeEncodeError: {}'.format(e))
-        traceback.print_exc(limit=5)
-        print(msg.encode('UTF-8'))
+    f1, f2 = _funcs_tipo_output(tipo)
+    if verbose:
+        f1(msg)
+    if log_msg:
+        f2(msg)
 
 
 def set_logging_conf(filename, level='DEBUG', verbose=True, with_initial_log=True):
-    # Logging configuration
+    """Logging configuration"""
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
                         format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
@@ -122,8 +101,8 @@ def timeit(cadena_log, verbose=False, *args_dec):
     :param args_dec:
     :return:
     """
-    def real_deco(function):
-        def wrapper(*args, **kwargs):
+    def _real_deco(function):
+        def _wrapper(*args, **kwargs):
             kwargs_print = {}
             for k in kwargs.keys():
                 if k.startswith('print_'):
@@ -134,8 +113,8 @@ def timeit(cadena_log, verbose=False, *args_dec):
                 print_yellowb(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
             logging.debug(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
             return out
-        return wrapper
-    return real_deco
+        return _wrapper
+    return _real_deco
 
 
 def get_lines_file(filename, tail=None, reverse=False):
@@ -193,7 +172,7 @@ def check_resource_files(dest_path, origin_path=None):
     return True
 
 
-def get_config():
+def _get_config():
     """
     Loads or generates ini file for ENERPI (& ENERPIweb) configuration.
 
@@ -243,8 +222,38 @@ almacenando la ruta absoluta a la instalación de ENERPI
     return data_path, configp
 
 
+def _get_analog_sensors_and_msg_masks():
+    # Conexiones analógicas vía MCP3008
+    mcp3008_dac_prec = 10  # bits
+    niveles = 2 ** mcp3008_dac_prec - 1
+    bias_current = -(niveles // 2) / niveles
+
+    cols_data_rms = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA_RMS', fallback='power').split(', ')
+    cols_data_mean = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA_MEAN', fallback='noise, ldr').split(', ')
+
+    ch_probe = CONFIG.getint('MCP3008', 'CH_PROBE', fallback=4)
+    ch_probe_2 = CONFIG.getint('MCP3008', 'CH_PROBE_2', fallback=-1)
+    ch_probe_3 = CONFIG.getint('MCP3008', 'CH_PROBE_3', fallback=-1)
+    ch_noise = CONFIG.getint('MCP3008', 'CH_NOISE', fallback=3)
+    ch_ldr = CONFIG.getint('MCP3008', 'CH_LDR', fallback=7)
+    analog_sensors = [(ch, bias_current, True, name)
+                      for ch, name in zip([ch_probe, ch_probe_2, ch_probe_3], cols_data_rms) if ch >= 0]
+    cols_data_rms = list(list(zip(*analog_sensors))[3])
+    analog_sensors_no_rms = [(ch, 0, False, name) for ch, name in zip([ch_noise, ch_ldr], cols_data_mean) if ch >= 0]
+    cols_data_mean = list(list(zip(*analog_sensors_no_rms))[3])
+    analog_sensors += analog_sensors_no_rms
+
+    # Nombres de columna en pd.DataFrames y formato de fecha
+    col_ts = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
+    fmt_ts = CONFIG.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
+    # cols_data = list(list(zip(*analog_sensors))[3]) + ['ref', 'ref_n']
+    cols_data = cols_data_rms + cols_data_mean + ['ref', 'ref_n']
+
+    return analog_sensors, col_ts, cols_data, cols_data_rms, cols_data_mean, fmt_ts
+
+
 # Loads configuration
-DATA_PATH, CONFIG = get_config()
+DATA_PATH, CONFIG = _get_config()
 TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
 FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
 LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
@@ -252,3 +261,6 @@ LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 # Set Locale
 CUSTOM_LOCALE = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))
 locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
+
+# ANALOG SENSORS WITH MCP3008 (Rasp.io Analog Zero)
+ANALOG_SENSORS, COL_TS, COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN, FMT_TS = _get_analog_sensors_and_msg_masks()

@@ -9,16 +9,14 @@ import pandas as pd
 from threading import Thread, current_thread
 from time import sleep, time
 
-from enerpi.base import BASE_PATH, CONFIG, TZ, DATA_PATH, get_lines_file
+from enerpi.base import TZ, get_lines_file, FILE_LOGGING, COLS_DATA, COLS_DATA_RMS, COL_TS
 from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
 from enerpiweb import app, SERVER_FILE_LOGGING, STATIC_PATH, WITH_ML_SUBSYSTEM
 
 
-ENERPI_FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING'))
+ENERPI_FILE_LOGGING = FILE_LOGGING
 RSC_GEN_FILE_LOGGING = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
-PALETA = pd.read_csv(os.path.join(BASE_PATH, 'rsc', 'paleta_power_w.csv')
-                     ).set_index('Unnamed: 0')['0'].str[1:-1].str.split(', ').apply(lambda x: [float(i) for i in x])
 COLOR_BASE = app.config['BASECOLOR']
 
 BUFFER_MAX_SAMPLES = 1800
@@ -75,11 +73,6 @@ def _format_event_stream(d_msg, timeout_retry=None, msg_id=None):
     return 'data: {}\n\n'.format(json.dumps(d_msg))
 
 
-def _aplica_paleta(serie):
-    return ['background-color: rgba({}, {}, {}, .7); color: #fff'.format(
-        *map(lambda x: int(255 * x), PALETA.loc[:v].iloc[-1])) for v in serie]
-
-
 @app.template_filter('text_date')
 def text_date(str_date):
     try:
@@ -107,9 +100,10 @@ def ts_strftime(ts):
 def _get_dataframe_buffer_data():
     global buffer_last_data
     if len(buffer_last_data) > 0:
-        df = pd.DataFrame(list(buffer_last_data))[['ts', 'power', 'ldr', 'ref']].set_index('ts')
-        df.power = df.power.astype(int)
-        df.ref = df.ref.astype(int)
+        df = pd.DataFrame(list(buffer_last_data))[[COL_TS, COLS_DATA_RMS[0], 'ldr', COLS_DATA[-2]]].set_index(COL_TS)
+        df[COLS_DATA_RMS[0]] = df[COLS_DATA_RMS[0]].astype(int)
+        df[COLS_DATA[-2]] = df[COLS_DATA[-2]].astype(int)
+        # TODO Resolver nombre LDR
         df.ldr = pd.Series(df.ldr * 100).round(1)
         return df
     return None
@@ -118,7 +112,7 @@ def _get_dataframe_buffer_data():
 def _get_dataframe_print_buffer_data(df=None):
     if df is None:
         df = _get_dataframe_buffer_data()
-    df_print = df.rename(columns={'ref': 'nº s.', 'power': 'Power (W)', 'ldr': 'LDR (%)'})
+    df_print = df.rename(columns={COLS_DATA[-2]: 'nº s.', COLS_DATA_RMS[0]: 'Power (W)', 'ldr': 'LDR (%)'})
     df_print['T'] = df_print.index.map(lambda x: x.time().strftime('%H:%M:%S'))
     df_print = df_print.reset_index(drop=True)[['T', 'Power (W)', 'LDR (%)', 'nº s.']].set_index('T')
     return df_print
@@ -130,7 +124,7 @@ def _get_html_table_buffer_data(df_print=None):
     clases_tabla = 'table table-responsive table-stripped table-hover table-not-bordered table-sm'
     tabla = (df_print.style  # .set_uuid('idunico-tablebuffer')
              .set_table_attributes('class="{}" border="0"'.format(clases_tabla))
-             .apply(_aplica_paleta, subset=['Power (W)'])
+             # .apply(_aplica_paleta, subset=['Power (W)'])
              .format({'LDR (%)': lambda x: "{:.1f} %".format(x),
                       'Power (W)': lambda x: "<strong>{:.0f}</strong> W".format(x)})
              # .bar(subset=['LDR (%)'], color='yellow')
@@ -147,12 +141,12 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None, rs_data=None, 
     if start or end or last_hours:
         cat = enerpi_data_catalog(check_integrity=False)
         if kwh:
-            df = cat.get_summary(start=start, end=end, last_hours=last_hours, async_get=False)
+            df = cat.get_summary(start=start, end=end, last_hours=last_hours)
         else:
-            df = cat.get(start=start, end=end, last_hours=last_hours, async_get=False)
+            df = cat.get(start=start, end=end, last_hours=last_hours)
             if (df is not None) and not df.empty:
-                df = df[['power', 'ldr', 'ref']]
-                df.ldr = df.ldr.astype(float) / 10.
+                df = df[[COLS_DATA_RMS[0], 'ldr', COLS_DATA[-2]]]
+                df.ldr = df['ldr'].astype(float) / 10.
                 if last_hours is not None:
                     df_last_data = _get_dataframe_buffer_data()
                     if df_last_data is not None:
@@ -230,10 +224,10 @@ def stream_sensors():
         tic = time()
         while time() - tic < STREAM_MAX_TIME:
             global last_data
-            if 'ts' in last_data and last_data['ts'] > last_ts:
+            if COL_TS in last_data and last_data[COL_TS] > last_ts:
                 send = last_data.copy()
-                last_ts = send['ts']
-                send['ts'] = send['ts'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+                last_ts = send[COL_TS]
+                send[COL_TS] = send[COL_TS].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
                 yield _format_event_stream(send)
                 count += 1
                 sleep(.5)
@@ -261,6 +255,15 @@ def index():
     global buffer_last_data
     return render_template('index.html', include_consumption=True, include_ldr=True,
                            last_samples=list(buffer_last_data))
+
+
+@app.route('/api/last')
+def last_value_json():
+    global last_data
+    send = last_data.copy()
+    if COL_TS in send:
+        send[COL_TS] = send[COL_TS].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+    return _format_event_stream(send)
 
 
 @app.route('/api/stream/table')
@@ -372,11 +375,11 @@ def control():
     global last_data
     last = last_data.copy()
     try:
-        is_sender_active = (pd.Timestamp.now(tz=TZ) - last['ts']) < pd.Timedelta('1min')
+        is_sender_active = (pd.Timestamp.now(tz=TZ) - last[COL_TS]) < pd.Timedelta('1min')
     except KeyError:
         # last_ts, last_power, host_logger = last_data['ts'], last_data['power'], last_data['host']
         is_sender_active = False
-        last = {'host': '?', 'power': -1, 'ts': pd.Timestamp.now(tz=TZ)}
+        last = {'host': '?', COLS_DATA_RMS[0]: -1, COL_TS: pd.Timestamp.now(tz=TZ)}
     alerta = request.args.get('alerta', '')
     if alerta:
         alerta = json.loads(alerta)

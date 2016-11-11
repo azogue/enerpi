@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-import logging
 import os
+# noinspection PyUnresolvedReferences
 from enerpiweb import app as application, SERVER_FILE_LOGGING, LOGGING_LEVEL_SERVER
 from enerpiweb.command_enerpiweb import main, check_resource_files
 from enerpi.base import set_logging_conf

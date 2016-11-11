@@ -5,7 +5,7 @@ import pandas as pd
 from time import time
 import re
 from shutil import copy as copy_file
-from enerpi.base import CONFIG, DATA_PATH, log, funcs_tipo_output, timeit
+from enerpi.base import CONFIG, DATA_PATH, log, timeit, COL_TS, COLS_DATA
 from enerpi.catalog import EnerpiCatalog
 
 
@@ -13,8 +13,6 @@ from enerpi.catalog import EnerpiCatalog
 INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT ENERPI')
 HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
 
-COL_TS = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
-COLS_DATA = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA', fallback='power, noise, ref, ldr').split(', ')
 KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
 CONFIG_CATALOG = dict(preffix='DATA',
                       raw_file=HDF_STORE,
@@ -29,6 +27,13 @@ CONFIG_CATALOG = dict(preffix='DATA',
 
 
 def init_catalog(base_path=DATA_PATH, **kwargs):
+    """
+    Get ENERPI data catalog for access & operation with params.
+
+    :param base_path: :str: ENERPIDATA base path
+    :param kwargs: :dict: parameters
+    :return: :EnerpiCatalog:
+    """
     conf = CONFIG_CATALOG.copy()
     conf.update(base_path=base_path)
     if kwargs:
@@ -47,20 +52,22 @@ def _clean_store_path(path_st):
 
 
 def show_info_data(df, df_consumo=None):
-    f_print, _ = funcs_tipo_output('info')
-    f_print('DATAFRAME INFO:\n* Head:\n{}'.format(df.head()))
-    f_print('* Tail:\n{}'.format(df.tail()))
-    f_print('* Count & types:\n{}'.format(pd.concat([df.count().rename('N_rows'),
-                                                     df.dtypes.rename('dtypes'),
-                                                     df.describe().drop('count').T], axis=1)))
-    f_print, _ = funcs_tipo_output('magenta')
+    """
+    Prints some info about DATA (& opt SUMMARY_DATA)
+
+    :param df: :pd.DataFrame: DATA
+    :param df_consumo: :pd.DataFrame: SUMMARY_DATA
+    """
+    log('DATAFRAME INFO:\n* Head:\n{}'.format(df.head()), 'info', True, False)
+    log('* Tail:\n{}'.format(df.tail()), 'info', True, False)
+    log('* Count & types:\n{}'
+        .format(pd.concat([df.count().rename('N_rows'), df.dtypes.rename('dtypes'), df.describe().drop('count').T],
+                          axis=1)), 'info', True, False)
     if df_consumo is not None and not df_consumo.empty:
-        frac_h = df.delta.resample('1h').sum().rename('frac')
-        df_consumo = pd.DataFrame(pd.concat([df_consumo, (frac_h / pd.Timedelta('1h')).round(3)], axis=1))
-        f_print('\n** HOURLY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(df_consumo))
+        log('\n** HOURLY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(df_consumo), 'magenta', True, False)
         dias = df_consumo.resample('1D').sum()
-        dias.frac /= 24
-        f_print('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias))
+        dias['t_ref'] /= 24
+        log('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias), 'ok', True, False)
 
 
 # TODO Rehacer backups y clears en catalog vía CLI
@@ -95,11 +102,10 @@ def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
     :param verb:
     :return:
     """
-    df_tot = None
     try:
+        df_tot = None
         if data is not None and type(data) is not pd.DataFrame:
             data = pd.DataFrame(data, columns=[COL_TS] + COLS_DATA).set_index(COL_TS).dropna().astype(float)
-            # with pd.HDFStore(path_st, mode='a') as st:
             with pd.HDFStore(path_st, mode='a', complevel=9, complib='blosc') as st:
                 st.append(KEY, data)
                 if catalog is not None:
@@ -120,6 +126,15 @@ def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
 
 @timeit('get_ts_last_save')
 def get_ts_last_save(path_st=HDF_STORE, get_last_sample=False, verbose=True, n=3):
+    """
+    Returns last data timestamp in hdf store.
+
+    :param path_st: :str: hdf store file path
+    :param get_last_sample: :bool: returns ts or pd.DataFrame
+    :param verbose: :bool: shows logging msgs in stdout.
+    :param n: :int: # of tail rows
+    :return: pd.Timestamp or pd.DataFrame
+    """
     tic = time()
     try:
         ts = dt.datetime.fromtimestamp(os.path.getmtime(path_st))
@@ -142,12 +157,26 @@ def get_ts_last_save(path_st=HDF_STORE, get_last_sample=False, verbose=True, n=3
 
 
 def delete_log_file(log_file, verbose=True):
+    """
+    Removes (logging) file from disk.
+
+    :param log_file: :str: logging file path
+    :param verbose: :bool: shows logging msgs in stdout.
+    """
     log('Deleting LOG FILE in {} ...'.format(log_file), 'warn', verbose)
     os.remove(log_file)
 
 
 @timeit('extract_log_file')
 def extract_log_file(log_file, extract_temps=True, verbose=True):
+    """
+    Extracts pd.DataFrame from logging file.
+
+    :param log_file: :str: logging file path
+    :param extract_temps: :bool: process RPI temperature logging entries (appends columns 'CPU' & 'GPU')
+    :param verbose: :bool: shows logging msgs in stdout.
+    :return: time-indexed pd.DataFrame
+    """
     if os.path.exists(log_file):
         rg_log_msg = re.compile('(?P<tipo>INFO|WARNING|DEBUG|ERROR) \[(?P<func>.+?)\] '
                                 '- (?P<ts>\d{1,2}/\d\d/\d\d\d\d \d\d:\d\d:\d\d): (?P<msg>.*?)\n', re.DOTALL)

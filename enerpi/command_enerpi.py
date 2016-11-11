@@ -3,40 +3,19 @@ import datetime as dt
 import os
 import re
 from threading import Timer
-from time import time, sleep
 import sys
 from enerpi import PRETTY_NAME, DESCRIPTION
 from enerpi.base import (BASE_PATH, CONFIG, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
                          FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log)
 from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
                              extract_log_file, delete_log_file, HDF_STORE)
-from enerpi.enerpimeter import enerpi_logger, receiver, sender_random, DELTA_SEC_DATA, TS_DATA_MS, RMS_ROLL_WINDOW_SEC
+from enerpi.enerpimeter import (enerpi_logger, receiver, enerpi_raw_data,
+                                DELTA_SEC_DATA, TS_DATA_MS, RMS_ROLL_WINDOW_SEC)
 
 
 # Config:
 DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK', fallback='enerpi_plot_{:%Y%m%d_%H%M}.png')
 IMG_TILES_BASEPATH = os.path.join(BASE_PATH, '..', 'enerpiweb', 'static', 'img', 'generated')
-
-
-def _run_logger(is_demo=True, verbose=True, path_st=None, **kwargs_sender):
-    """
-    Starts ENERPI Logger loop.
-    """
-
-    n_execs = 0
-    tic = time()
-    while True:
-        if is_demo:
-            ok = sender_random(path_st=path_st, verbose=verbose, **kwargs_sender)
-        else:
-            ok = enerpi_logger(path_st=path_st, verbose=verbose, **kwargs_sender)
-        if not ok:
-            break
-        toc = time()
-        log('Waiting 10 s to init again... EXEC={}, ∆T={:.1f} s'.format(n_execs, toc - tic), 'ok', verbose, True)
-        sleep(10)
-        tic = time()
-        n_execs += 1
 
 
 def _enerpi_arguments():
@@ -50,9 +29,11 @@ def _enerpi_arguments():
                                        '\033[0m', formatter_class=argparse.RawTextHelpFormatter)
     g_m = p.add_argument_group(title='☆  \033[1m\033[4mENERPI Working Mode\033[24m',
                                description='→  Choose working mode between RECEIVER / SENDER')
-    g_m.add_argument('-e', '-s', '--enerpi', action='store_true', help='⚡  SET ENERPI LOGGER & BROADCAST MODE')
+    g_m.add_argument('-e', '--enerpi', action='store_true', help='⚡  SET ENERPI LOGGER & BROADCAST MODE')
     g_m.add_argument('-r', '--receive', action='store_true', help='⚡  SET Broadcast Receiver mode (by default)')
     g_m.add_argument('-d', '--demo', action='store_true', help='☮️  SET Demo Mode (broadcast random values)')
+    g_m.add_argument('--raw', type=int, action='store', nargs='?', const=5, metavar='∆T',
+                     help='☮️  SET RAW Data Mode (adquire all samples)')
     g_m.add_argument('--config', action='store_true', help='⚒  Shows configuration in INI file')
     g_m.add_argument('--install', action='store_true', help='⚒  Install CRON task for exec ENERPI LOGGER as daemon')
     g_m.add_argument('--uninstall', action='store_true', help='⚒  Delete all CRON tasks from ENERPI')
@@ -77,7 +58,6 @@ def _enerpi_arguments():
     g_st = p.add_argument_group(title='⚙  \033[4mHDF Store Options\033[24m')
     g_st.add_argument('--store', action='store', metavar='ST', default=HDF_STORE,
                       help='✏️  Set the .h5 file where save the HDF store.\n     Default: "{}"'.format(HDF_STORE))
-    g_st.add_argument('--compact', action='store_true', help='✙✙  Compact the HDF Store database (read, delete, save)')
     g_st.add_argument('--backup', action='store', metavar='BKP', help='☔️  Backup the HDF Store')
     g_st.add_argument('--clear', action='store_true', help='☠  \033[31mDelete the HDF Store database\033[39m')
     g_st.add_argument('--clearlog', action='store_true', help='⚠️  Delete the LOG FILE at: "{}"'.format(FILE_LOGGING))
@@ -87,8 +67,7 @@ def _enerpi_arguments():
     g_d = p.add_argument_group(title='☕  \033[4mDEBUG Options\033[24m')
     g_d.add_argument('--temps', action='store_true', help='♨️  Show RPI temperatures (CPU + GPU)')
     g_d.add_argument('-l', '--log', action='store_true', help='☕  Show LOG FILE')
-    g_d.add_argument('--debug', action='store_true', help='☕  DEBUG Mode (save timing to csv)')
-    g_d.add_argument('-v', '--verbose', action='store_false', help='‼️  Verbose mode ON BY DEFAULT!')
+    g_d.add_argument('-s', '--silent', action='store_true', help='‼️  Silent mode (Verbose mode ON BY DEFAULT in CLI)')
 
     g_ts = p.add_argument_group(title='⚒  \033[4mCurrent Meter Sampling Configuration\033[24m')
     g_ts.add_argument('-T', '--delta', type=int, action='store', default=DELTA_SEC_DATA, metavar='∆T',
@@ -99,9 +78,6 @@ def _enerpi_arguments():
     g_ts.add_argument('-w', '--window', type=int, action='store', default=RMS_ROLL_WINDOW_SEC, metavar='∆T',
                       help='⚖  Set window width in seconds for instant RMS calculation. Default ∆T_w: {} s'
                       .format(RMS_ROLL_WINDOW_SEC))
-    # g_ts.add_argument('--raw', action='store_true',
-    #                   help='⚖  Set window width in seconds for instant RMS calculation. Default ∆T_w: {} s'
-    #                   .format(RMS_ROLL_WINDOW_SEC))
 
     return p.parse_args()
 
@@ -129,15 +105,23 @@ def enerpi_main_cli():
     enerpi -h para mostrar las diferentes opciones
 
     """
+    # Init CLI
     import matplotlib
     matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    pd.set_option('display.width', 200)
+
     # CLI Arguments
     args = _enerpi_arguments()
+    verbose = not args.silent
 
     # CONTROL LOGIC
+    timer_temps = None
     if args.temps:
         # Shows RPI Temps
-        Timer(3, show_pi_temperature, args=(3,)).start()
+        timer_temps = Timer(3, show_pi_temperature, args=(3,))
+        timer_temps.start()
 
     if args.install or args.uninstall:
         from enerpi.config.crontasks import set_command_on_reboot, clear_cron_commands
@@ -145,11 +129,11 @@ def enerpi_main_cli():
         cmd_logger = _make_cron_command_task_daemon()
         if args.install:
             log('** Installing CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'ok', True, False)
-            set_command_on_reboot(cmd_logger, verbose=True)
+            set_command_on_reboot(cmd_logger, verbose=verbose)
         else:
             log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
-            clear_cron_commands([cmd_logger], verbose=True)
-    elif (args.enerpi or args.info or args.compact or args.backup or args.clear or args.config or
+            clear_cron_commands([cmd_logger], verbose=verbose)
+    elif (args.enerpi or args.info or args.backup or args.clear or args.config or args.raw or
             args.last or args.clearlog or args.filter or args.plot or args.plot_tiles):
         # Logging configuration
         set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, True)
@@ -166,16 +150,27 @@ def enerpi_main_cli():
 
         # Delete LOG File
         if args.clearlog:
-            delete_log_file(FILE_LOGGING, verbose=True)
+            delete_log_file(FILE_LOGGING, verbose=verbose)
 
         # Data Store Config
         path_st = operate_hdf_database(args.store, path_backup=args.backup, clear_database=args.clear)
 
         # Starts ENERPI Logger
         if args.enerpi:
-            # TODO Raw mode
-            _run_logger(is_demo=False, verbose=args.verbose, path_st=path_st,
-                        delta_sampling=args.delta, roll_time=args.window, sampling_ms=args.ts, debug=args.debug)
+            enerpi_logger(is_demo=False, verbose=verbose, path_st=path_st,
+                          delta_sampling=args.delta, roll_time=args.window, sampling_ms=args.ts)
+        elif args.raw:
+            # Raw mode
+            delta_secs = args.raw
+            raw_data = enerpi_raw_data(path_st.replace('.h5', '_raw_sample.h5'), delta_secs=delta_secs,
+                                       roll_time=args.window, sampling_ms=args.ts, verbose=verbose)
+            t0, tf = raw_data.index[0], raw_data.index[-1]
+            log('Showing RAW DATA for {} seconds ({} samples, {:.2f} sps)\n** Real data: from {} to {} --> {:.2f} sps'
+                .format(delta_secs, len(raw_data), len(raw_data) / delta_secs,
+                        t0, tf, len(raw_data) / (tf-t0).total_seconds()), 'info', verbose, False)
+            # TODO revisar config X11 + ssh -X para plot en display local
+            raw_data.plot(lw=.5, figsize=(16, 10))
+            plt.show()
         # Shows database info
         elif args.info or args.filter or args.plot or args.plot_tiles:
             catalog = init_catalog(raw_file=path_st, check_integrity=False)
@@ -184,9 +179,9 @@ def enerpi_main_cli():
 
                 ok = gen_svg_tiles(IMG_TILES_BASEPATH, catalog)
                 if ok:
-                    log('SVG Tiles generated!', 'ok', args.verbose, True)
+                    log('SVG Tiles generated!', 'ok', verbose, True)
                 else:
-                    log('No generation of SVG Tiles!', 'error', args.verbose, True)
+                    log('No generation of SVG Tiles!', 'error', verbose, True)
             else:
                 if args.filter:
                     loc_data = args.filter.split('::')
@@ -211,17 +206,14 @@ def enerpi_main_cli():
 
                     img_name = plot_power_consumption_hourly(data.power, consumption.kWh, ldr=data.ldr,
                                                              rs_potencia=None, rm_potencia=60, savefig=args.plot)
-                    log('Image stored in "{}"'.format(img_name), 'ok', args.verbose, True)
+                    log('Image stored in "{}"'.format(img_name), 'ok', verbose, True)
         # Shows database info
         else:  # Shows last 10 entries
-            last = get_ts_last_save(path_st, get_last_sample=True, verbose=True, n=10)
-            log('Showing last 10 entries in {}:\n{}'.format(path_st, last), 'info', True, False)
+            last = get_ts_last_save(path_st, get_last_sample=True, verbose=verbose, n=10)
+            log('Showing last 10 entries in {}:\n{}'.format(path_st, last), 'info', verbose, False)
     # Shows & extract info from LOG File
     elif args.log:
-        import pandas as pd
-
-        pd.set_option('display.width', 200)
-        data_log = extract_log_file(FILE_LOGGING, extract_temps=True, verbose=True)
+        data_log = extract_log_file(FILE_LOGGING, extract_temps=True, verbose=verbose)
         try:
             df_temps = data_log[data_log.temp.notnull()].drop(['tipo', 'msg', 'debug_send'], axis=1).dropna(axis=1)
             if len(set(df_temps['exec'])) == 1:
@@ -236,29 +228,16 @@ def enerpi_main_cli():
     elif args.demo:
         set_logging_conf(FILE_LOGGING + '_demo.log', LOGGING_LEVEL, True)
         path_st = os.path.join(DATA_PATH, 'debug_buffer_disk.h5')
-        _run_logger(is_demo=True, verbose=args.verbose, path_st=path_st, ts_data=args.delta, debug=args.debug)
+        enerpi_logger(is_demo=True, verbose=verbose, path_st=path_st, ts_data=args.delta)
     # Receiver
     else:  # elif args.receive:
-        log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', args.verbose, False)
-        receiver(verbose=args.verbose, debug=args.debug)
-
-
-def enerpi_main_logger(with_pitemps=False):
-    """
-    Punto de entrada directa a ENERPI Logger (:= 'enerpi -e') con la configuración de DATA_PATH/config_enerpi.ini.
-
-    Se utiliza para iniciar ENERPI como daemon mediante 'enerpi-daemon start|stop|restart'
-    (en conjunción con enerpiweb: 'sudo -u www-data %(path_env_bin)/enerpi-daemon start')
-
-    :param with_pitemps: :bool: Logs RPI temperature every 3 seconds
-    """
-
-    set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
-    if with_pitemps:
-        # Shows RPI Temps
-        Timer(3, show_pi_temperature, args=(3,)).start()
-    _run_logger(is_demo=False, verbose=False, path_st=HDF_STORE, debug=False,
-                delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS)
+        log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', verbose, False)
+        receiver(verbose=verbose)
+    log('Exiting from ENERPI CLI...', 'debug', True)
+    if timer_temps is not None:
+        log('Stopping RPI TEMPS sensing...', 'debug', True)
+        timer_temps.cancel()
+    sys.exit(0)
 
 
 if __name__ == '__main__':

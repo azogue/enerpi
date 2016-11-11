@@ -3,7 +3,7 @@
 import os
 import sys
 from enerpi.base import log, FILE_LOGGING, LOGGING_LEVEL, set_logging_conf
-from enerpi.command_enerpi import enerpi_main_logger  # , enerpi_main_logger_demo
+from enerpi.enerpimeter import enerpi_daemon_logger
 from enerpi.daemon import Daemon
 
 
@@ -12,8 +12,10 @@ class EnerPiDaemon(Daemon):
     Clase Daemon para la ejecución de enerpi_main_logger en background
     """
     def run(self):
-        enerpi_main_logger()
-        # enerpi_main_logger_demo()
+        """
+        Runs the logger
+        """
+        enerpi_daemon_logger()
 
 
 def enerpi_daemon():

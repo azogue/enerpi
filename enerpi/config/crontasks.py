@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-from crontab import CronTab
-import datetime as dt
-
-
 """
 ** CRON Scheduler **
 """
+from crontab import CronTab
+import datetime as dt
 
 
 def __info_crontable():

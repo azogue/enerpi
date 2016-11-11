@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from setuptools import setup, find_packages
+from setuptools import setup
 from codecs import open
 import os
 from enerpi import __version__ as version
@@ -13,8 +13,8 @@ with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst')
     long_description = f.read()
 
 # PACKAGES = find_packages()
-# print('SETUP PACKAGES: ', PACKAGES)
 PACKAGES = ['enerpi', 'enerpiplot', 'enerpiweb', 'enerpi.hdftscat', 'enerpi.pitemps', 'enerpi.prettyprinting']
+# print('SETUP PACKAGES: ', PACKAGES)
 
 setup(
     # ext_modules=cythonize("extractlog.pyx"),

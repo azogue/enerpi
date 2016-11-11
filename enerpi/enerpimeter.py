@@ -6,9 +6,10 @@ import os
 import pandas as pd
 from threading import Timer
 from time import sleep, time
-from enerpi.base import CONFIG, DATA_PATH, log
+from enerpi.base import (CONFIG, COL_TS, COLS_DATA, show_pi_temperature,
+                         set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL)
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE
-from enerpi.pisampler import random_generator, enerpi_sampler_rms, msg_to_dict, tuple_to_msg, COL_TS, COLS_DATA
+from enerpi.pisampler import random_generator, enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
 from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
 from enerpi.ledrgb import get_rgbled, led_info, led_alarm, blink_color
 
@@ -17,7 +18,7 @@ from enerpi.ledrgb import get_rgbled, led_info, led_alarm, blink_color
 # TS_DATA_MS = 0  # Para maximizar el sampling (a costa de elevar demasiado la Tª de una RPI 3 -> ~80 ºC)
 TS_DATA_MS = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
 # ∆T para el deque donde se acumulan frames
-RMS_ROLL_WINDOW_SEC = CONFIG.getint('ENERPI_SAMPLER', 'RMS_ROLL_WINDOW_SEC', fallback=2)
+RMS_ROLL_WINDOW_SEC = CONFIG.getfloat('ENERPI_SAMPLER', 'RMS_ROLL_WINDOW_SEC', fallback=2.)
 DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=2)
 INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT')
 N_COLS_SAMPLER = len(COLS_DATA + [COL_TS])  # Columnas de datos + columna de marca de tiempo
@@ -29,21 +30,11 @@ STORE_PERIODIC_CATALOG_SEC = CONFIG.getint('ENERPI_DATA', 'TS_DATA_MS', fallback
 # Variable global para controlar el estado de notificaciones vía RGB LED
 LED_STATE = 0
 
-# Debug variables
-COLS_DEB_SEND = ['N', 'T_msg', 'T_send', 'T_buffer', 'T_disk']
-COLS_DEB_RECV = ['T_msg', 'T_crypt', 'msg']
-DEBUG_TIMES = []
-
-# RGBLED CONTROL & COLORS
-# def _get_paleta_rgb_led():
-#     # color = paleta.loc[:valor_w].iloc[-1]
-#     return pd.read_csv(os.path.join(BASE_PATH, 'rsc', 'paleta_power_w.csv')
-#                        ).set_index('Unnamed: 0')['0'].str[1:-1].str.split(', ').apply(lambda x: [float(i) for i in x])
-PALETA = dict(off=(0, (0, 0, 1)),
-              standby=(250, (0, 1, 0)),
-              medium=(750, (1, .5, 0)),
-              high=(3500, (1, 0, 0)),
-              max=(4500, (1, 0, 1)))
+PALETA = dict(off=(0., (0., 0., 1.)),
+              standby=(250., (0., 1., 0.)),
+              medium=(750., (1., .5, 0.)),
+              high=(3500., (1., 0., 0.)),
+              max=(4500., (1., 0., 1.)))
 
 
 def _interp_colors(c1, c2, ini_v, fin_v, value):
@@ -96,41 +87,41 @@ def _set_led_state_info(led, n_blinks=3):
 
 def _set_led_blink_rgbled(led, valor_w):
     if led is not None:
-        # log('blink_led POWER = {:.0f} W, color={}'.format(valor_w, PALETA_P.loc[:valor_w].iloc[-1]), 'debug', True)
-        # blink_color(led, color=paleta.loc[:valor_w].iloc[-1], n=1)
         blink_color(led, color=_get_color(valor_w, paleta=PALETA), n=1)
 
 
 # General
-def _execfunc(func, cols_debug, debug, *args_func, **kwargs_func):
+def _execfunc(func, *args_func, **kwargs_func):
     try:
-        func(debug, *args_func, **kwargs_func)
+        func(*args_func, **kwargs_func)
         return True
     except KeyboardInterrupt:
-        if debug and len(DEBUG_TIMES) > 0:
-            if cols_debug is None:
-                cols_debug = ['deb_{}'.format(i) for i in range(len(DEBUG_TIMES[0]))]
-
-            df_tiempos = pd.DataFrame(DEBUG_TIMES, columns=cols_debug)
-            path_debug = os.path.join(DATA_PATH, 'debug_tiempos__{}.csv'.format(func.__name__))
-            log('FIN. TIEMPOS:\n{}\nGrabada como CSV en {}'.format(df_tiempos.describe(), path_debug), 'info', True)
-            df_tiempos.to_csv(path_debug)
         # raise KeyboardInterrupt
         return False
 
 
 # Receiver
-def _show_cli_bargraph(d_data, log_msgs=False, ancho_disp=80, v_max=4000):
+def _show_cli_bargraph(d_data, ancho_disp=80, v_max=4000):
     n_resto = 3
-    v_bar = min(d_data[COLS_DATA[0]], v_max) * ancho_disp / v_max
+    v_bar = min(d_data['power'], v_max) * ancho_disp / v_max
     n_big = int(v_bar)
     n_little = int(round((v_bar - int(v_bar)) / (1 / n_resto)))
     if n_little == n_resto:
         n_little = 0
         n_big += 1
-    log('⚡ {:%H:%M:%S.%f}'.format(d_data[COL_TS])[:-3] + ': \033[1m{:.0f} W\033[1m; \033[33mLDR={:.3f} \033[32m'
-        .format(d_data[COLS_DATA[0]], d_data[COLS_DATA[-1]]) + '◼︎' * n_big + '⇡︎' * n_little,
-        'debug', True, log_msgs)
+    line = '⚡ {:%H:%M:%S.%f}'.format(d_data[COL_TS])[:-3] + ': '
+    # if 'power' in d_data:
+    line += '\033[1m{:.0f} W\033[1m; '.format(d_data['power'])
+    if 'power_2' in d_data:
+        line += '\033[1m{:.0f} W\033[1m; '.format(d_data['power_2'])
+    if 'power_3' in d_data:
+        line += '\033[1m{:.0f} W\033[1m; '.format(d_data['power_3'])
+    if 'ldr' in d_data:
+        line += '\033[33mLDR={:.3f} \033[32m'.format(d_data['ldr'])
+    leng_intro = len(line)
+    line += '◼︎' * n_big + '⇡︎' * n_little
+    log(line, 'debug', True, False)
+    return leng_intro
 
 
 def _get_console_cols_size():
@@ -138,7 +129,7 @@ def _get_console_cols_size():
     return int(columns)
 
 
-def _receiver(debug=False, verbose=True):
+def _receiver(verbose=True):
     gen = receiver_msg_generator(verbose)
     counter_msgs, last_msg = 0, ''
     leng_intro = len('⚡ 16:10:38.326: 3433 W; LDR=0.481 ︎')
@@ -150,22 +141,23 @@ def _receiver(debug=False, verbose=True):
             if msg != last_msg:
                 counter_msgs += 1
                 d_data = msg_to_dict(msg)
-                if verbose and (v_max < d_data[COLS_DATA[0]]):
-                    v_max = np.ceil(d_data[COLS_DATA[0]] / 500) * 500
-                    log('Se cambia la escala del CLI_bar_graph a P_MAX={:.0f} W'.format(v_max), tipo='info')
-                if verbose:
-                    _show_cli_bargraph(d_data, debug, ancho_disp=n_cols_bar, v_max=v_max)
-                if debug:
-                    DEBUG_TIMES.append([1000 * f for f in (delta_msg, delta_decrypt)] + [d_data['msg']])
-                if counter_msgs % 10 == 0:  # Actualiza tamaño de consola cada 10 samples
-                    n_cols_bar = _get_console_cols_size() - leng_intro
+                try:
+                    if verbose and (v_max < d_data[COLS_DATA[0]]):
+                        v_max = np.ceil(d_data[COLS_DATA[0]] / 500) * 500
+                        log('Se cambia la escala del CLI_bar_graph a P_MAX={:.0f} W'.format(v_max), tipo='info')
+                    if verbose:
+                        leng_intro = _show_cli_bargraph(d_data, ancho_disp=n_cols_bar, v_max=v_max)
+                    if counter_msgs % 10 == 0:  # Actualiza tamaño de consola cada 10 samples
+                        n_cols_bar = _get_console_cols_size() - leng_intro
+                except KeyError as e:
+                    log('RECEIVER: {}. Received data: {} [MSG={}]'.format(e, d_data, msg), 'error', verbose, True)
                 last_msg = msg
         except StopIteration:
             log('Terminada la recepción...', 'debug', verbose, True)
             break
 
 
-def receiver(verbose=True, debug=False):
+def receiver(verbose=True):
     """
     Runs ENERPI CLI receiver
 
@@ -180,13 +172,12 @@ def receiver(verbose=True, debug=False):
     press CTRL+C to exit
 
     :param verbose:
-    :param debug:
     """
-    _execfunc(_receiver, COLS_DEB_RECV, debug=debug, verbose=verbose)
+    _execfunc(_receiver, verbose=verbose)
 
 
 # ENERPI logger
-def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
+def _sender(data_generator, ts_data=1, path_st=HDF_STORE, verbose=True):
 
     def _save_buffer(buffer, process_save, path_store, data_catalog, v):
         if process_save is not None and process_save.is_alive():
@@ -198,10 +189,9 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
     global LED_STATE
     LED_STATE = 0
     counter, p_save = 0, None
+    normal_exit = True
     led = get_rgbled(verbose=True)
-    # paleta_rgbled = _get_paleta_rgb_led()
-    socket, counter_unreachable = None, np.array([0, 0])
-
+    sock_send, counter_unreachable = None, np.array([0, 0])
     catalog = init_catalog(raw_file=path_st, check_integrity=True, archive_existent=True)
 
     l_ini = [np.nan] * N_COLS_SAMPLER
@@ -213,15 +203,15 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
         while True:
             tic = time()
             # Recibe sample del generador de datos
-            data = next(func_get_data)
+            data = next(data_generator)
             if data is None:
                 raise KeyboardInterrupt
-            # d_data = tuple_to_dict(data)
-            toc_m = time()
+            # elif verbose:
+            #     print('Sampled: ', dict(zip([COL_TS] + COLS_DATA, data)), data)
 
             # Broadcast mensaje
-            socket = broadcast_msg(tuple_to_msg(data), counter_unreachable, sock_send=socket, verbose=verbose)
-            toc_n = time()
+            sock_send = broadcast_msg(tuple_to_dict_json(data), counter_unreachable,
+                                      sock_send=sock_send, verbose=verbose)
             if (counter_unreachable[0] > 1) and (LED_STATE == 0):  # 2x blink rojo ERROR NETWORK
                 _set_led_state_alarm(led, time_blinking=2.5, timeout=3)
 
@@ -229,7 +219,6 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
             for i in range(len(data)):
                 buffer_disk[counter, i] = data[i]
             counter += 1
-            toc_b = time()
 
             # Blink LED cada 2 seg
             if (LED_STATE == 0) and (counter % 2 == 0):
@@ -250,41 +239,84 @@ def _sender(debug, func_get_data, ts_data=1, path_st=HDF_STORE, verbose=True):
                 buffer_disk[:, 1] = np.nan
                 counter = 0
             toc = time()
-
-            if debug:
-                DEBUG_TIMES.append([1000 * f for f in (counter, toc_m - tic, toc_n - toc_m,
-                                                       toc_b - toc_n, toc - toc_b)])
             # Sleep cycle
             sleep(max(0.001, ts_data - (toc - tic)))
     except StopIteration:
-        log('SALIENDO DE SENDER', 'warn')
+        log('Exiting SENDER because StopIteration', 'warn', verbose)
     except KeyboardInterrupt:
-        log('Interrumpting SENDER with KeyboardInterrupt', 'warn')
-        raise KeyboardInterrupt
-    if socket is not None:
-        socket.close()
+        # log('Interrumpting SENDER with KeyboardInterrupt', 'warn', verbose)
+        normal_exit = False
+    if sock_send is not None:
+        sock_send.close()
     if led is not None:
         led.close()
+    if not normal_exit:
+        raise KeyboardInterrupt
 
 
-def sender_random(ts_data=1, verbose=True, debug=True, path_st=HDF_STORE):
+def _get_raw_chunk(data_generator, ts_data=1, verbose=True):
+    global LED_STATE
+    LED_STATE = 0
+    counter, p_save = 0, None
+    led = get_rgbled(verbose=True)
+
+    tic_abs = toc = time()
+    acumulador_ts = []
+    acumulador_data = []
+    try:
+        while True:
+            tic = time()
+            # Recibe sample del generador de datos
+            data = next(data_generator)
+            if data is None:
+                raise KeyboardInterrupt
+            elif verbose:
+                print('Sampled: ', data[0][0], data[1][0], data[0][-1], data[1][-1])
+
+            # Acumulación en buffer
+            acumulador_ts.append(data[0].copy())
+            acumulador_data.append(data[1].copy())
+            counter += 1
+
+            # Blink LED cada 2 seg
+            if (LED_STATE == 0) and (counter % 2 == 0):
+                _set_led_blink_rgbled(led, 2000)
+
+            toc = time()
+            # Sleep cycle
+            sleep(max(0.001, ts_data - (toc - tic)))
+    except StopIteration:
+        log('Exiting RAW SAMPLER because StopIteration', 'warn', verbose)
+    except KeyboardInterrupt:
+        log('Interrumpting RAW SAMPLER with KeyboardInterrupt', 'warn', verbose)
+    if led is not None:
+        led.close()
+    # Construcción de pd.df raw_data:
+    log('Making RAW data (Sampling took {:.3f} secs)'.format(toc - tic_abs), 'info', verbose)
+    df = pd.DataFrame(pd.concat([pd.DataFrame(mat_v, index=pd.Series(arr_d, name='ts'),
+                                              columns=['raw_0', 'raw_power', 'raw_ldr'])
+                                 for arr_d, mat_v in zip(acumulador_ts, acumulador_data)])).sort_index()
+    toc_abs = time()
+    log('RAW data (Total time: {:.3f} secs):\n{}\n{}'.format(toc_abs - tic_abs, df.head(7), df.tail(7)), 'ok', verbose)
+    return df
+
+
+def _sender_random(path_st=HDF_STORE, ts_data=1, verbose=True):
     """
     Runs Enerpi Logger in demo mode (sends random values)
 
+    :param path_st:
     :param ts_data:
     :param verbose:
-    :param debug:
-    :param path_st:
     :return:
     """
-    ok = _execfunc(_sender, COLS_DEB_SEND, debug, random_generator(), ts_data=ts_data, path_st=path_st, verbose=verbose)
-    log('SALIENDO DE SENDER_RANDOM', 'info')
+    ok = _execfunc(_sender, random_generator(), ts_data=ts_data, path_st=path_st, verbose=verbose)
+    log('Exiting SENDER_RANDOM; status:{}'.format(ok), 'info')
     return ok
 
 
-def enerpi_logger(path_st=HDF_STORE,
-                  delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS,
-                  verbose=True, debug=False):
+def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
+                   roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, verbose=True):
     """
     Runs ENERPI Sensor & Logger
 
@@ -293,19 +325,89 @@ def enerpi_logger(path_st=HDF_STORE,
     :param roll_time:
     :param sampling_ms:
     :param verbose:
-    :param debug:
     :return:
     """
     s_calc = sampling_ms if sampling_ms > 0 else 8
     n_samples = int(round(roll_time * 1000 / s_calc))
-    intro = (INIT_LOG_MARK + '\n  *** Haciendo RMS con window de {} frames (deltaT={} s, sampling: {} ms)'
+    intro = (INIT_LOG_MARK + '\n  *** Calculating RMS values with window of {} frames (deltaT={} s, sampling: {} ms)'
              .format(n_samples, roll_time, sampling_ms))
-    if debug:
-        intro += '\n  ** DEBUG Mode ON (se grabarán tiempos) **'
     log(intro, 'ok', True)
-    ok = _execfunc(_sender, COLS_DEB_SEND, debug, enerpi_sampler_rms(n_samples_buffer=n_samples,
-                                                                     delta_sampling=delta_sampling,
-                                                                     min_ts_ms=sampling_ms, verbose=verbose),
-                   ts_data=0, path_st=path_st, verbose=verbose)
-    log('SALIENDO DE ENERPI_LOGGER', 'info', verbose)
+    ok = _execfunc(_sender, enerpi_sampler_rms(n_samples_buffer=n_samples, delta_sampling=delta_sampling,
+                                               min_ts_ms=sampling_ms, verbose=verbose),
+                   ts_data=1, path_st=path_st, verbose=verbose)
+    log('Exiting ENERPI_LOGGER; status:{}'.format(ok), 'info', verbose)
     return ok
+
+
+def enerpi_raw_data(path_st, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, delta_secs=20, verbose=True):
+    """
+    Runs ENERPI Sensor & Logger in RAW DATA mode
+
+    :param path_st:
+    :param roll_time:
+    :param sampling_ms:
+    :param delta_secs:
+    :param verbose:
+    :return:
+    """
+    if sampling_ms > 0:
+        s_calc = sampling_ms
+        n_samples = int(round(roll_time * 1000 / s_calc))
+    else:
+        n_samples = 5000
+    intro = (INIT_LOG_MARK + '\n  *** Calculating RMS values with window of {} frames (deltaT={} s, sampling: {} ms)'
+             .format(n_samples, roll_time, sampling_ms))
+    intro += ('\n  ** RAW_DATA Mode ON (adquiring all samples in {} secs) (chunk={} samples) **'
+              .format(delta_secs, n_samples))
+    log(intro, 'ok', True)
+    raw_data = _get_raw_chunk(enerpi_raw_sampler(delta_secs=delta_secs, n_samples_buffer=n_samples,
+                                                 min_ts_ms=sampling_ms, verbose=verbose),
+                              ts_data=0, verbose=verbose)
+    if type(raw_data) is pd.DataFrame:
+        log('Exiting ENERPI_RAW_LOGGER with:\n{}'.format(raw_data.describe()), 'info', verbose)
+        raw_data.to_hdf(path_st, 'raw')
+    return raw_data
+
+
+def enerpi_logger(path_st=None, is_demo=True, verbose=True, **kwargs_sender):
+    """
+    Starts ENERPI Logger loop.
+    """
+
+    n_execs = 0
+    tic = time()
+    while True:
+        if is_demo:
+            ok = _sender_random(path_st=path_st, verbose=verbose, **kwargs_sender)
+        else:
+            ok = _enerpi_logger(path_st=path_st, verbose=verbose, **kwargs_sender)
+        if not ok:
+            break
+        toc = time()
+        log('Waiting 10 s to init again... EXEC={}, ∆T={:.1f} s'.format(n_execs, toc - tic), 'ok', verbose, True)
+        sleep(10)
+        tic = time()
+        n_execs += 1
+
+
+def enerpi_daemon_logger(with_pitemps=False):
+    """
+    Punto de entrada directa a ENERPI Logger con la configuración de DATA_PATH/config_enerpi.ini.
+
+    Se utiliza para iniciar ENERPI como daemon mediante 'enerpi-daemon start|stop|restart'
+    (en conjunción con enerpiweb, con user www-data: 'sudo -u www-data %(path_env_bin)/enerpi-daemon start')
+
+    :param with_pitemps: :bool: Logs RPI temperature every 3 seconds
+    """
+
+    set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
+    timer_temps = None
+    if with_pitemps:
+        # Shows RPI Temps
+        timer_temps = Timer(3, show_pi_temperature, args=(3,))
+        timer_temps.start()
+    enerpi_logger(path_st=HDF_STORE, is_demo=False, verbose=False,
+                  delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS)
+    if timer_temps is not None:
+        log('Stopping RPI TEMPS sensing desde enerpi_main_logger...', 'debug', False, True)
+        timer_temps.cancel()

@@ -195,15 +195,16 @@ def _plot_bokeh_multi_index(data_plot, **fig_kwargs):
     p.line('ts', 'ldr', **kwargs_l)
 
     # Plot patch
+    zero = np.array([0])
     df_patch = pd.Series(data_plot['ldr'].fillna(method='pad', limit=2).fillna(0).round(2))
     x = np.append(np.insert(df_patch.index.values, 0, df_patch.index.values[0]), df_patch.index.values[-1])
-    y = np.append(np.insert(df_patch.values, 0, 0), 0)
+    y = np.append(np.insert(df_patch.values, 0, zero), zero)
     kwargs_patch = dict(color=COLORS_DATA[1], line_alpha=0, fill_alpha=0.10, y_range_name=COLS_DATA[1])
     p.patch(x, y, **kwargs_patch)
 
     df_patch = data_plot['power'].fillna(method='pad', limit=2).fillna(0).round(2)
     x = np.append(np.insert(df_patch.index.values, 0, df_patch.index.values[0]), df_patch.index.values[-1])
-    y = np.append(np.insert(df_patch.values, 0, 0), 0)
+    y = np.append(np.insert(df_patch.values, 0, zero), zero)
     kwargs_patch = dict(color=COLORS_DATA[0], line_alpha=0, fill_alpha=0.15)
     p.patch(x, y, **kwargs_patch)
 

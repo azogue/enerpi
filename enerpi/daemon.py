@@ -84,6 +84,10 @@ class Daemon:
         #     sys.exit(-1)
 
     def delpid(self):
+        """
+        Remove pidfile from disk
+
+        """
         if os.path.exists(self.pidfile):
             os.remove(self.pidfile)
 

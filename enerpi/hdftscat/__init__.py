@@ -180,7 +180,7 @@ class HDFTimeSeriesCatalog(object):
             index.cols = index.cols.map(lambda x: json.loads(x.replace("'", '"')))
             return index.drop_duplicates(subset=['st', 'key', 'ts_st', 'ts_ini', 'ts_fin'])
         except OSError:
-            log('Error leyendo INDEX en "{}". Se reconstruye.'.format(p), 'error', self.verbose)
+            log('Error reading HDFTSCAT INDEX in "{}". Rebuilding index...'.format(p), 'error', self.verbose)
             return None
 
     def _save_index(self, index):
@@ -247,8 +247,8 @@ class HDFTimeSeriesCatalog(object):
             return data
         except KeyError as e:
             log('load_hdf KEYERROR -> ST:"{}", KEY:{}; -> {}'.format(p, k, e), 'error', self.verbose)
-            with pd.HDFStore(p, mode='r') as st:
-                log(st, 'error', self.verbose)
+            # with pd.HDFStore(p, mode='r') as st:
+            #     log(st, 'error', self.verbose)
             return None
         except OSError as e:
             log('load_hdf OSERROR -> ST:"{}", KEY:"{}"'
@@ -531,8 +531,9 @@ class HDFTimeSeriesCatalog(object):
         ahora = pd.Timestamp.now()
         month_now = ahora.year * 12 + ahora.month
         monthly_archive = False
-
+        new_data_append = False
         if new_data is not None:
+            new_data_append = True
             log('ARCHIVE NEW RAW DATA: {}'.format(new_data.shape), 'debug', self.verbose)
             if self.is_raw_data(new_data):
                 new_data = self.process_data(new_data)
@@ -545,9 +546,7 @@ class HDFTimeSeriesCatalog(object):
                     .format(old_stores, month.shape if month is not None else 'None'), 'info', self.verbose)
                 if month is not None:
                     new_data = month.append(new_data)
-                    month = None
                 new_stores += self.distribute_data(new_data, mode='w')
-                new_data = None
                 self._remove_old_if_archive(old_stores, new_stores, ahora)
             elif hay_cambio_dia:
                 today = self._load_today()
@@ -555,7 +554,6 @@ class HDFTimeSeriesCatalog(object):
                 if today is not None:
                     new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
                 new_stores += self.distribute_data(new_data, mode='w')
-                new_data = None
                 self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
             else:
                 new_stores += self.distribute_data(new_data, mode='a')
@@ -569,7 +567,6 @@ class HDFTimeSeriesCatalog(object):
                     month, days_cm = self._load_current_month(with_summary_data=False)
                     log('** ARCHIVE MONTH: {}'.format(days_cm), 'info', self.verbose)
                     new_stores += self.distribute_data(month, mode='a')
-                    month = None
                     self._remove_old_if_archive(days_cm, new_stores, ahora)
                     monthly_archive = len(new_stores) > 0
             ts_today = self._ts_filepath(ST_TODAY)
@@ -590,16 +587,22 @@ class HDFTimeSeriesCatalog(object):
         if new_stores:
             new_stores = list(set(new_stores))
             log('Modificando index en archive_periodic: new_stores: {}'.format(new_stores), 'debug', self.verbose)
-            index = self.tree.copy()
             new_rows = self._make_index(distribute_existent=False, paths=new_stores)
-            index = index.set_index('st').drop(new_rows['st'].drop_duplicates().values, errors='ignore').reset_index()
-            index = pd.DataFrame(pd.concat([index, new_rows], axis=0)).sort_values(by='ts_ini')
+            if self.tree is not None:
+                index = self.tree.copy()
+                index = index.set_index('st').drop(new_rows['st'].drop_duplicates().values, errors='ignore'
+                                                   ).reset_index()
+                index = pd.DataFrame(pd.concat([index, new_rows], axis=0)).sort_values(by='ts_ini')
+            else:
+                index = pd.DataFrame(new_rows).sort_values(by='ts_ini')
             if monthly_archive:
                 index = self._check_index(index)
             self.tree = index
             self._save_index(index)
             self.min_ts = self.tree['ts_ini'].min() if not self.tree.empty else np.nan
             self.index_ts = self._ts_filepath(self.catalog_file)
+            return True
+        return new_data_append
 
     @timeit('update_catalog')
     def update_catalog(self, data=None):
@@ -608,11 +611,14 @@ class HDFTimeSeriesCatalog(object):
         This function reads the temporal data store, adds it to the catalog, and deletes (recreates) the temporal store.
         """
         temp_data = data if data is not None else self._load_hdf(self.raw_store, self.key_raw)
-        self.archive_periodic(new_data=temp_data, reload_index=True)
-        p = os.path.join(self.base_path, self.raw_store)
-        with pd.HDFStore(p, 'w'):
-            info = 'Temporal data has been archived. Reset of "{}" is done. Store new size: {:.1f} KB'
-            log(info.format(p, os.path.getsize(p) / 1000), 'debug', self.verbose)
+        new_data = self.archive_periodic(new_data=temp_data, reload_index=True)
+        if new_data:
+            p = os.path.join(self.base_path, self.raw_store)
+            with pd.HDFStore(p, 'w'):
+                info = 'Temporal data has been archived. Reset of "{}" is done. Store new size: {:.1f} KB'
+                log(info.format(p, os.path.getsize(p) / 1000), 'debug', self.verbose)
+            return True
+        return False
 
     def get_index(self, check_index=True):
         """
@@ -651,7 +657,7 @@ class HDFTimeSeriesCatalog(object):
         return paths
 
     # @timeit('get')
-    def get(self, start=None, end=None, last_hours=None, column=None, with_summary=False, async_get=True):
+    def get(self, start=None, end=None, last_hours=None, column=None, with_summary=False):
         """
         Loads catalog data from disk.
 
@@ -660,7 +666,6 @@ class HDFTimeSeriesCatalog(object):
         :param last_hours: int num_hours
         :param column: desired key in pd.DataFrame
         :param with_summary: bool
-        :param async_get: bool
         :return: data (opc: , data_summary)
         """
 
@@ -703,7 +708,7 @@ class HDFTimeSeriesCatalog(object):
         return None
 
     @timeit('get_summary')
-    def get_summary(self, start=None, end=None, last_hours=None, async_get=True):
+    def get_summary(self, start=None, end=None, last_hours=None):
         paths_idx = self.get_paths(start, end, last_hours)
         if paths_idx:
             # if async_get and len(paths_idx) > 2:
@@ -717,8 +722,8 @@ class HDFTimeSeriesCatalog(object):
         return None
 
     @timeit('get_all_data', verbose=True)
-    def get_all_data(self, with_summary_data=True, async_get=True):
-        return self.get(start=self.min_ts, with_summary=with_summary_data, async_get=async_get)
+    def get_all_data(self, with_summary_data=True):
+        return self.get(start=self.min_ts, with_summary=with_summary_data)
 
     @staticmethod
     def resample_data(data, rs_data=None, rm_data=None, use_median=False, func_agg=np.mean):
@@ -741,7 +746,7 @@ class HDFTimeSeriesCatalog(object):
         for path in paths_w_summary.st:
             df = self.load_store(path)
             df_bis, df_s = self.process_data_summary(df)
-            assert((df == df_bis).all().all())
+            assert(pd.Series(df == df_bis).all().all())
             self._save_hdf([df_bis, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
 
     def get_path_hdf_store_binaries(self, rel_path=ST_TODAY):
