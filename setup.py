@@ -1,42 +1,30 @@
 # -*- coding: utf-8 -*-
-from setuptools import setup
 from codecs import open
 import os
-from enerpi import __version__ as version
+from setuptools import setup, find_packages
+from enerpi import __version__ as version, BASE_PATH
 
 
 # Failed building wheel for cryptography, cffi
 # Si error de cffi en install:
 # sudo apt-get install build-essential libssl-dev libffi-dev python-dev
 
-with open(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst'), encoding='utf-8') as f:
+packages = find_packages(exclude=['docs', '*tests*', 'notebooks'])
+with open(os.path.join(BASE_PATH, '..', 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-# PACKAGES = find_packages()
-PACKAGES = ['enerpi', 'enerpiplot', 'enerpiweb', 'enerpi.hdftscat', 'enerpi.pitemps', 'enerpi.prettyprinting']
-# print('SETUP PACKAGES: ', PACKAGES)
-
 setup(
-    # ext_modules=cythonize("extractlog.pyx"),
     name='enerpi',
     version=version,
     description='AC Current Meter for Raspberry PI with GPIOZERO and MCP3008',
-    long_description=long_description,
+    long_description='\n' + long_description,
     keywords='enerpi current gpiozero raspberry analog',
-    # Author details
     author='Eugenio Panadero',
     author_email='azogue.lab@gmail.com',
     url='https://github.com/azogue/enerpi',
-
     license='MIT',
-    # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
-        # How mature is this project? Common values are
-        #   3 - Alpha
-        #   4 - Beta
-        #   5 - Production/Stable
         'Development Status :: 3 - Alpha',
-        # Indicate who your project is intended for
         'Environment :: Console',
         'Intended Audience :: Developers',
         'Intended Audience :: Education',
@@ -47,14 +35,12 @@ setup(
         'Natural Language :: Spanish',
         # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: MIT License',
-
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
-        'Operating System :: Unix'
-    ],
-    packages=PACKAGES,
+        'Operating System :: Unix'],
+    packages=packages,
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
@@ -62,16 +48,8 @@ setup(
         'enerpi': ['config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
         'enerpiweb': ['templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
-
-    # Alternatively, if you want to distribute just a my_module.py, uncomment
-    # this:
-    #   py_modules=["my_module"],
-    # List run-time dependencies here.  These will be installed by pip when
-    # your project is installed. For an analysis of "install_requires" vs pip's
-    # requirements files see:
-    # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['numpy', 'pandas', 'pytz', 'cryptography', 'gpiozero', 'matplotlib', 'termcolor', 'flask',
-                      'werkzeug', 'jinja2', 'bokeh', 'python-crontab'],
+    install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7', 'cryptography>=1.5.2', 'gpiozero>=1.3.1',
+                      'matplotlib>=1.5.3', 'termcolor>=1.1.0', 'flask>=0.11.1', 'bokeh>=0.12.3', 'python-crontab'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
@@ -96,6 +74,9 @@ setup(
             'enerpiweb = enerpiweb.__main__:main'
         ]
     },
-    test_suite='nose.collector',
-    tests_require=['nose'],
+    # Test configuration:
+    # setup_requires=['pytest-runner'],
+    tests_require=['pytest'],
+    # test_suite='nose.collector',
+    # tests_require=['nose'],
 )

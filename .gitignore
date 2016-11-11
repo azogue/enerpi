@@ -1,7 +1,5 @@
-antiguo/*
 *.pyc
 *.log
-*.h5
 .DS_Store
 .idea
 

@@ -6,3 +6,5 @@ include README.rst
 recursive-include enerpiweb/static/img/icons *
 recursive-include enerpiweb/static/css *
 recursive-include enerpiweb/static/js *
+
+global-exclude .DS_Store

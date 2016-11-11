@@ -134,11 +134,12 @@ def random_generator():
     """Random data generator of sampling values for DEMO mode."""
     p_min, p_max = 180, VOLTAJE * 15
     count = 0
-    while count < 500:
+    while count < 50:
         p = random.randint(p_min, p_max)
         yield dt.datetime.now(), p, 1, 0, .5
         count += 1
     log('PROGRAMMED STOP OF RANDOM_GENERATOR', 'info', True, False)
+    raise StopIteration
 
 
 def _close_analog_sensor(sensor):

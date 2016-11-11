@@ -70,12 +70,12 @@ def _enerpi_arguments():
     g_d.add_argument('-s', '--silent', action='store_true', help='‼️  Silent mode (Verbose mode ON BY DEFAULT in CLI)')
 
     g_ts = p.add_argument_group(title='⚒  \033[4mCurrent Meter Sampling Configuration\033[24m')
-    g_ts.add_argument('-T', '--delta', type=int, action='store', default=DELTA_SEC_DATA, metavar='∆T',
+    g_ts.add_argument('-T', '--delta', type=float, action='store', default=DELTA_SEC_DATA, metavar='∆T',
                       help='⌚  Set Ts sampling (to database & broadcast), in seconds. Default ∆T: {} s'
                       .format(DELTA_SEC_DATA))
     g_ts.add_argument('-ts', type=int, action='store', default=TS_DATA_MS, metavar='∆T',
                       help='⏱  Set Ts raw sampling, in ms. Default ∆T_s: {} ms'.format(TS_DATA_MS))
-    g_ts.add_argument('-w', '--window', type=int, action='store', default=RMS_ROLL_WINDOW_SEC, metavar='∆T',
+    g_ts.add_argument('-w', '--window', type=float, action='store', default=RMS_ROLL_WINDOW_SEC, metavar='∆T',
                       help='⚖  Set window width in seconds for instant RMS calculation. Default ∆T_w: {} s'
                       .format(RMS_ROLL_WINDOW_SEC))
 
@@ -98,7 +98,7 @@ def _make_cron_command_task_daemon():
     return cmd_logger.format(**local_params)
 
 
-def enerpi_main_cli():
+def enerpi_main_cli(test_mode=False):
     """
     Uso de ENERPI desde CLI
 
@@ -237,8 +237,9 @@ def enerpi_main_cli():
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing...', 'debug', True)
         timer_temps.cancel()
-    sys.exit(0)
+    if not test_mode:
+        sys.exit(0)
 
 
 if __name__ == '__main__':
-    enerpi_main_cli()
+    enerpi_main_cli(test_mode=False)

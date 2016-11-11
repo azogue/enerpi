@@ -124,16 +124,20 @@ def _show_cli_bargraph(d_data, ancho_disp=80, v_max=4000):
     return leng_intro
 
 
-def _get_console_cols_size():
-    _, columns = os.popen('stty size', 'r').read().split()
-    return int(columns)
+def _get_console_cols_size(len_preffix=25):
+    try:
+        _, columns = os.popen('stty size', 'r').read().split()
+        return int(columns) - len_preffix, True
+    except ValueError:
+        # log('No stty! ValueError: "{}"'.format(e), 'error')
+        return 120 - len_preffix, False
 
 
 def _receiver(verbose=True):
     gen = receiver_msg_generator(verbose)
     counter_msgs, last_msg = 0, ''
     leng_intro = len('⚡ 16:10:38.326: 3433 W; LDR=0.481 ︎')
-    n_cols_bar = _get_console_cols_size() - leng_intro
+    n_cols_bar, hay_consola = _get_console_cols_size(leng_intro)
     v_max = 3500
     while True:
         try:
@@ -148,7 +152,7 @@ def _receiver(verbose=True):
                     if verbose:
                         leng_intro = _show_cli_bargraph(d_data, ancho_disp=n_cols_bar, v_max=v_max)
                     if counter_msgs % 10 == 0:  # Actualiza tamaño de consola cada 10 samples
-                        n_cols_bar = _get_console_cols_size() - leng_intro
+                        n_cols_bar, _ = _get_console_cols_size(leng_intro)
                 except KeyError as e:
                     log('RECEIVER: {}. Received data: {} [MSG={}]'.format(e, d_data, msg), 'error', verbose, True)
                 last_msg = msg
@@ -378,7 +382,8 @@ def enerpi_logger(path_st=None, is_demo=True, verbose=True, **kwargs_sender):
     tic = time()
     while True:
         if is_demo:
-            ok = _sender_random(path_st=path_st, verbose=verbose, **kwargs_sender)
+            _ok = _sender_random(path_st=path_st, verbose=verbose, **kwargs_sender)
+            break
         else:
             ok = _enerpi_logger(path_st=path_st, verbose=verbose, **kwargs_sender)
         if not ok:
