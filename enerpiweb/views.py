@@ -9,7 +9,7 @@ import pandas as pd
 from threading import Thread, current_thread
 from time import sleep, time
 
-from enerpi.base import TZ, get_lines_file, FILE_LOGGING, COLS_DATA, COLS_DATA_RMS, COL_TS
+from enerpi.base import DATA_PATH, CONFIG_FILENAME, TZ, get_lines_file, FILE_LOGGING, COLS_DATA, COLS_DATA_RMS, COL_TS
 from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
 from enerpiweb import app, SERVER_FILE_LOGGING, STATIC_PATH, WITH_ML_SUBSYSTEM
@@ -53,6 +53,8 @@ def _get_filepath_from_file_id(file_id):
         filename = ENERPI_FILE_LOGGING
     elif 'uwsgi' == file_id:
         filename = '/var/log/uwsgi/enerpiweb.log'
+    elif 'config' == file_id:
+        filename = os.path.join(DATA_PATH, CONFIG_FILENAME)
     else:  # Fichero derivado del catálogo
         cat = enerpi_data_catalog(check_integrity=False)
         if 'raw_store' == file_id:

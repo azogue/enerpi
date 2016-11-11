@@ -36,7 +36,10 @@
                         <a class="btn btn-secondary btn-outline-primary" href="{{ url_for('showfile', file='rsc', tail=200, reverse=True)}}" role="button">RSC gen.</a>
                       </div>
                       <div class="btn-group" role="group" aria-label="ENERPI LOG">
-                        <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='enerpi', tail=200, reverse=True)}}" role="button">EnerPi LOG</a>
+                        <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='enerpi', tail=200, reverse=True)}}" role="button"><i class="fa fa-bolt" aria-hidden="true"></i> EnerPi LOG</a>
+                      </div>
+                      <div class="btn-group" role="group" aria-label="ENERPI CONFIG">
+                        <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='config')}}" role="button"><i class="fa fa-sliders" aria-hidden="true"></i> Config</a>
                       </div>
                       <br class="hidden-sm hidden-xs">
                       <div class="btn-group" role="group" aria-label="UWSGI+NGINX LOGs">
