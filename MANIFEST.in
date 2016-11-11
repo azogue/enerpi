@@ -3,7 +3,6 @@ include LICENSE
 include README.rst
 
 # Include the data files
-recursive-include enerpi/rsc *
 recursive-include enerpiweb/static/img/icons *
 recursive-include enerpiweb/static/css *
 recursive-include enerpiweb/static/js *
