@@ -2,10 +2,10 @@
 import argparse
 import os
 import sys
-
 from enerpi.base import BASE_PATH, log
 from enerpiweb import basedir, CONFIG, DATA_PATH, check_resource_files, app as application
-from enerpi.prettyprinting import print_secc, print_cyan, print_red
+from enerpi.prettyprinting import print_secc, print_cyan, print_red, print_magenta
+
 
 FLASK_WEBSERVER_PORT = CONFIG.getint('ENERPI_WEBSERVER', 'FLASK_WEBSERVER_PORT', fallback=7777)
 PERIOD_MINUTES_RSC_GEN = CONFIG.getint('ENERPI_WEBSERVER', 'RSC_GEN_EVERY_MINUTES', fallback=15)
@@ -78,6 +78,8 @@ def _make_webserver_config(overwrite=False):
               .format('sudo ln -s {}/{} /etc/nginx/sites-enabled/'.format(DATA_PATH, NGINX_CONFIG_FILE)))
     print_red('* Make a symlink to deposit the UWSGI-Emperor configuration:\n **"{}"**\n'
               .format('sudo ln -s {}/{} /etc/uwsgi-emperor/vassals/'.format(DATA_PATH, UWSGI_CONFIG_FILE)))
+    print_magenta('* To start the webserver, restart NGINX & UWSGI-EMPEROR:\n **"{}"**\n **"{}"**\n'
+                  .format('sudo service nginx restart', 'sudo service uwsgi-emperor restart'))
 
 
 def main():
@@ -115,6 +117,10 @@ def main():
             log('** Deleting CRON task for web resources generation every X minutes:\n"{}"'
                 .format(cmd_server), 'warn', True, False)
             clear_cron_commands([cmd_server], verbose=True)
+            print_red('\n* To stop the webserver, remove config files from {}:\n **"{}"**\n **"{}"**\n'
+                      .format('NGINX & UWSGI-EMPEROR',
+                              'sudo rm /etc/uwsgi-emperor/vassals/{}'.format(UWSGI_CONFIG_FILE),
+                              'sudo rm /etc/nginx/sites-enabled/{}'.format(NGINX_CONFIG_FILE)))
     else:
         log('EJECUTANDO FLASK WSGI A MANO en P:{}!'.format(FLASK_WEBSERVER_PORT), 'ok', True, False)
         application.run(host="0.0.0.0", port=args.port, processes=1, threaded=True, debug=args.debug)
