@@ -31,13 +31,13 @@ class AnalogSensorBuffer(object):
     """
     Wrapper for MCP Sensor with 1D ring buffer using numpy arrays for RMS & M sensing.
     """
-    def __init__(self, probe, value_correction, length, rms_sensor=True, dtype='f'):
+    def __init__(self, probe, value_correction, length, rms_sensor=True):
         self._probe = probe
         self._value_correction = value_correction
         self.size_max = length
         self._rms_sensor = rms_sensor
         self.size = 0
-        self._data = np.zeros(length, dtype=dtype)
+        self._data = np.zeros(length, dtype='f')
         self._last_out = 0.
         self._last_mean = 0.
 
@@ -157,8 +157,8 @@ def _sampler(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, m
     n_samples_buffer_normal = n_samples_buffer // MEASURE_LDR_DIVISOR
     try:
         buffers = [AnalogSensorBuffer(MCP3008(channel=ch), bias,
-                                      n_samples_buffer_rms if is_rms else n_samples_buffer_normal,
-                                      rms_sensor=is_rms, dtype='f') for ch, bias, is_rms, _ in ANALOG_SENSORS]
+                                      n_samples_buffer_rms if is_rms else n_samples_buffer_normal, rms_sensor=is_rms)
+                   for ch, bias, is_rms, _ in ANALOG_SENSORS]
         software_spi_mode = buffers[0].software_spi
         log('ENERPI ANALOG SENSING WITH MCP3008 - (channel={}, raw_value={}); '
             'Active:{}, Software SPI:{}, #buffer_rms:{}, #buffer:{}'

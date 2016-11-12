@@ -18,7 +18,7 @@ class EnerPiDaemon(Daemon):
         enerpi_daemon_logger()
 
 
-def enerpi_daemon():
+def enerpi_daemon(test_mode=False):
     """
     Main logic para el demonio de ejecución de enerpi_main_logger
 
@@ -34,6 +34,7 @@ def enerpi_daemon():
     set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
     # TODO Eliminar stdout y stderr! (o diferenciar su uso según LOGGING_LEVEL)
     daemon = EnerPiDaemon('/tmp/enerpilogger.pid',
+                          test_mode=test_mode,
                           stdout=os.path.expanduser('/tmp/enerpi_out.txt'),
                           stderr=os.path.expanduser('/tmp/enerpi_err.txt'))
     if len(sys.argv) == 2:
@@ -54,11 +55,14 @@ def enerpi_daemon():
             daemon.restart()
         else:
             log("Unknown command", 'warn', True, False)
-            sys.exit(2)
-        sys.exit(0)
+            if not test_mode:
+                sys.exit(2)
+        if not test_mode:
+            sys.exit(0)
     else:
         print("usage: %s start|stop|restart|status".format(sys.argv[0]))
-        sys.exit(2)
+        if not test_mode:
+            sys.exit(2)
 
 
 if __name__ == "__main__":

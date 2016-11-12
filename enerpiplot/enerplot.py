@@ -241,8 +241,7 @@ def write_fig_to_svg(fig, name_img, preserve_ratio=False):
     svg_out = output.getvalue()
     if not preserve_ratio:
         svg_out = REGEXPR_SVG_WIDTH.sub(' width="100%" preserveAspectRatio="none"',
-                                        REGEXPR_SVG_HEIGHT.sub('<svg height="100%"', svg_out.decode(), count=0),
-                                        count=0).encode()
+                                        REGEXPR_SVG_HEIGHT.sub('<svg height="100%"', svg_out.decode())).encode()
     try:
         with open(name_img, 'wb') as f:
             f.write(svg_out)

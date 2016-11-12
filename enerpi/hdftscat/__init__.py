@@ -103,8 +103,7 @@ class HDFTimeSeriesCatalog(object):
                  catalog_file=INDEX,
                  check_integrity=True,
                  archive_existent=False,
-                 verbose=True,
-                 backup_original=True):
+                 verbose=True):
         self.base_path = os.path.abspath(base_path)
         self.name = preffix
         self.verbose = verbose
@@ -114,46 +113,50 @@ class HDFTimeSeriesCatalog(object):
         self.key_summary = key_summary_data
         self.key_summary_extra = key_summary_extra
 
-        # TODO Usar
-        self.backup_orig = backup_original
-
         # Index:
         self.catalog_file = catalog_file
 
         if archive_existent:
             self.update_catalog()
         else:
-            self.tree = self.get_index(check_index=check_integrity)
+            self.tree = self._get_index(check_index=check_integrity)
         self.min_ts = self.tree['ts_ini'].min() if self._exist() else np.nan
         self.index_ts = self._ts_filepath(self.catalog_file)
 
-        # if self.verbose:
-        #     print_ok(self.tree)
-
     @staticmethod
     def is_raw_data(data):
-        # Is RAW Data? If it is, call process_data before storing it
-        # Implementar en subclase
+        """
+        Is RAW Data? If it is, call process_data before storing it. Implement on subclass
+        :param data:
+        :return: :bool:
+        """
         raise NotImplementedError
 
     @staticmethod
     def process_data(data):
-        # From RAW Data to processed data
-        # Implementar en subclase
+        """
+        RAW Data to processed data. Implement on subclass
+        :param data:
+        :return: data_p
+        """
         raise NotImplementedError
 
     @staticmethod
     def process_data_summary(data):
-        # From Processed data to Processed data + summary
-        # Implementar en subclase
-        # return data, data_s
+        """
+        From Processed data to Processed data + summary. Implement on subclass
+        :param data:
+        :return: data, data_s
+        """
         raise NotImplementedError
 
     @staticmethod
     def process_data_summary_extra(data):
-        # From Processed data to Processed data + summary + summary extra
-        # Implementar en subclase
-        # return data, data_s, data_se
+        """
+        From Processed data to Processed data + summary + summary extra. Implement on subclass
+        :param data:
+        :return: data, data_s, data_se
+        """
         raise NotImplementedError
 
     def _exist(self):
@@ -179,9 +182,31 @@ class HDFTimeSeriesCatalog(object):
             index = pd.read_csv(p, index_col=0, parse_dates=['ts_ini', 'ts_fin', 'ts_st'])
             index.cols = index.cols.map(lambda x: json.loads(x.replace("'", '"')))
             return index.drop_duplicates(subset=['st', 'key', 'ts_st', 'ts_ini', 'ts_fin'])
+        except FileNotFoundError:
+            log('FileNotFoundError reading HDFTSCAT INDEX in "{}". Rebuilding index...'
+                .format(p), 'error', self.verbose)
+        except AttributeError:
+            log('AttributeError reading HDFTSCAT INDEX in "{}". Corrupted?\n{}\n ...Rebuilding index...'
+                .format(p, open(p, 'r').readlines()), 'error', self.verbose)
         except OSError:
-            log('Error reading HDFTSCAT INDEX in "{}". Rebuilding index...'.format(p), 'error', self.verbose)
-            return None
+            log('OSError reading HDFTSCAT INDEX in "{}". Rebuilding index...'.format(p), 'error', self.verbose)
+        return None
+
+    def _get_index(self, check_index=True):
+        """
+        Loading and checking of the catalog index (It's contained in a CSV file in the catalog root directory).
+        ** The index is updated or rebuilt if necessary.
+        :return: index, Pandas DataFrame with the catalog of all included HDF Stores.
+        """
+
+        index = self._load_index()
+        if index is None:
+            index = self._make_index(distribute_existent=True)
+            if index is not None and not index.empty:
+                self._save_index(index)
+        elif check_index:
+            index = self._check_index(index)
+        return index
 
     def _save_index(self, index):
         # print_secc('Salvando INDEX')
@@ -206,7 +231,8 @@ class HDFTimeSeriesCatalog(object):
         index['new_ts'] = times
         b_no_existe = index['new_ts'].isnull()
         index.loc[b_no_existe, 'modif'] = True
-        index.loc[~b_no_existe, 'modif'] = index.loc[~b_no_existe, 'ts_st'] != index.loc[~b_no_existe, 'new_ts']
+        if not b_no_existe.all():
+            index.loc[~b_no_existe, 'modif'] = index.loc[~b_no_existe, 'ts_st'] != index.loc[~b_no_existe, 'new_ts']
         if new_stores:
             log('NEW STORES WERE FOUND: {}'.format(new_stores), 'warn', self.verbose)
         new_stores += paths.loc[index['new_ts'].notnull() & index['modif']].drop_duplicates().tolist()
@@ -218,7 +244,7 @@ class HDFTimeSeriesCatalog(object):
                 'debug', self.verbose)
             new_rows = self._make_index(distribute_existent=True, paths=new_stores)
             index = index.set_index('st').drop(new_rows['st'].drop_duplicates().values, errors='ignore').reset_index()
-            index = pd.DataFrame(pd.concat([index, new_rows], axis=0)).sort_values(by='ts_ini')
+            index = pd.DataFrame(pd.concat([index, new_rows])).sort_values(by='ts_ini')
         if lost_stores:
             log('SOME STORES WERE LOST. THESE WILL BE REMOVED FROM INDEX: {}'.format(lost_stores), 'warn', self.verbose)
             index = index.set_index('st').drop(lost_stores, errors='ignore').sort_values(by='ts_ini').reset_index()
@@ -328,12 +354,12 @@ class HDFTimeSeriesCatalog(object):
         if with_summary_data:
             extracted = [self._load_hdf(p, func_store=lambda st: (st[self.key_raw], st[self.key_summary]))
                          for p in days_cm]
-            df = pd.DataFrame(pd.concat([e[0] for e in extracted if e is not None], axis=0))  # .sort_index()
-            df_s = pd.DataFrame(pd.concat([e[1] for e in extracted if e is not None], axis=0))  # .sort_index()
+            df = pd.DataFrame(pd.concat([e[0] for e in extracted if e is not None]))
+            df_s = pd.DataFrame(pd.concat([e[1] for e in extracted if e is not None]))
             return df, df_s, days_cm
         else:
             if days_cm:
-                df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw) for p in days_cm], axis=0))
+                df = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw) for p in days_cm]))
                 return df, days_cm
             return None, []
 
@@ -342,12 +368,13 @@ class HDFTimeSeriesCatalog(object):
         try:
             valid_dfs = list(filter(lambda df: df is not None, dataframes))
             if valid_dfs:
-                dataframe = pd.DataFrame(pd.concat(valid_dfs, axis=0)).sort_index()
+                dataframe = pd.DataFrame(pd.concat(valid_dfs)).sort_index()
                 if fin is not None:
                     return dataframe.loc[ini:fin]
                 return dataframe.loc[ini:]
             else:
-                log('GET DATA WARNING -> No valid dfs (were {})'.format(len(dataframes)), 'warn', verbose)
+                log('GET DATA WARNING -> No valid dfs (were {}: {})'
+                    .format(len(dataframes), dataframes), 'warn', verbose)
         except ValueError as e:
             log('GET DATA ERROR: {}'.format(e), 'error', verbose)
         return None
@@ -423,8 +450,6 @@ class HDFTimeSeriesCatalog(object):
                                               axis=1).rename('is_cat'))
             if not iscat.empty:
                 return df.set_index('st').join(iscat).fillna(False).sort_values(by='ts_ini').reset_index()
-            df['is_cat'] = False
-            return df.sort_values(by='ts_ini')
         return df.T.append(pd.Series([], name='ts_cat').T).T
 
     # @timeit('_make_index')
@@ -448,7 +473,7 @@ class HDFTimeSeriesCatalog(object):
                 log('2º PASADA con modpaths', 'debug', self.verbose)
                 df = df.set_index('st').drop(mod_paths, errors='ignore').reset_index()
                 df_2 = self._gen_index_entries(paths=mod_paths)
-                df = pd.concat([df.drop(raw_to_distr.index, errors='ignore'), df_2], axis=0)
+                df = pd.concat([df.drop(raw_to_distr.index, errors='ignore'), df_2])
             else:
                 log('No hay stores que distribuir', 'debug', self.verbose)
             return df
@@ -526,7 +551,7 @@ class HDFTimeSeriesCatalog(object):
         """
 
         if reload_index:
-            self.tree = self.get_index(check_index=False)
+            self.tree = self._get_index(check_index=False)
         new_stores = []
         ahora = pd.Timestamp.now()
         month_now = ahora.year * 12 + ahora.month
@@ -552,7 +577,7 @@ class HDFTimeSeriesCatalog(object):
                 today = self._load_today()
                 log('** ARCHIVE DAY', 'info', self.verbose)
                 if today is not None:
-                    new_data = pd.DataFrame(pd.concat([today, new_data], axis=0)).sort_index().groupby(level=0).first()
+                    new_data = pd.DataFrame(pd.concat([today, new_data])).sort_index().groupby(level=0).first()
                 new_stores += self.distribute_data(new_data, mode='w')
                 self._remove_old_if_archive([ST_TODAY], new_stores, ahora)
             else:
@@ -592,7 +617,7 @@ class HDFTimeSeriesCatalog(object):
                 index = self.tree.copy()
                 index = index.set_index('st').drop(new_rows['st'].drop_duplicates().values, errors='ignore'
                                                    ).reset_index()
-                index = pd.DataFrame(pd.concat([index, new_rows], axis=0)).sort_values(by='ts_ini')
+                index = pd.DataFrame(pd.concat([index, new_rows])).sort_values(by='ts_ini')
             else:
                 index = pd.DataFrame(new_rows).sort_values(by='ts_ini')
             if monthly_archive:
@@ -620,24 +645,6 @@ class HDFTimeSeriesCatalog(object):
             return True
         return False
 
-    def get_index(self, check_index=True):
-        """
-        Loading and checking of the catalog index (It's contained in a CSV file in the catalog root directory).
-        ** The index is updated or rebuilt if necessary.
-        :return: index, Pandas DataFrame with the catalog of all included HDF Stores.
-        """
-
-        index = self._load_index()
-        if index is None:
-            index = self._make_index(distribute_existent=True)
-            if index is not None and not index.empty:
-                self._save_index(index)
-        elif check_index:
-            index = self._check_index(index)
-        return index
-
-    # @timeit('_distribute_data')
-    # @profile
     def distribute_data(self, data, mode='a'):
 
         def _save_distributed_data(p, d1, d2, d3):
@@ -648,7 +655,7 @@ class HDFTimeSeriesCatalog(object):
             if mode == 'a' and os.path.exists(p_abs):  # 1º se lee, se concatena, y se eliminan duplicados
                 log('** Leyendo información previa del STORE: {}'.format(p_abs), 'debug', self.verbose)
                 old_dfs = self._load_hdf(p, func_store=lambda st: [st[k] for k in keys])
-                dfs = [pd.DataFrame(pd.concat([old, df], axis=0)
+                dfs = [pd.DataFrame(pd.concat([old, df])
                                     ).sort_index().reset_index().drop_duplicates(subset='ts').set_index('ts')
                        for old, df in zip(old_dfs, dfs)]
             self._save_hdf(dfs, p, keys, mode='w', **KWARGS_SAVE)
@@ -680,7 +687,7 @@ class HDFTimeSeriesCatalog(object):
                 paths_idx = paths_idx[:-1]
                 today = self.load_store(ST_TODAY, column=column)
                 plus = self.process_data(self.load_store(self.raw_store))
-                if column is not None:
+                if column is not None and plus is not None:
                     plus = plus[column]
                 if today is not None and plus is not None:
                     last = pd.DataFrame(pd.concat([today, plus]))
@@ -697,7 +704,7 @@ class HDFTimeSeriesCatalog(object):
             #         extracted = [future.result() for future in futures.as_completed(future_loads)]
             # else:
             extracted = [self.load_store(p, with_summary=with_summary, column=column) for p in paths_idx]
-            if with_summary:
+            if with_summary and extracted:
                 dfs, dfs_s = list(zip(*extracted))
                 data = self._concat_loaded_data(list(dfs) + [last], start, end, self.verbose)
                 data_s = self._concat_loaded_data(list(dfs_s) + [last_s], start, end, self.verbose)
@@ -729,7 +736,7 @@ class HDFTimeSeriesCatalog(object):
     def resample_data(data, rs_data=None, rm_data=None, use_median=False, func_agg=np.mean):
 
         def _median(arr):
-            return 0 if arr.empty else np.nanmedian(arr)
+            return 0 if arr.shape[0] == 0 else np.nanmedian(arr)
 
         if data is not None and not data.empty:
             if use_median:
@@ -746,14 +753,12 @@ class HDFTimeSeriesCatalog(object):
         for path in paths_w_summary.st:
             df = self.load_store(path)
             df_bis, df_s = self.process_data_summary(df)
-            assert(pd.Series(df == df_bis).all().all())
             self._save_hdf([df_bis, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
 
     def get_path_hdf_store_binaries(self, rel_path=ST_TODAY):
         subset = self.tree[self.tree.st.str.contains(rel_path)].st.values
         if len(subset) > 0:
             p = os.path.join(self.base_path, subset[0])
-            # print(os.path.exists(p), os.path.getsize(p), rel_path)
             return p
         return None
 

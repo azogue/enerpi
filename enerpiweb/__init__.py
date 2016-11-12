@@ -31,7 +31,7 @@ app.config['WITH_ML_SUBSYSTEM'] = WITH_ML_SUBSYSTEM
 app.jinja_loader = jinja2.FileSystemLoader(os.path.join(basedir, 'templates'))
 
 # Views
-# noinspection PyUnresolvedReferences
+# noinspection PyUnresolvedReferences,PyPep8
 from enerpiweb import views
 
 # wsgi

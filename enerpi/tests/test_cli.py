@@ -1,13 +1,30 @@
 # -*- coding: utf-8 -*-
 import os
 import subprocess
-# from unittest import TestCase
-# from threading import Timer
 from unittest.mock import patch
-import enerpi
-from enerpi.command_enerpi import enerpi_main_cli
-import enerpi.prettyprinting as pp
 import sys
+import enerpi
+import enerpi.prettyprinting as pp
+from enerpi.command_enerpi import enerpi_main_cli
+
+
+def test_script_enerpi():
+    """
+    ENERPI CLI Testing with subprocess.check_output.
+
+    """
+    def _exec_cli_w_args(args, timeout=None):
+        try:
+            out = subprocess.check_output(args, timeout=timeout).decode()
+            pp.print_ok(out)
+        except subprocess.TimeoutExpired as e:
+            pp.print_warn(e)
+
+    _exec_cli_w_args(['enerpi', '-i'])
+    _exec_cli_w_args(['enerpi', '-l'])
+    _exec_cli_w_args(['enerpi', '--config'])
+    _exec_cli_w_args(['enerpi', '--demo', '-ts', '0', '-T', '.01'], timeout=3)
+    _exec_cli_w_args(['enerpi', '--timeout', '5'], timeout=7)
 
 
 def test_main_cli():
@@ -23,7 +40,8 @@ def test_main_cli():
     _exec_cli_w_args(['test_cli', '-i'])
     _exec_cli_w_args(['test_cli', '-l'])
     _exec_cli_w_args(['test_cli', '--config'])
-    # _exec_cli_w_args(['test_cli', '--demo', '-ts', '1', '-T', '.1'])
+    _exec_cli_w_args(['test_cli', '--demo', '-ts', '1', '-T', '.01'])
+    _exec_cli_w_args(['test_cli', '--timeout', '5'])
     _exec_cli_w_args(['test_cli', '-f', '-ts', '0', '-T', '.01'])
 
 
@@ -38,25 +56,6 @@ def test_pitemps():
     pp.print_ok(out)
     print(get_cpu_temp())
     print(get_gpu_temp())
-
-
-def test_script_enerpi():
-    """
-    ENERPI CLI Testing with subprocess.check_output.
-
-    """
-    def _exec_cli_w_args(args, timeout=10):
-        try:
-            out = subprocess.check_output(args, timeout=timeout).decode()
-            pp.print_ok(out)
-        except subprocess.TimeoutExpired as e:
-            pp.print_warn(e)
-
-    _exec_cli_w_args(['enerpi', '-i'])
-    _exec_cli_w_args(['enerpi', '-l'])
-    _exec_cli_w_args(['enerpi', '--config'])
-    # _exec_cli_w_args(['enerpi', '--demo', '-ts', '0', '-T', '.01'])
-    # _exec_cli_w_args(['enerpi'], timeout=5)
 
 
 def test_prettyprinting():

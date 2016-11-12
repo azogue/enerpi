@@ -6,8 +6,11 @@ from time import time, sleep
 # do this before importing pylab or pyplot
 import matplotlib
 matplotlib.use('Agg')
+# noinspection PyPep8
 from enerpi.base import DATA_PATH, CONFIG, check_resource_files, set_logging_conf
+# noinspection PyPep8
 from enerpi.database import init_catalog
+# noinspection PyPep8
 from enerpiplot.enerplot import gen_svg_tiles
 
 

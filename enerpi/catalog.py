@@ -24,19 +24,15 @@ from enerpi.base import COLS_DATA
 DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL = 120  # pd.Timedelta('2min')
 COL_POWER = COLS_DATA[0]
 COL_REF = COLS_DATA[-2]
-# TODO Terminar
+# TODO Terminar Doc
 
 
-def _compress_data(data, verbose=False):
+def _compress_data(data):
     if data is not None:
-        if verbose:
-            data.info()
         if not data.empty:
             data = data.copy().astype('float32')
             data[COL_REF] = data[COL_REF].astype('int16')
             data['ldr'] = pd.Series(1000. * data['ldr']).round().astype('int16')
-            if verbose:
-                data.info()
     return data
 
 

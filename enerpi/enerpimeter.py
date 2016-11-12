@@ -37,6 +37,25 @@ PALETA = dict(off=(0., (0., 0., 1.)),
               max=(4500., (1., 0., 1.)))
 
 
+class TimerExiter(object):
+    """
+    Simple timer, without threading (and without any precission!),
+    for limiting time in infinite loops (receiver & emitter)
+
+    It has overloaded the __nonzero__ method, for asking it in while loops like:
+        t = TimerExiter(7)
+        while t:
+            do cool things...
+    """
+
+    def __init__(self, timeout):
+        self.timeout = timeout
+        self.tic = time()
+
+    def __nonzero__(self):
+        return time() - self.tic < self.timeout
+
+
 def _interp_colors(c1, c2, ini_v, fin_v, value):
     color = [0] * 3
     d = value - ini_v
@@ -87,7 +106,7 @@ def _set_led_state_info(led, n_blinks=3):
 
 def _set_led_blink_rgbled(led, valor_w):
     if led is not None:
-        blink_color(led, color=_get_color(valor_w, paleta=PALETA), n=1)
+        blink_color(led, color=_get_color(valor_w), n=1)
 
 
 # General
@@ -133,13 +152,14 @@ def _get_console_cols_size(len_preffix=25):
         return 120 - len_preffix, False
 
 
-def _receiver(verbose=True):
+def _receiver(verbose=True, timeout=None):
     gen = receiver_msg_generator(verbose)
     counter_msgs, last_msg = 0, ''
     leng_intro = len('⚡ 16:10:38.326: 3433 W; LDR=0.481 ︎')
     n_cols_bar, hay_consola = _get_console_cols_size(leng_intro)
     v_max = 3500
-    while True:
+    cond_while = True if timeout is None else TimerExiter(timeout)
+    while cond_while:
         try:
             msg, delta_msg, delta_decrypt = next(gen)
             if msg != last_msg:
@@ -161,7 +181,7 @@ def _receiver(verbose=True):
             break
 
 
-def receiver(verbose=True):
+def receiver(verbose=True, timeout=None):
     """
     Runs ENERPI CLI receiver
 
@@ -176,12 +196,13 @@ def receiver(verbose=True):
     press CTRL+C to exit
 
     :param verbose:
+    :param timeout:
     """
-    _execfunc(_receiver, verbose=verbose)
+    _execfunc(_receiver, verbose=verbose, timeout=timeout)
 
 
 # ENERPI logger
-def _sender(data_generator, ts_data=1, path_st=HDF_STORE, verbose=True):
+def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=True):
 
     def _save_buffer(buffer, process_save, path_store, data_catalog, v):
         if process_save is not None and process_save.is_alive():
@@ -203,8 +224,9 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, verbose=True):
     buffer_disk = np.array(l_ini * N_SAMPLES_BUFFER_DISK).reshape(N_SAMPLES_BUFFER_DISK, N_COLS_SAMPLER)
     tic_abs = time()
 
+    cond_while = True if timeout is None else TimerExiter(timeout)
     try:
-        while True:
+        while cond_while:
             tic = time()
             # Recibe sample del generador de datos
             data = next(data_generator)
@@ -305,7 +327,7 @@ def _get_raw_chunk(data_generator, ts_data=1, verbose=True):
     return df
 
 
-def _sender_random(path_st=HDF_STORE, ts_data=1, verbose=True):
+def _sender_random(path_st=HDF_STORE, ts_data=1, timeout=None, verbose=True):
     """
     Runs Enerpi Logger in demo mode (sends random values)
 
@@ -314,13 +336,13 @@ def _sender_random(path_st=HDF_STORE, ts_data=1, verbose=True):
     :param verbose:
     :return:
     """
-    ok = _execfunc(_sender, random_generator(), ts_data=ts_data, path_st=path_st, verbose=verbose)
+    ok = _execfunc(_sender, random_generator(), ts_data=ts_data, path_st=path_st, timeout=timeout, verbose=verbose)
     log('Exiting SENDER_RANDOM; status:{}'.format(ok), 'info')
     return ok
 
 
 def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
-                   roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, verbose=True):
+                   roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, timeout=None, verbose=True):
     """
     Runs ENERPI Sensor & Logger
 
@@ -328,6 +350,7 @@ def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
     :param delta_sampling:
     :param roll_time:
     :param sampling_ms:
+    :param timeout:
     :param verbose:
     :return:
     """
@@ -338,7 +361,7 @@ def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
     log(intro, 'ok', True)
     ok = _execfunc(_sender, enerpi_sampler_rms(n_samples_buffer=n_samples, delta_sampling=delta_sampling,
                                                min_ts_ms=sampling_ms, verbose=verbose),
-                   ts_data=1, path_st=path_st, verbose=verbose)
+                   ts_data=1, path_st=path_st, timeout=timeout, verbose=verbose)
     log('Exiting ENERPI_LOGGER; status:{}'.format(ok), 'info', verbose)
     return ok
 
@@ -373,7 +396,7 @@ def enerpi_raw_data(path_st, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_
     return raw_data
 
 
-def enerpi_logger(path_st=None, is_demo=True, verbose=True, **kwargs_sender):
+def enerpi_logger(path_st=None, is_demo=True, timeout=None, verbose=True, **kwargs_sender):
     """
     Starts ENERPI Logger loop.
     """
@@ -382,10 +405,10 @@ def enerpi_logger(path_st=None, is_demo=True, verbose=True, **kwargs_sender):
     tic = time()
     while True:
         if is_demo:
-            _ok = _sender_random(path_st=path_st, verbose=verbose, **kwargs_sender)
+            _ = _sender_random(path_st=path_st, timeout=timeout, verbose=verbose, **kwargs_sender)
             break
         else:
-            ok = _enerpi_logger(path_st=path_st, verbose=verbose, **kwargs_sender)
+            ok = _enerpi_logger(path_st=path_st, timeout=timeout, verbose=verbose, **kwargs_sender)
         if not ok:
             break
         toc = time()
@@ -411,7 +434,7 @@ def enerpi_daemon_logger(with_pitemps=False):
         # Shows RPI Temps
         timer_temps = Timer(3, show_pi_temperature, args=(3,))
         timer_temps.start()
-    enerpi_logger(path_st=HDF_STORE, is_demo=False, verbose=False,
+    enerpi_logger(path_st=HDF_STORE, is_demo=False, timeout=None, verbose=False,
                   delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS)
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing desde enerpi_main_logger...', 'debug', False, True)

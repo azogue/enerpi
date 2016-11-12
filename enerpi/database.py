@@ -22,8 +22,7 @@ CONFIG_CATALOG = dict(preffix='DATA',
                       # catalog_file=INDEX,
                       check_integrity=True,
                       archive_existent=False,
-                      verbose=False,
-                      backup_original=True)
+                      verbose=False)
 
 
 def init_catalog(base_path=DATA_PATH, **kwargs):
@@ -163,8 +162,11 @@ def delete_log_file(log_file, verbose=True):
     :param log_file: :str: logging file path
     :param verbose: :bool: shows logging msgs in stdout.
     """
-    log('Deleting LOG FILE in {} ...'.format(log_file), 'warn', verbose)
-    os.remove(log_file)
+    if os.path.exists(log_file) and os.path.isfile(log_file):
+        log('Deleting LOG FILE in {} ...'.format(log_file), 'warn', verbose, False)
+        os.remove(log_file)
+        return True
+    return False
 
 
 @timeit('extract_log_file')

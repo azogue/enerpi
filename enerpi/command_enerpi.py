@@ -31,9 +31,11 @@ def _enerpi_arguments():
                                description='→  Choose working mode between RECEIVER / SENDER')
     g_m.add_argument('-e', '--enerpi', action='store_true', help='⚡  SET ENERPI LOGGER & BROADCAST MODE')
     g_m.add_argument('-r', '--receive', action='store_true', help='⚡  SET Broadcast Receiver mode (by default)')
-    g_m.add_argument('-d', '--demo', action='store_true', help='☮️  SET Demo Mode (broadcast random values)')
+    g_m.add_argument('-d', '--demo', action='store_true', help='☮ SET Demo Mode (broadcast random values)')
+    g_m.add_argument('--timeout', action='store', nargs='?', type=int, metavar='∆T', const=60,
+                     help='⚡  SET Timeout to finish execution automatically')
     g_m.add_argument('--raw', type=int, action='store', nargs='?', const=5, metavar='∆T',
-                     help='☮️  SET RAW Data Mode (adquire all samples)')
+                     help='☮ SET RAW Data Mode (adquire all samples)')
     g_m.add_argument('--config', action='store_true', help='⚒  Shows configuration in INI file')
     g_m.add_argument('--install', action='store_true', help='⚒  Install CRON task for exec ENERPI LOGGER as daemon')
     g_m.add_argument('--uninstall', action='store_true', help='⚒  Delete all CRON tasks from ENERPI')
@@ -41,7 +43,7 @@ def _enerpi_arguments():
     g_p = p.add_argument_group(title='︎ℹ️  \033[4mQUERY & REPORT DATA\033[24m')
     filter_24h = (dt.datetime.now().replace(microsecond=0) - dt.timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
     g_p.add_argument('-f', '--filter', action='store', nargs='?', metavar='TS', const=filter_24h,
-                     help='✂️  Query the HDF Store with pandas-like slicing:'
+                     help='✂ Query the HDF Store with pandas-like slicing:'
                           '\n     "2016-01-07 :: 2016-02-01 04:00" --> df.loc["2016-01-07":"2016-02-01 04:00"]'
                           '\n     \t(Pay atention to the double "::"!!)'
                           '\n     · By default, "-f" filters data from 24h ago (.loc[{}:]).\n\n'.format(filter_24h))
@@ -58,16 +60,16 @@ def _enerpi_arguments():
     g_st = p.add_argument_group(title='⚙  \033[4mHDF Store Options\033[24m')
     g_st.add_argument('--store', action='store', metavar='ST', default=HDF_STORE,
                       help='✏️  Set the .h5 file where save the HDF store.\n     Default: "{}"'.format(HDF_STORE))
-    g_st.add_argument('--backup', action='store', metavar='BKP', help='☔️  Backup the HDF Store')
-    g_st.add_argument('--clear', action='store_true', help='☠  \033[31mDelete the HDF Store database\033[39m')
-    g_st.add_argument('--clearlog', action='store_true', help='⚠️  Delete the LOG FILE at: "{}"'.format(FILE_LOGGING))
-    g_st.add_argument('-i', '--info', action='store_true', help='︎ℹ️  Show data info')
-    g_st.add_argument('--last', action='store_true', help='︎ℹ️  Show last saved data')
+    g_st.add_argument('--backup', action='store', metavar='BKP', help='☔ Backup the HDF Store')
+    g_st.add_argument('--clear', action='store_true', help='☠ \033[31mDelete the HDF Store database\033[39m')
+    g_st.add_argument('--clearlog', action='store_true', help='⚠ Delete the LOG FILE at: "{}"'.format(FILE_LOGGING))
+    g_st.add_argument('-i', '--info', action='store_true', help='︎ℹ Show data info')
+    g_st.add_argument('--last', action='store_true', help='︎ℹ Show last saved data')
 
     g_d = p.add_argument_group(title='☕  \033[4mDEBUG Options\033[24m')
-    g_d.add_argument('--temps', action='store_true', help='♨️  Show RPI temperatures (CPU + GPU)')
-    g_d.add_argument('-l', '--log', action='store_true', help='☕  Show LOG FILE')
-    g_d.add_argument('-s', '--silent', action='store_true', help='‼️  Silent mode (Verbose mode ON BY DEFAULT in CLI)')
+    g_d.add_argument('--temps', action='store_true', help='♨ Show RPI temperatures (CPU + GPU)')
+    g_d.add_argument('-l', '--log', action='store_true', help='☕ Show LOG FILE')
+    g_d.add_argument('-s', '--silent', action='store_true', help='‼ Silent mode (Verbose mode ON BY DEFAULT in CLI)')
 
     g_ts = p.add_argument_group(title='⚒  \033[4mCurrent Meter Sampling Configuration\033[24m')
     g_ts.add_argument('-T', '--delta', type=float, action='store', default=DELTA_SEC_DATA, metavar='∆T',
@@ -82,7 +84,7 @@ def _enerpi_arguments():
     return p.parse_args()
 
 
-def _make_cron_command_task_daemon():
+def make_cron_command_task_daemon():
     """
     CRON periodic task for exec ENERPI LOGGER as daemon at every boot
     Example command:
@@ -126,7 +128,7 @@ def enerpi_main_cli(test_mode=False):
     if args.install or args.uninstall:
         from enerpi.config.crontasks import set_command_on_reboot, clear_cron_commands
         # INSTALL / UNINSTALL CRON TASKS & KEY
-        cmd_logger = _make_cron_command_task_daemon()
+        cmd_logger = make_cron_command_task_daemon()
         if args.install:
             log('** Installing CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'ok', True, False)
             set_command_on_reboot(cmd_logger, verbose=verbose)
@@ -157,8 +159,8 @@ def enerpi_main_cli(test_mode=False):
 
         # Starts ENERPI Logger
         if args.enerpi:
-            enerpi_logger(is_demo=False, verbose=verbose, path_st=path_st,
-                          delta_sampling=args.delta, roll_time=args.window, sampling_ms=args.ts)
+            enerpi_logger(is_demo=False, verbose=verbose, path_st=path_st, delta_sampling=args.delta,
+                          roll_time=args.window, sampling_ms=args.ts, timeout=args.timeout)
         elif args.raw:
             # Raw mode
             delta_secs = args.raw
@@ -232,7 +234,7 @@ def enerpi_main_cli(test_mode=False):
     # Receiver
     else:  # elif args.receive:
         log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', verbose, False)
-        receiver(verbose=verbose)
+        receiver(verbose=verbose, timeout=args.timeout)
     log('Exiting from ENERPI CLI...', 'debug', True)
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing...', 'debug', True)

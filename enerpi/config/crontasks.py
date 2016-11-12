@@ -6,7 +6,11 @@ from crontab import CronTab
 import datetime as dt
 
 
-def __info_crontable():
+def info_crontable():
+    """
+    Print current user CRON TABLE
+
+    """
     ahora = dt.datetime.now()
     cron = CronTab(user=True)
     print('-*-' * 30)
@@ -99,4 +103,4 @@ def clear_cron_commands(commands, verbose=True):
 
 
 if __name__ == '__main__':
-    __info_crontable()
+    info_crontable()

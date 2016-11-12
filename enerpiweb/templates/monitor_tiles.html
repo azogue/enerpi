@@ -165,18 +165,18 @@
                 <th class="hidden-xs-down">noise</th>
             </tr>
         </thead>
-        <tbody id="table_body_stream">
-        {% for sample in last_samples|reverse %}
-            <tr>
-            <td>{{ sample['ts'].strftime('%H:%M:%S') }}</td>
-            <td style="text-align: left" class="hidden-md-down">{{ sample['msg'] }}</td>
-            <td><strong>{{ sample['power']|int }}</strong></td>
-            <td>{{ (sample['ldr'] * 100)|round(1)}}</td>
-            <td>{{ sample['ref']|int }}</td>
-            <td class="hidden-xs-down">{{ sample['noise'] }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
+{#        <tbody id="table_body_stream">#}
+{#        {% for sample in last_samples|reverse %}#}
+{#            <tr>#}
+{#            <td>{{ sample['ts'].strftime('%H:%M:%S') }}</td>#}
+{#            <td style="text-align: left" class="hidden-md-down">{{ sample['msg'] }}</td>#}
+{#            <td><strong>{{ sample['power']|int }}</strong></td>#}
+{#            <td>{{ (sample['ldr'] * 100)|round(1)}}</td>#}
+{#            <td>{{ sample['ref']|int }}</td>#}
+{#            <td class="hidden-xs-down">{{ sample['noise'] }}</td>#}
+{#            </tr>#}
+{#        {% endfor %}#}
+{#        </tbody>#}
     </table>
 </div>
 {% endmacro %}

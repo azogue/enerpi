@@ -14,11 +14,12 @@ class Daemon:
     Usage: subclass the Daemon class and override the run() method
     """
 
-    def __init__(self, pidfile, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
+    def __init__(self, pidfile, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null', test_mode=False):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
         self.pidfile = pidfile
+        self.test_mode = test_mode
 
     def _get_pid(self):
         """
@@ -40,9 +41,13 @@ class Daemon:
             pid = os.fork()
             if pid > 0:
                 # exit first parent
+                if self.test_mode:
+                    return True
                 sys.exit(0)
         except OSError as e:
             sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
+            if self.test_mode:
+                return False
             sys.exit(1)
 
         # decouple from parent environment
@@ -55,9 +60,13 @@ class Daemon:
             pid = os.fork()
             if pid > 0:
                 # exit from second parent
+                if self.test_mode:
+                    return True
                 sys.exit(0)
         except OSError as e:
             sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
+            if self.test_mode:
+                return False
             sys.exit(1)
 
         # redirect standard file descriptors
@@ -100,6 +109,8 @@ class Daemon:
         if pid:
             message = "pidfile %s already exist. Daemon already running?\n"
             sys.stderr.write(message % self.pidfile)
+            if self.test_mode:
+                return False
             sys.exit(1)
 
         # Start the daemon
@@ -128,6 +139,8 @@ class Daemon:
                 self.delpid()
             else:
                 print('OSError: ', err)
+                if self.test_mode:
+                    return False
                 sys.exit(1)
 
     def status(self):
@@ -144,6 +157,8 @@ class Daemon:
         else:
             message = "pidfile %s does not exist. Daemon not running?\n"
             sys.stderr.write(message % self.pidfile)
+            if self.test_mode:
+                return False
             sys.exit(1)
 
     def restart(self):

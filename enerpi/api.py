@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # noinspection PyUnresolvedReferences
-from enerpi.base import CONFIG, TZ, DATA_PATH, FILE_LOGGING, LOGGING_LEVEL
+from enerpi.base import CONFIG, TZ, DATA_PATH, FILE_LOGGING, LOGGING_LEVEL, log
 # noinspection PyUnresolvedReferences
-from enerpi.database import init_catalog, get_ts_last_save, extract_log_file, HDF_STORE
+from enerpi.database import init_catalog, get_ts_last_save, extract_log_file, delete_log_file, HDF_STORE
 from enerpi.enerpimeter import receiver_msg_generator, msg_to_dict, TS_DATA_MS, RMS_ROLL_WINDOW_SEC, DELTA_SEC_DATA
 
 
-def enerpi_receiver_generator():
+def enerpi_receiver_generator(verbose=False, n_msgs=None):
     """
     Generator of broadcasted values by ENERPI Logger.
 
@@ -14,9 +14,11 @@ def enerpi_receiver_generator():
     returns a dict of vars - values.
     Used by the webserver for read & stream real-time values.
 
+    :param verbose: :bool: Log to stdout
+    :param n_msgs: :int: # of msgs to receive (unlimited by default).
     :return: :dict:
     """
-    gen = receiver_msg_generator(False)
+    gen = receiver_msg_generator(verbose=verbose, n_msgs=n_msgs)
     count = 0
     while True:
         try:
@@ -24,8 +26,9 @@ def enerpi_receiver_generator():
             yield msg_to_dict(msg)
             count += 1
         except StopIteration:
-            print('StopIteration in it {}'.format(count))
-            return None
+            log('EXIT from enerpi_receiver_generator. StopIteration in msg #{}'.format(count), 'error', verbose)
+            break
+    return None
 
 
 def enerpi_default_config():
