@@ -40,22 +40,22 @@ def _get_codec():
 UDP_IP = CONFIG.get('BROADCAST', 'UDP_IP', fallback="192.168.1.255")
 UDP_PORT = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
 DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}".format(UDP_IP, UDP_PORT)
-
 CODEC, SECRET_KEY = _get_codec()
 
 
-def receiver_msg_generator(verbose=True, n_msgs=None):
+def receiver_msg_generator(verbose=True, n_msgs=None, port=UDP_PORT):
     """
     Generador de mensajes en el receptor de la emisión en la broadcast IP. Recibe los mensajes y los desencripta.
     También devuelve los tiempos implicados en la recepción (~ el ∆T entre mensajes) y el proceso de desencriptado.
     :param verbose: :bool: Imprime Broadcast IP & PORT.
     :param n_msgs: :int: # de mensajes a recibir (ilimitados por defecto).
+    :param port: :int: # Puerto de escucha.
     :yield: msg, ∆T_msg, ∆T_decryp
     """
     sock, counter = None, 0
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((UDP_IP, UDP_PORT))
+        sock.bind((UDP_IP, port))
         if verbose:
             log(DESCRIPTION_IO, 'ok', verbose, False)
         while (n_msgs is None) or (counter < n_msgs):
@@ -72,8 +72,8 @@ def receiver_msg_generator(verbose=True, n_msgs=None):
             yield msg, toc_msg - tic, toc_dcry - toc_msg
             counter += 1
         # log('Closing receiver_msg_generator socket...', 'debug', verbose, True)
-    except OSError as e:
-        log('OSError {} en receiver_msg_generator'.format(e), 'error', verbose, True)
+    # except OSError as e:
+    #     log('OSError {} en receiver_msg_generator'.format(e), 'error', verbose, True)
     except KeyboardInterrupt:
         log('KeyboardInterrupt en receiver_msg_generator', 'warn', verbose, True)
     if sock is not None:

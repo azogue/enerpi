@@ -11,6 +11,7 @@ from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalo
                              extract_log_file, delete_log_file, HDF_STORE)
 from enerpi.enerpimeter import (enerpi_logger, receiver, enerpi_raw_data,
                                 DELTA_SEC_DATA, TS_DATA_MS, RMS_ROLL_WINDOW_SEC)
+from enerpi.iobroadcast import UDP_PORT
 
 
 # Config:
@@ -31,6 +32,8 @@ def _enerpi_arguments():
                                description='→  Choose working mode between RECEIVER / SENDER')
     g_m.add_argument('-e', '--enerpi', action='store_true', help='⚡  SET ENERPI LOGGER & BROADCAST MODE')
     g_m.add_argument('-r', '--receive', action='store_true', help='⚡  SET Broadcast Receiver mode (by default)')
+    g_m.add_argument('--port', '--receiver-port', type=int, action='store', default=UDP_PORT, metavar='XX',
+                     help='⚡  SET Broadcast Receiver PORT')
     g_m.add_argument('-d', '--demo', action='store_true', help='☮ SET Demo Mode (broadcast random values)')
     g_m.add_argument('--timeout', action='store', nargs='?', type=int, metavar='∆T', const=60,
                      help='⚡  SET Timeout to finish execution automatically')
@@ -130,8 +133,13 @@ def enerpi_main_cli(test_mode=False):
         # INSTALL / UNINSTALL CRON TASKS & KEY
         cmd_logger = make_cron_command_task_daemon()
         if args.install:
+            # Logging configuration
+            set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, True)
+
             log('** Installing CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'ok', True, False)
             set_command_on_reboot(cmd_logger, verbose=verbose)
+            os.chmod(DATA_PATH, 0o777)
+            [os.chmod(os.path.join(base, f), 0o777) for base, dirs, files in os.walk(DATA_PATH) for f in files + dirs]
         else:
             log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
             clear_cron_commands([cmd_logger], verbose=verbose)
@@ -234,7 +242,7 @@ def enerpi_main_cli(test_mode=False):
     # Receiver
     else:  # elif args.receive:
         log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', verbose, False)
-        receiver(verbose=verbose, timeout=args.timeout)
+        receiver(verbose=verbose, timeout=args.timeout, port=args.port)
     log('Exiting from ENERPI CLI...', 'debug', True)
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing...', 'debug', True)

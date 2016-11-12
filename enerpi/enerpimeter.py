@@ -6,7 +6,7 @@ import os
 import pandas as pd
 from threading import Timer
 from time import sleep, time
-from enerpi.base import (CONFIG, COL_TS, COLS_DATA, show_pi_temperature,
+from enerpi.base import (CONFIG, COL_TS, COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN, show_pi_temperature,
                          set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL)
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE
 from enerpi.pisampler import random_generator, enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
@@ -122,21 +122,20 @@ def _execfunc(func, *args_func, **kwargs_func):
 # Receiver
 def _show_cli_bargraph(d_data, ancho_disp=80, v_max=4000):
     n_resto = 3
-    v_bar = min(d_data['power'], v_max) * ancho_disp / v_max
+    v_bar = min(d_data[COLS_DATA_RMS[0]], v_max) * ancho_disp / v_max
     n_big = int(v_bar)
     n_little = int(round((v_bar - int(v_bar)) / (1 / n_resto)))
     if n_little == n_resto:
         n_little = 0
         n_big += 1
     line = '⚡ {:%H:%M:%S.%f}'.format(d_data[COL_TS])[:-3] + ': '
-    # if 'power' in d_data:
-    line += '\033[1m{:.0f} W\033[1m; '.format(d_data['power'])
-    if 'power_2' in d_data:
-        line += '\033[1m{:.0f} W\033[1m; '.format(d_data['power_2'])
-    if 'power_3' in d_data:
-        line += '\033[1m{:.0f} W\033[1m; '.format(d_data['power_3'])
-    if 'ldr' in d_data:
-        line += '\033[33mLDR={:.3f} \033[32m'.format(d_data['ldr'])
+    line += '\033[1m{:.0f} W\033[1m; '.format(d_data[COLS_DATA_RMS[0]])
+    for c in COLS_DATA_RMS[1:]:
+        if c in d_data:
+            line += '\033[1m{:.0f} W\033[1m; '.format(d_data[c])
+    for c in COLS_DATA_MEAN:
+        if c in d_data:
+            line += '\033[33m{}={:.3f} \033[32m'.format(c.upper(), d_data[c])
     leng_intro = len(line)
     line += '◼︎' * n_big + '⇡︎' * n_little
     log(line, 'debug', True, False)
@@ -152,13 +151,14 @@ def _get_console_cols_size(len_preffix=25):
         return 120 - len_preffix, False
 
 
-def _receiver(verbose=True, timeout=None):
-    gen = receiver_msg_generator(verbose)
+def _receiver(verbose=True, timeout=None, port=None):
+    gen = receiver_msg_generator(verbose=verbose, port=port)
     counter_msgs, last_msg = 0, ''
     leng_intro = len('⚡ 16:10:38.326: 3433 W; LDR=0.481 ︎')
     n_cols_bar, hay_consola = _get_console_cols_size(leng_intro)
     v_max = 3500
     cond_while = True if timeout is None else TimerExiter(timeout)
+    print(COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN)
     while cond_while:
         try:
             msg, delta_msg, delta_decrypt = next(gen)
@@ -166,8 +166,8 @@ def _receiver(verbose=True, timeout=None):
                 counter_msgs += 1
                 d_data = msg_to_dict(msg)
                 try:
-                    if verbose and (v_max < d_data[COLS_DATA[0]]):
-                        v_max = np.ceil(d_data[COLS_DATA[0]] / 500) * 500
+                    if verbose and (v_max < d_data[COLS_DATA_RMS[0]]):
+                        v_max = np.ceil(d_data[COLS_DATA_RMS[0]] / 500) * 500
                         log('Se cambia la escala del CLI_bar_graph a P_MAX={:.0f} W'.format(v_max), tipo='info')
                     if verbose:
                         leng_intro = _show_cli_bargraph(d_data, ancho_disp=n_cols_bar, v_max=v_max)
@@ -181,7 +181,7 @@ def _receiver(verbose=True, timeout=None):
             break
 
 
-def receiver(verbose=True, timeout=None):
+def receiver(verbose=True, timeout=None, port=None):
     """
     Runs ENERPI CLI receiver
 
@@ -195,10 +195,11 @@ def receiver(verbose=True, timeout=None):
     ...
     press CTRL+C to exit
 
-    :param verbose:
-    :param timeout:
+    :param verbose: :bool: Prints broadcast IP & PORT.
+    :param timeout: :int: (Optional) # of seconds receiving msgs
+    :param port: :int: (Optional) set broadcast PORT
     """
-    _execfunc(_receiver, verbose=verbose, timeout=timeout)
+    _execfunc(_receiver, verbose=verbose, timeout=timeout, port=port)
 
 
 # ENERPI logger
