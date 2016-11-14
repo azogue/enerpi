@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 from enerpi.hdftscat import HDFTimeSeriesCatalog
-from enerpi.base import COLS_DATA
+from enerpi.base import SENSORS
 
 
 '''
@@ -22,48 +22,65 @@ from enerpi.base import COLS_DATA
 '''
 
 DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL = 120  # pd.Timedelta('2min')
-COL_POWER = COLS_DATA[0]
-COL_REF = COLS_DATA[-2]
 # TODO Terminar Doc
 
 
 def _compress_data(data):
+    """
+    Down-casting of raw data to minimize disk usage.
+
+    RMS sensor data is reduced to float32
+    MEAN sensor data take integer values from 0 to 1000 (int16)
+    Ref counters of rms & mean sensors also take integer values (int16)
+    :param data: :pd.DataFrame: raw data
+    :return: :pd.DataFrame: compressed raw data
+    """
     if data is not None:
         if not data.empty:
             data = data.copy().astype('float32')
-            data[COL_REF] = data[COL_REF].astype('int16')
-            data['ldr'] = pd.Series(1000. * data['ldr']).round().astype('int16')
+            data[SENSORS.ref_rms] = data[SENSORS.ref_rms].astype('int16')
+            for c in SENSORS.columns_sensors_mean:
+                data[c] = pd.Series(1000. * data[c]).round().astype('int16')
     return data
 
 
-def process_data(data, append_consumo=False):
+def _process_data(data, append_summary=False):
+    """
+    Calculate consumption and some stats of enerpi data...
+
+    :param data: :pd.DataFrame: archived data
+    :param append_summary: :bool: process summary of data and returns tuple of processed & summary dataframes
+    :return:
+    """
     consumo = None
-    if data is not None and not data.empty and (append_consumo or ('high_delta' not in data.columns)):
+    if data is not None and not data.empty and (append_summary or ('high_delta' not in data.columns)):
         data = data.copy()
-        data['delta'] = pd.Series(data.index).diff().fillna(method='bfill').dt.total_seconds().values
-        data['high_delta'] = False
-        data['execution'] = False
-        data.loc[data['delta'] > 3, 'high_delta'] = True
-        data.loc[data['delta'] > 60, 'execution'] = True
-        data.loc[data['delta'] > DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL, 'delta'] = DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL
-        data['Wh'] = data[COL_POWER] * data.delta / 3600
-        if append_consumo:
-            resampler = data[[COL_POWER, 'Wh', 'delta', 'high_delta', 'execution']].resample('1h', label='left')
-            consumo = pd.DataFrame(resampler['Wh'].sum().rename('kWh')).fillna(0.).astype('float32')
+        cols_rs = [SENSORS.main_column, 'Wh', 'delta', 'high_delta', 'execution']
+        data[cols_rs[2]] = pd.Series(data.index).diff().fillna(method='bfill').dt.total_seconds().values
+        data[cols_rs[3]] = False
+        data[cols_rs[4]] = False
+        data.loc[data[cols_rs[2]] > 3, cols_rs[3]] = True
+        data.loc[data[cols_rs[2]] > 60, cols_rs[4]] = True
+        data.loc[data[cols_rs[2]] > DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL,
+                 cols_rs[2]] = DELTA_MAX_CALC_CONSUMO_SAMPLE_BFILL
+        data[cols_rs[1]] = data[SENSORS.main_column] * data.delta / 3600
+        if append_summary:
+            resampler = data[cols_rs].resample('1h', label='left')
+            consumo = pd.DataFrame(resampler[cols_rs[1]].sum().rename('kWh')).fillna(0.).astype('float32')
             consumo /= 1000.
-            consumo['t_ref'] = pd.Series(resampler['delta'].sum() / 3600).astype('float32')
-            consumo['n_jump'] = resampler['high_delta'].sum().fillna(0).astype('int16')
-            consumo['n_exec'] = resampler['execution'].sum().fillna(0).astype('int32')
-            consumo['p_max'] = resampler[COL_POWER].max().round(0).astype('float16')
-            consumo['p_mean'] = resampler[COL_POWER].mean().round(0).astype('float16')
-            consumo['p_min'] = resampler[COL_POWER].min().round(0).astype('float16')
-        data['high_delta'] = data['high_delta'].astype(bool)
-        data['execution'] = data['execution'].astype(bool)
-        data.drop(['delta', 'Wh'], axis=1, inplace=True)
-        if append_consumo:
+            consumo['t_ref'] = pd.Series(resampler[cols_rs[2]].sum() / 3600).astype('float32')
+            consumo['n_jump'] = resampler[cols_rs[3]].sum().fillna(0).astype('int16')
+            consumo['n_exec'] = resampler[cols_rs[4]].sum().fillna(0).astype('int32')
+            consumo['p_max'] = resampler[SENSORS.main_column].max().round(0).astype('float16')
+            consumo['p_mean'] = resampler[SENSORS.main_column].mean().round(0).astype('float16')
+            consumo['p_min'] = resampler[SENSORS.main_column].min().round(0).astype('float16')
+        data[cols_rs[3]] = data[cols_rs[3]].astype(bool)
+        data[cols_rs[4]] = data[cols_rs[4]].astype(bool)
+        data.drop([cols_rs[2], cols_rs[1]], axis=1, inplace=True)
+        if append_summary:
             return data, consumo
         return data
-    elif append_consumo:
+    elif append_summary:
         return data, None
     return data
 
@@ -80,13 +97,13 @@ class EnerpiCatalog(HDFTimeSeriesCatalog):
     def process_data(data, is_raw=True):
         if is_raw:
             data = _compress_data(data)
-        return process_data(data, append_consumo=False)
+        return _process_data(data, append_summary=False)
 
     @staticmethod
     def process_data_summary(data):
-        return process_data(data, append_consumo=True)
+        return _process_data(data, append_summary=True)
 
     @staticmethod
     def process_data_summary_extra(data):
-        data, consumo = process_data(data, append_consumo=True)
+        data, consumo = _process_data(data, append_summary=True)
         return data, consumo, None

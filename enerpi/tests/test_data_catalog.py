@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from enerpi.base import BASE_PATH, COLS_DATA_RMS
+from enerpi.base import BASE_PATH, SENSORS
 from enerpi.api import enerpi_data_catalog
 import enerpi.prettyprinting as pp
 
@@ -168,15 +168,15 @@ class TestUpdateCatalog(TestCase):
         d1_none, d1_s_none = self.cat.get(start='2010-01-01', end='2010-03-01', with_summary=True)
         assert d1_none is None
         assert d1_s_none is None
-        d2_none = self.cat.get(start=None, end=None, last_hours=10, column=COLS_DATA_RMS[0], with_summary=False)
-        d3_none = self.cat.get(start=None, end=None, last_hours=10, column=COLS_DATA_RMS[0], with_summary=True)
+        d2_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=False)
+        d3_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=True)
         assert d2_none is None
         assert d3_none is None
-        d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=COLS_DATA_RMS[0], with_summary=True)
+        d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=SENSORS.main_column, with_summary=True)
         assert not d4.empty
         assert d4_s.shape[0] == 48
 
-        d5 = self.cat.get(start='2016-10-01', end='2016-09-02', column=COLS_DATA_RMS[0])
+        d5 = self.cat.get(start='2016-10-01', end='2016-09-02', column=SENSORS.main_column)
         print(d5)
         assert d5 is None
 

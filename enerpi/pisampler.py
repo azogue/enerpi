@@ -7,23 +7,11 @@ import random
 import re
 from subprocess import check_output
 from time import sleep, time
-from enerpi.base import CONFIG, TZ, log, ANALOG_SENSORS, COL_TS, COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN, FMT_TS
+from enerpi.base import SENSORS, log
 
-# Current meter
-# Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
-VOLTAJE = CONFIG.getint('ENERPI_SAMPLER', 'VOLTAJE', fallback=236)
-# 30 A para 1 V --> Pinza amperométrica SCT030-030
-A_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'A_REF', fallback=30.)
-# V, V_ref RPI GPIO
-V_REF = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
-# ∆T en segundos entre envíos de información (yielding)
-DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
 
-RMS_ROLL_WINDOW_SEC = 2  # ∆T para el deque donde se acumulan frames
-N_SAMPLES_BUFFER = 250  # Nº de samples tenidos en cuenta para calcular el RMS instantáneo
+# TODO Change MEAN SENSORS FOR **MEDIAN** SENSORS!
 PREC_SAMPLING = dt.timedelta(microseconds=500)
-MEASURE_LDR_DIVISOR = CONFIG.getint('ENERPI_SAMPLER', 'MEASURE_LDR_DIVISOR', fallback=10)
-
 HOST = check_output('hostname').decode().splitlines()[0]
 
 
@@ -98,13 +86,17 @@ def tuple_to_dict_json(data_tuple):
     :param data_tuple: :tuple: sampling values
     :return: :str: JSON message
     """
-    d_data = dict(zip([COL_TS] + COLS_DATA, data_tuple))
+    d_data = dict(zip(SENSORS.columns_sampling, data_tuple))
     d_data['host'] = HOST
-    d_data[COL_TS] = d_data[COL_TS].strftime(FMT_TS)
-    for c in filter(lambda x: x in d_data, COLS_DATA_RMS):
+    d_data[SENSORS.ts_column] = d_data[SENSORS.ts_column].strftime(SENSORS.ts_fmt)
+
+    cols_rms, cols_mean, cols_ref = SENSORS.included_columns_sampling(d_data)
+    for c in cols_rms:
         d_data[c] = int(round(d_data[c]))
-    for c in filter(lambda x: x in d_data, COLS_DATA_MEAN):
+    for c in cols_mean:
         d_data[c] = round(d_data[c], 4)
+    for c in cols_ref:
+        d_data[c] = int(d_data[c])
     js = json.dumps(d_data)
     return js
 
@@ -123,16 +115,16 @@ def msg_to_dict(msg):
         rg_msg_mask = re.compile('^(?P<host>.*) __ (?P<ts>.*) __ (?P<power>.*) W __ Noise: (?P<noise>.*) W __ '
                                  'REF: (?P<ref>.*) __ LDR: (?P<ldr>.*)')
         d_data = rg_msg_mask.search(msg).groupdict()
-        for k in filter(lambda x: x in d_data, COLS_DATA):
+        for k in filter(lambda x: x in d_data, SENSORS.columns_sensors_rms + SENSORS.columns_sensors_mean):
             d_data[k] = float(d_data[k])
-    d_data[COL_TS] = TZ.localize(dt.datetime.strptime(d_data[COL_TS], FMT_TS))
+    d_data[SENSORS.ts_column] = SENSORS.TZ.localize(dt.datetime.strptime(d_data[SENSORS.ts_column], SENSORS.ts_fmt))
     d_data['msg'] = msg
     return d_data
 
 
 def random_generator():
     """Random data generator of sampling values for DEMO mode."""
-    p_min, p_max = 180, VOLTAJE * 15
+    p_min, p_max = 180, 240 * 15
     count = 0
     while count < 50:
         p = random.randint(p_min, p_max)
@@ -147,22 +139,24 @@ def _close_analog_sensor(sensor):
         sensor.close()
 
 
-def _sampler(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, min_ts_ms=0,
-             delta_secs_raw_capture=None, verbose=False):
+def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSORS.delta_sec_data,
+             min_ts_ms=SENSORS.ts_data_ms, delta_secs_raw_capture=None,
+             measure_ldr_divisor=SENSORS.measure_ldr_divisor, verbose=False):
     delta_sampling_calc = dt.timedelta(seconds=delta_sampling)
     con_pausa = min_ts_ms > 0
     buffers, normal_exit = [], True
-    assert(len(ANALOG_SENSORS) > 0)
+    assert(len(SENSORS) > 0)
     n_samples_buffer_rms = n_samples_buffer
-    n_samples_buffer_normal = n_samples_buffer // MEASURE_LDR_DIVISOR
+    n_samples_buffer_normal = n_samples_buffer // measure_ldr_divisor
     try:
-        buffers = [AnalogSensorBuffer(MCP3008(channel=ch), bias,
-                                      n_samples_buffer_rms if is_rms else n_samples_buffer_normal, rms_sensor=is_rms)
-                   for ch, bias, is_rms, _ in ANALOG_SENSORS]
+        buffers = [AnalogSensorBuffer(MCP3008(channel=s.channel), s.bias,
+                                      n_samples_buffer_rms if s.is_rms else n_samples_buffer_normal,
+                                      rms_sensor=s.is_rms) for s in SENSORS]
+
         software_spi_mode = buffers[0].software_spi
         log('ENERPI ANALOG SENSING WITH MCP3008 - (channel={}, raw_value={}); '
             'Active:{}, Software SPI:{}, #buffer_rms:{}, #buffer:{}'
-            .format(ANALOG_SENSORS[0][0], buffers[0].read(), buffers[0].is_active, software_spi_mode,
+            .format(SENSORS[0].channel, buffers[0].read(), buffers[0].is_active, software_spi_mode,
                     n_samples_buffer_rms, n_samples_buffer_normal), 'debug', verbose)
         if software_spi_mode:
             log('SOFTWARE_SPI --> No hardware/driver present, so is going to be slower...', 'warn', verbose)
@@ -195,7 +189,7 @@ def _sampler(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, m
             while True:
                 counter_buffer_rms += 1
                 counter_frames += 1
-                process_all_sensors = counter_buffer_rms % MEASURE_LDR_DIVISOR == 0
+                process_all_sensors = counter_buffer_rms % measure_ldr_divisor == 0
 
                 # Read instant values:
                 [b.append(b.read()) for b in buffers if process_all_sensors or b.is_rms]
@@ -210,7 +204,7 @@ def _sampler(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, m
                 ts = dt.datetime.now()
                 if ts - stop > delta_sampling_calc - PREC_SAMPLING:
                     stop = ts
-                    power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * VOLTAJE * A_REF * V_REF
+                    power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * SENSORS.rms_multiplier
                     other_values = cumsum_sensors_normal / counter_buffer_normal
 
                     yield (ts, *power_rms_values, *other_values, counter_buffer_rms, counter_buffer_normal)
@@ -242,7 +236,8 @@ def _sampler(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, m
         raise KeyboardInterrupt
 
 
-def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_SEC_DATA, min_ts_ms=0, verbose=False):
+def enerpi_sampler_rms(n_samples_buffer=SENSORS.n_samples_buffer_rms,
+                       delta_sampling=SENSORS.delta_sec_data, min_ts_ms=SENSORS.ts_data_ms, verbose=False):
     """
     Generador de valores RMS de las conexiones analógicas vía MCP3008.
         - Esta función realiza el sampling de alta frecuencia y va calculando los valores RMS con un buffer (como una
@@ -264,7 +259,7 @@ def enerpi_sampler_rms(n_samples_buffer=N_SAMPLES_BUFFER, delta_sampling=DELTA_S
                     delta_sampling=delta_sampling, min_ts_ms=min_ts_ms, verbose=verbose)
 
 
-def enerpi_raw_sampler(delta_secs=20, n_samples_buffer=N_SAMPLES_BUFFER, min_ts_ms=0,
+def enerpi_raw_sampler(delta_secs=20, n_samples_buffer=SENSORS.n_samples_buffer_rms, min_ts_ms=0,
                        verbose=True):
     """
     Generador de valores en bruto de las conexiones analógicas vía MCP3008 (sampling de alta frecuencia)

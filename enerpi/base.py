@@ -6,6 +6,7 @@ import os
 import pytz
 import shutil
 import subprocess
+import sys
 from time import time, sleep
 from enerpi import BASE_PATH, PRETTY_NAME
 
@@ -25,6 +26,295 @@ except ImportError:
     get_cpu_temp = get_gpu_temp = None
     logging.debug('* No se encuentra el módulo "pitemps" para medir las Tªs de la RPI')
     HAY_TEMPS = False
+
+
+class EnerpiAnalogSensor(object):
+    """
+    Object for centralize access to sensor properties, as description, color, units, etc.
+
+    """
+    def __init__(self, column_name, description='', channel=0, channel_name='CH_PROBE',
+                 is_rms=True, color='0CBB43', bias=0):
+        self.name = column_name
+        self.description = description
+        self.channel = channel
+        self.channel_name = channel_name
+        self.is_rms = is_rms
+        self.unit = 'W' if is_rms else '%'
+        self.color = '#{}'.format(color)
+        self.bias = bias
+
+    def __repr__(self):
+        return 'ANALOG_S: {} ({}{}, ch={}, unit={})'.format(self.name, 'RMS, ' if self.is_rms else '',
+                                                            self.description, self.channel, self.unit)
+
+
+class EnerpiSamplerConf(object):
+    """
+    Object for easy access to data properties, as # of columns, column names, descriptions and units, type of sensors,
+    color for plotting, summary info & columns, etc...
+
+    """
+    def __init__(self, configparser_obj):
+        # Read config INI file
+        self._fmt_ts = configparser_obj.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
+        self._col_ts = configparser_obj.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
+        self._ref_column_rms = 'ref'
+        self._ref_column_mean = 'ref_n'
+
+        # Voltage divisor for sct030 probes:
+        mcp3008_dac_prec = 10  # bits
+        niveles = 2 ** mcp3008_dac_prec - 1
+        bias_current = -(niveles // 2) / niveles
+
+        # Get columns
+        cols_data_rms = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_RMS', fallback='power').split(', ')
+        cols_data_mean = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_MEAN', fallback='noise, ldr').split(', ')
+
+        # Get descriptions
+        descr_data_rms = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_RMS', fallback='power').split(', ')
+        descr_data_mean = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_MEAN', fallback='noise, ldr').split(', ')
+
+        # Get colors
+        colors_data_rms = configparser_obj.get('ENERPI_SAMPLER', 'COLORS_DATA_RMS', fallback='power').split(', ')
+        colors_data_mean = configparser_obj.get('ENERPI_SAMPLER', 'COLORS_DATA_MEAN', fallback='noise, ldr').split(', ')
+        # Get channel probes
+        names_channels = list(configparser_obj['MCP3008'].keys())
+        channels = [configparser_obj.getint('MCP3008', ch_name, fallback=i) for i, ch_name in enumerate(names_channels)]
+
+        self._sensors_rms = [EnerpiAnalogSensor(name, desc, ch, ch_n, True, color, bias_current)
+                             for name, desc, color, ch, ch_n in zip(cols_data_rms, descr_data_rms, colors_data_rms,
+                                                                    channels[:len(cols_data_rms)],
+                                                                    names_channels[:len(cols_data_rms)])]
+        self._sensors_mean = [EnerpiAnalogSensor(name, desc, ch, ch_n, False, color)
+                              for name, desc, color, ch, ch_n in zip(cols_data_mean, descr_data_mean, colors_data_mean,
+                                                                     channels[len(cols_data_rms):],
+                                                                     names_channels[len(cols_data_rms):])]
+        # PiSampler parameters:
+        # Current meter
+        # Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
+        voltaje = CONFIG.getint('ENERPI_SAMPLER', 'VOLTAJE', fallback=236)
+        # 30 A para 1 V --> Pinza amperométrica SCT030-030
+        a_ref = CONFIG.getfloat('ENERPI_SAMPLER', 'A_REF', fallback=30.)
+        # V, V_ref RPI GPIO
+        v_ref = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
+        self.voltaje = voltaje
+        self.rms_multiplier = self.voltaje * a_ref * v_ref
+
+        # Sampling:
+        self.ts_data_ms = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
+        # ∆T para el deque donde se acumulan frames
+        self.rms_roll_window_sec = CONFIG.getfloat('ENERPI_SAMPLER', 'RMS_ROLL_WINDOW_SEC', fallback=2.)
+        s_calc = self.ts_data_ms if self.ts_data_ms > 0 else 8
+        self.n_samples_buffer_rms = int(round(self.rms_roll_window_sec * 1000 / s_calc))
+
+        self.delta_sec_data = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
+        self.measure_ldr_divisor = CONFIG.getint('ENERPI_SAMPLER', 'MEASURE_LDR_DIVISOR', fallback=10)
+        self.n_samples_buffer_mean = self.n_samples_buffer_rms // self.measure_ldr_divisor
+        self.TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
+
+    def __repr__(self):
+        repr_str = 'ENERPI SAMPLER SENSORS:\n * '
+        repr_str += '\n * '.join([str(s) for s in self])
+        repr_str += ('\n --SAMPLING: V={} V; ∆T={} s; sampling={} ms, N={}, {}(/{})'
+                     .format(self.voltaje, self.delta_sec_data, self.ts_data_ms,
+                             self.n_samples_buffer_rms, self.n_samples_buffer_mean, self.measure_ldr_divisor))
+        return repr_str
+
+    def __len__(self):
+        return len(self._sensors_rms) + len(self._sensors_mean)
+
+    def __getitem__(self, key):
+        if type(key) is int:
+            if key >= len(self._sensors_rms):
+                try:
+                    return self._sensors_mean[key - len(self._sensors_rms)]
+                except IndexError:
+                    raise KeyError('Sensor #{} not present (available sensors: {})'
+                                   .format(key, self.columns_sensors[1:]))
+            return self._sensors_rms[key]
+        else:
+            assert type(key) is str
+            try:
+                int_key = self.columns_sensors.index(key) - 1
+                return self.__getitem__(int_key)
+            except ValueError:
+                raise KeyError("Sensor '{}' not present (available sensors: {})".format(key, self.columns_sensors[1:]))
+
+    def __iter__(self):
+        for x in self._sensors_rms + self._sensors_mean:
+            yield x
+
+    @property
+    def main_column(self):
+        """
+        First (& principal) RMS sensor (Main power)
+
+        :return: :str: name of main column
+        """
+        return self._sensors_rms[0].name
+
+    @property
+    def ts_column(self):
+        """
+        Name of time-series index
+
+        :return: :str: name of time-series index column
+        """
+        return self._col_ts
+
+    @property
+    def ts_fmt(self):
+        """
+        String formatting of timestamps:
+
+        :return: :str: fmt
+        """
+        return self._fmt_ts
+
+    @property
+    def ref_rms(self):
+        """
+        Name of column with # of samples of RMS values
+
+        :return: :str: column name
+        """
+        return self._ref_column_rms
+
+    @property
+    def ref_mean(self):
+        """
+        Name of column with # of samples of MEAN values
+
+        :return: :str: column name
+        """
+        return self._ref_column_mean
+
+    @property
+    def n_cols_sensors(self):
+        """
+        # of columns: index column (TS) + RMS sensors + MEAN sensors
+
+        :return: :int: # of columns
+        """
+        return len(self) + 1
+
+    @property
+    def n_cols_sampling(self):
+        """
+        # of columns: index column (TS) + RMS sensors + MEAN sensors + ref_RMS + ref_MEAN
+
+        :return: :int: # of columns
+        """
+        return len(self) + 3
+
+    @property
+    def columns_sensors(self):
+        """
+        List of columns names of sensors (+ts): index column (TS) + RMS sensors + MEAN sensors
+
+        :return: :list:
+        """
+        return [self.ts_column] + [s.name for s in self._sensors_rms + self._sensors_mean]
+
+    @property
+    def columns_sensors_rms(self):
+        """
+        List of columns names of RMS sensors
+
+        :return: :list:
+        """
+        return [s.name for s in self._sensors_rms]
+
+    @property
+    def columns_sensors_mean(self):
+        """
+        List of columns names of MEAN sensors
+
+        :return: :list:
+        """
+        return [s.name for s in self._sensors_mean]
+
+    @property
+    def columns_sampling(self):
+        """
+        List of columns names of sampling data index column (TS) + RMS sensors + MEAN sensors + REF_RMS + REF_MEAN
+
+        :return: :list:
+        """
+        return self.columns_sensors + [self.ref_rms, self.ref_mean]
+
+    def included_columns_sensors(self, dict_sample):
+        """
+        Return RMS & MEAN columns included in dict sample
+
+        :return: :tuple: tuple with 2 lists (rms & mean included columns)
+
+        """
+        cols_rms = [s.name for s in self._sensors_rms if s.name in dict_sample]
+        cols_mean = [s.name for s in self._sensors_mean if s.name in dict_sample]
+        return cols_rms, cols_mean
+
+    def included_columns_sampling(self, dict_sample):
+        """
+        Return RMS & MEAN columns (or ref_RMS and ref_MEAN) included in sampling data dict
+
+        :return: :tuple: tuple with 3 lists (rms, mean & ref included columns)
+
+        """
+        cols_rms, cols_mean = self.included_columns_sensors(dict_sample)
+        cols_ref = [c for c in [self._ref_column_rms, self._ref_column_mean] if c in dict_sample]
+        return cols_rms, cols_mean, cols_ref
+
+    def descriptions(self, columns, return_list=True):
+        """
+        Return column descriptions (as list or as dict c:desc)
+        :param columns: list of columns
+        :param return_list: :bool: False for dict return
+        :return: :list: or :dict:
+        """
+        def _get_desc(key):
+            try:
+                return self[key].description
+            except KeyError as e:
+                if key == self.ts_column:
+                    return 'TS'
+                elif key == self.ref_rms:
+                    return '# samples'
+                elif key == self.ref_mean:
+                    return '# samples_n'
+                else:
+                    raise KeyError(e)
+
+        if return_list:
+            return [_get_desc(c) for c in columns]
+        else:
+            return {c: _get_desc(c) for c in columns}
+
+    def other(self, columns, return_list=True):
+        """
+        Return column descriptions (as list or as dict c:desc)
+        :param columns: list of columns
+        :param return_list: :bool: False for dict return
+        :return: :list: or :dict:
+        """
+        def _get_desc(key):
+            try:
+                return self[key].description
+            except KeyError as e:
+                if key == self.ts_column:
+                    return 'TS'
+                elif key == self.ref_rms:
+                    return '# samples'
+                elif key == self.ref_mean:
+                    return '# samples_n'
+                else:
+                    raise KeyError(e)
+
+        if return_list:
+            return [_get_desc(c) for c in columns]
+        else:
+            return {c: _get_desc(c) for c in columns}
 
 
 def _funcs_tipo_output(tipo_log):
@@ -68,9 +358,15 @@ def log(msg, tipo, verbose=True, log_msg=True):
 
 def set_logging_conf(filename, level='DEBUG', verbose=True, with_initial_log=True):
     """Logging configuration"""
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
-                        format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
+    try:
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
+                            format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
+    except PermissionError as e:
+        log('PermissionError: {}'.format(e), 'error', True, False)
+        # sudo chmod 777 ~/ENERPIDATA/enerpi.log
+        # TODO Notify error
+        sys.exit(2)
     if with_initial_log:
         log(PRETTY_NAME, 'ok', verbose)
 
@@ -158,7 +454,13 @@ def check_resource_files(dest_path, origin_path=None):
     if not os.path.exists(dest_path):
         if origin_path is None:
             log('-> Making paths to "{}"'.format(dest_path), 'info', True, True)
-            os.makedirs(dest_path, exist_ok=True)
+            try:
+                os.makedirs(dest_path, exist_ok=True)
+            except PermissionError as e:
+                log('PermissionError: {}'.format(e), 'error', True, False)
+                # sudo chmod 777 ~/ENERPIDATA/enerpi.log
+                # TODO Notify error
+                sys.exit(2)
         else:
             origin_path = os.path.abspath(origin_path)
             if os.path.isfile(origin_path):
@@ -169,6 +471,8 @@ def check_resource_files(dest_path, origin_path=None):
                 shutil.copytree(origin_path, dest_path)
         log('** check_resource_files OK', 'debug', True, True)
         return False
+    elif oct(os.stat(dest_path).st_mode)[-3:] != '777':
+        os.chmod(dest_path, 0o777)
     return True
 
 
@@ -180,7 +484,7 @@ def _get_config():
     2) Tries to load 'config_enerpi.ini' from DATA_PATH, as user custom config.
     3) If not present, generates it copying the default configuration.
 
-    :return: configparser loaded object
+    :return: :configparser: loaded object
     """
 
     # Load DATA_PATH:
@@ -222,39 +526,8 @@ almacenando la ruta absoluta a la instalación de ENERPI
     return data_path, configp
 
 
-def _get_analog_sensors_and_msg_masks():
-    # Conexiones analógicas vía MCP3008
-    mcp3008_dac_prec = 10  # bits
-    niveles = 2 ** mcp3008_dac_prec - 1
-    bias_current = -(niveles // 2) / niveles
-
-    cols_data_rms = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA_RMS', fallback='power').split(', ')
-    cols_data_mean = CONFIG.get('ENERPI_SAMPLER', 'COLS_DATA_MEAN', fallback='noise, ldr').split(', ')
-
-    ch_probe = CONFIG.getint('MCP3008', 'CH_PROBE', fallback=4)
-    ch_probe_2 = CONFIG.getint('MCP3008', 'CH_PROBE_2', fallback=-1)
-    ch_probe_3 = CONFIG.getint('MCP3008', 'CH_PROBE_3', fallback=-1)
-    ch_noise = CONFIG.getint('MCP3008', 'CH_NOISE', fallback=3)
-    ch_ldr = CONFIG.getint('MCP3008', 'CH_LDR', fallback=7)
-    analog_sensors = [(ch, bias_current, True, name)
-                      for ch, name in zip([ch_probe, ch_probe_2, ch_probe_3], cols_data_rms) if ch >= 0]
-    cols_data_rms = list(list(zip(*analog_sensors))[3])
-    analog_sensors_no_rms = [(ch, 0, False, name) for ch, name in zip([ch_noise, ch_ldr], cols_data_mean) if ch >= 0]
-    cols_data_mean = list(list(zip(*analog_sensors_no_rms))[3])
-    analog_sensors += analog_sensors_no_rms
-
-    # Nombres de columna en pd.DataFrames y formato de fecha
-    col_ts = CONFIG.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
-    fmt_ts = CONFIG.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
-    # cols_data = list(list(zip(*analog_sensors))[3]) + ['ref', 'ref_n']
-    cols_data = cols_data_rms + cols_data_mean + ['ref', 'ref_n']
-
-    return analog_sensors, col_ts, cols_data, cols_data_rms, cols_data_mean, fmt_ts
-
-
 # Loads configuration
 DATA_PATH, CONFIG = _get_config()
-TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
 FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
 LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 
@@ -263,4 +536,4 @@ CUSTOM_LOCALE = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*
 locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
 
 # ANALOG SENSORS WITH MCP3008 (Rasp.io Analog Zero)
-ANALOG_SENSORS, COL_TS, COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN, FMT_TS = _get_analog_sensors_and_msg_masks()
+SENSORS = EnerpiSamplerConf(CONFIG)

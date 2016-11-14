@@ -6,8 +6,7 @@ import os
 import pandas as pd
 from threading import Timer
 from time import sleep, time
-from enerpi.base import (CONFIG, COL_TS, COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN, show_pi_temperature,
-                         set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL)
+from enerpi.base import CONFIG, SENSORS, show_pi_temperature, set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE
 from enerpi.pisampler import random_generator, enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
 from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
@@ -21,7 +20,6 @@ TS_DATA_MS = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
 RMS_ROLL_WINDOW_SEC = CONFIG.getfloat('ENERPI_SAMPLER', 'RMS_ROLL_WINDOW_SEC', fallback=2.)
 DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=2)
 INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT')
-N_COLS_SAMPLER = len(COLS_DATA + [COL_TS])  # Columnas de datos + columna de marca de tiempo
 
 # Disk data store
 N_SAMPLES_BUFFER_DISK = CONFIG.getint('ENERPI_DATA', 'TS_DATA_MS', fallback=60)
@@ -52,8 +50,13 @@ class TimerExiter(object):
         self.timeout = timeout
         self.tic = time()
 
-    def __nonzero__(self):
+    def __bool__(self):
         return time() - self.tic < self.timeout
+
+    __nonzero__ = __bool__
+
+    def __repr__(self):
+        return '{:.6f}'.format(time() - self.tic)
 
 
 def _interp_colors(c1, c2, ini_v, fin_v, value):
@@ -122,20 +125,18 @@ def _execfunc(func, *args_func, **kwargs_func):
 # Receiver
 def _show_cli_bargraph(d_data, ancho_disp=80, v_max=4000):
     n_resto = 3
-    v_bar = min(d_data[COLS_DATA_RMS[0]], v_max) * ancho_disp / v_max
+    v_bar = min(d_data[SENSORS.main_column], v_max) * ancho_disp / v_max
     n_big = int(v_bar)
     n_little = int(round((v_bar - int(v_bar)) / (1 / n_resto)))
     if n_little == n_resto:
         n_little = 0
         n_big += 1
-    line = '⚡ {:%H:%M:%S.%f}'.format(d_data[COL_TS])[:-3] + ': '
-    line += '\033[1m{:.0f} W\033[1m; '.format(d_data[COLS_DATA_RMS[0]])
-    for c in COLS_DATA_RMS[1:]:
-        if c in d_data:
-            line += '\033[1m{:.0f} W\033[1m; '.format(d_data[c])
-    for c in COLS_DATA_MEAN:
-        if c in d_data:
-            line += '\033[33m{}={:.3f} \033[32m'.format(c.upper(), d_data[c])
+    line = '⚡ {:%H:%M:%S.%f}'.format(d_data[SENSORS.ts_column])[:-3] + ': '
+    cols_rms, cols_mean, cols_ref = SENSORS.included_columns_sampling(d_data)
+    for c in cols_rms:
+        line += '\033[1m{:.0f} W\033[1m; '.format(d_data[c])
+    for c in cols_mean:
+        line += '\033[33m{}={:.3f} \033[32m'.format(c, d_data[c])
     leng_intro = len(line)
     line += '◼︎' * n_big + '⇡︎' * n_little
     log(line, 'debug', True, False)
@@ -158,7 +159,6 @@ def _receiver(verbose=True, timeout=None, port=None):
     n_cols_bar, hay_consola = _get_console_cols_size(leng_intro)
     v_max = 3500
     cond_while = True if timeout is None else TimerExiter(timeout)
-    print(COLS_DATA, COLS_DATA_RMS, COLS_DATA_MEAN)
     while cond_while:
         try:
             msg, delta_msg, delta_decrypt = next(gen)
@@ -166,8 +166,8 @@ def _receiver(verbose=True, timeout=None, port=None):
                 counter_msgs += 1
                 d_data = msg_to_dict(msg)
                 try:
-                    if verbose and (v_max < d_data[COLS_DATA_RMS[0]]):
-                        v_max = np.ceil(d_data[COLS_DATA_RMS[0]] / 500) * 500
+                    if verbose and (v_max < d_data[SENSORS.main_column]):
+                        v_max = np.ceil(d_data[SENSORS.main_column] / 500) * 500
                         log('Se cambia la escala del CLI_bar_graph a P_MAX={:.0f} W'.format(v_max), tipo='info')
                     if verbose:
                         leng_intro = _show_cli_bargraph(d_data, ancho_disp=n_cols_bar, v_max=v_max)
@@ -220,9 +220,9 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
     sock_send, counter_unreachable = None, np.array([0, 0])
     catalog = init_catalog(raw_file=path_st, check_integrity=True, archive_existent=True)
 
-    l_ini = [np.nan] * N_COLS_SAMPLER
+    l_ini = [np.nan] * SENSORS.n_cols_sampling
     l_ini[0] = dt.datetime.now()
-    buffer_disk = np.array(l_ini * N_SAMPLES_BUFFER_DISK).reshape(N_SAMPLES_BUFFER_DISK, N_COLS_SAMPLER)
+    buffer_disk = np.array(l_ini * N_SAMPLES_BUFFER_DISK).reshape(N_SAMPLES_BUFFER_DISK, SENSORS.n_cols_sampling)
     tic_abs = time()
 
     cond_while = True if timeout is None else TimerExiter(timeout)
@@ -234,7 +234,7 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
             if data is None:
                 raise KeyboardInterrupt
             # elif verbose:
-            #     print('Sampled: ', dict(zip([COL_TS] + COLS_DATA, data)), data)
+            #     print('Sampled: ', dict(zip(SENSORS.columns, data)), data)
 
             # Broadcast mensaje
             sock_send = broadcast_msg(tuple_to_dict_json(data), counter_unreachable,

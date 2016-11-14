@@ -53,6 +53,7 @@ class TestCron(TestCase):
 
         """
         def _exec_cli_w_args(args):
+            # noinspection PyUnresolvedReferences
             with patch.object(sys, 'argv', args):
                 print('TESTING CLI with sys.argv: {}'.format(sys.argv))
                 enerpi_main_cli(test_mode=True)
@@ -60,7 +61,6 @@ class TestCron(TestCase):
         print('ENERPI CLI Install & Uninstall CRON daemon: "{}"'.format(self.cmd_daemon))
         _exec_cli_w_args(['test_cli', '--install'])
         _exec_cli_w_args(['test_cli', '--uninstall'])
-
 
     def test_install_daemon(self):
         """

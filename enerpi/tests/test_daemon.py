@@ -11,6 +11,7 @@ def test_daemon():
 
     """
     def _exec_cli_w_args(args):
+        # noinspection PyUnresolvedReferences
         with patch.object(sys, 'argv', args):
             pp.print_secc('TESTING CLI with sys.argv: {}'.format(sys.argv))
             enerpi_daemon(test_mode=True)

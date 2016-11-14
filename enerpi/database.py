@@ -5,7 +5,7 @@ import pandas as pd
 from time import time
 import re
 from shutil import copy as copy_file
-from enerpi.base import CONFIG, DATA_PATH, log, timeit, COL_TS, COLS_DATA
+from enerpi.base import CONFIG, DATA_PATH, log, timeit, SENSORS
 from enerpi.catalog import EnerpiCatalog
 
 
@@ -104,7 +104,8 @@ def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
     try:
         df_tot = None
         if data is not None and type(data) is not pd.DataFrame:
-            data = pd.DataFrame(data, columns=[COL_TS] + COLS_DATA).set_index(COL_TS).dropna().astype(float)
+            data = pd.DataFrame(data, columns=SENSORS.columns_sampling
+                                ).set_index(SENSORS.ts_column).dropna().astype(float)
             with pd.HDFStore(path_st, mode='a', complevel=9, complib='blosc') as st:
                 st.append(KEY, data)
                 if catalog is not None:

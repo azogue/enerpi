@@ -33,6 +33,7 @@ def test_main_cli():
 
     """
     def _exec_cli_w_args(args):
+        # noinspection PyUnresolvedReferences
         with patch.object(sys, 'argv', args):
             pp.print_secc('TESTING CLI with sys.argv: {}'.format(sys.argv))
             enerpi_main_cli(test_mode=True)

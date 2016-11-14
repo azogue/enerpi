@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # noinspection PyUnresolvedReferences
-from enerpi.base import CONFIG, TZ, DATA_PATH, FILE_LOGGING, LOGGING_LEVEL, log
+from enerpi.base import CONFIG, SENSORS, DATA_PATH, FILE_LOGGING, LOGGING_LEVEL, log
 # noinspection PyUnresolvedReferences
 from enerpi.database import init_catalog, get_ts_last_save, extract_log_file, delete_log_file, HDF_STORE
 from enerpi.enerpimeter import receiver_msg_generator, msg_to_dict, TS_DATA_MS, RMS_ROLL_WINDOW_SEC, DELTA_SEC_DATA
