@@ -198,7 +198,6 @@ class HDFTimeSeriesCatalog(object):
         """
 
         index = self._load_index()
-        print('index:', index)
         if index is None:
             index = self._make_index(distribute_existent=True)
             if index is not None and not index.empty:
@@ -208,16 +207,13 @@ class HDFTimeSeriesCatalog(object):
         return index
 
     def _save_index(self, index):
-        # print_secc('Salvando INDEX')
         p = os.path.join(self.base_path, self.catalog_file)
         index.to_csv(p)
         return True
 
     def _check_index(self, index):
-        # print_secc('CHECK INDEX')
         index = index.copy()
         paths = index['st'].apply(lambda x: os.path.join(self.base_path, x))
-        print('paths en _check_index:', paths.values)
         times = [self._ts_filepath(p) for p in paths]
         pb_bkp = os.path.join(self.base_path, DIR_BACKUP)
         new_stores = [f.replace(self.base_path + os.path.sep, '')

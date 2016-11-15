@@ -1,0 +1,212 @@
+{% extends "layout.html" %}
+{% from 'macros.html' import alert_dismiss with context %}
+{% from 'monitor_tiles.html' import monitor_tiles_styles%}
+
+{% block content %}
+    {% if alerta %}
+        {{ alert_dismiss(alerta) }}
+    {% endif %}
+    <div class="jumbotron">
+        <div class="container-fluid">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span class="float-xs-left"><h2>{{ titulo|safe }}<br></h2></span>
+                {% if dict_config_content|length > 1 %}
+                <br class="">
+                <span class="float-sm-right hidden-sm-down">
+                    <a class="btn btn-primary btn-sm"
+                       href="{{ url_for('download_file', file_id=file_id, as_attachment=True) }}"
+                       download="{{ url_for('download_file', file_id=file_id, as_attachment=True) }}" role="button">
+                        <i class="fa fa-download" aria-hidden="true"></i> Download</a>
+                    <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#confimationModal"><i class="fa fa-pencil-square" aria-hidden="true"></i> Save Changes</button>
+                </span>
+                {% endif %}
+            </div>
+            <div class="hidden-md-up mb-1 pb-1">
+                <a class="btn btn-primary btn-sm"
+                   href="{{ url_for('download_file', file_id=file_id, as_attachment=True) }}"
+                   download="{{ url_for('download_file', file_id=file_id, as_attachment=True) }}" role="button">
+                    <i class="fa fa-download" aria-hidden="true"></i> Download</a>
+                <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#confimationModal"><i class="fa fa-pencil-square" aria-hidden="true"></i> Save Changes</button>
+            </div>
+            {% if filename %}
+                <h6 class="lead">Contents of config file <code>{{ filename }}</code>:</h6>
+            {% endif %}
+            {% if abspath %}
+                <small style="word-wrap:break-word; overflow-wrap: break-word;">(abspath: {{ abspath|safe }})</small>
+            {% endif %}
+            <div class="pt-1">
+                <div class="checkbox">
+                    <label>Show file comments   <input type="checkbox" id="switch_comments" value="with_comments"
+                                  onchange="location.href='{{ url_for('editfile', file=file_id, without_comments=with_comments) }}';"
+                                  class="form-control form-control-sm" {% if with_comments %}checked{% endif %}>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-xs-12">
+                <ul class="nav nav-tabs" id="EditorTabView" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-toggle="tab" href="#edit_view" role="tab" aria-controls="edit_view"><strong>Edit parameters</strong></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#show_view" role="tab" aria-controls="show_view"><strong>View INI File</strong></a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <br>
+    <div class="tab-content">
+        {% if dict_config_content %}
+        <div class="tab-pane fade in active" id="edit_view" role="tabpanel">
+            <div class="container-fluid px-0">
+                <form id="form_ini_file_config" class="form-horizontal col-xs-12 px-0" method="post">
+                {% for section, config_opts in dict_config_content.items() %}
+                    <div class="col-md-12 col-lg-6">
+                        <div class="form-group" style="border-color: #1477d5; background-color: rgba(20, 140, 229, 0.18); border-width: 3px; border-radius: 18px; padding: 20px; border-style:solid;">
+                            <h2><span class="tag tag-pill tag-primary">{{ section }}</span><button type="button" class="btn btn-danger btn-sm float-sm-right hidden-xs-down" data-toggle="modal" data-target="#confimationModal"><i class="fa fa-pencil-square" aria-hidden="true"></i> Save</button></h2>
+                            {% for var_name, (value, var_type, comment) in config_opts.items() %}
+                                {% if comment %}
+                                    <div class="col-sm-offset-2"><pre class="mb-0 text-muted font-italic"># {{ comment }}</pre></div>
+                                {% endif %}
+                                <div class="form-group input-group input-group-sm" id="group_{{ var_name }}">
+                                    {% if var_type == 'str' %}
+                                        <label class="col-sm-5 form-control-label" for="var_{{ var_name }}"><strong>{{ var_name }}:</strong></label>
+                                        <div class=" col-sm-7">
+                                            <input type="text" class="form-control form-control-sm"
+                                                   name="{{ var_name }}" id="var_{{ var_name }}" value="{{ value }}">
+                                        </div>
+                                    {% elif var_type == 'bool' %}
+                                        <div class="col-sm-12">
+                                            <div class="checkbox">
+                                                <label><input type="checkbox" id="switch_{{ var_name }}"
+                                                              name="{{ var_name }}"
+                                                              {% if value %}checked{% endif %}>   <strong>{{ var_name }}</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    {% elif var_type == 'float' %}
+                                        <label class="col-sm-8 form-control-label" for="var_{{ var_name }}"><strong>{{ var_name }}:</strong></label>
+                                        <div class=" col-sm-4">
+                                            <input type="number" class="form-control form-control-sm"
+                                                   name="{{ var_name }}" id="var_{{ var_name }}" value="{{ value }}">
+                                        </div>
+                                    {% else %}
+                                        <label class="col-sm-8 form-control-label" for="var_{{ var_name }}"><strong>{{ var_name }}:</strong></label>
+                                        <div class=" col-sm-4">
+                                            <input type="number" class="form-control form-control-sm" id="var_{{ var_name }}"
+                                                   name="{{ var_name }}" value="{{ value }}">
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                            <div class="form-group input-group input-group-sm mb-0 mb-0">
+                                    <button type="button" class="btn btn-danger btn-sm btn-block hidden-sm-up" data-toggle="modal" data-target="#confimationModal"><i class="fa fa-pencil-square" aria-hidden="true"></i> Save</button>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+                <!-- Modal -->
+                <div id="confimationModal" class="modal fade" role="dialog">
+                  <div class="modal-dialog">
+                    <!-- Modal content-->
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                        <h4 class="modal-title">Confirm changes?</h4>
+                      </div>
+                      <div class="modal-body">
+                        <p>Click "Confirm" to save changes in configuration file, over-writting the INI config file {% if abspath %}(abspath: <strong style="word-wrap:break-word; overflow-wrap: break-word;">{{ abspath|safe }}</strong>){% endif %}
+                        </p>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="submit" class="btn btn-danger btn-sm float-xs-left"><i class="fa fa-pencil-square-o" aria-hidden="true"></i> Confirm over-write</button>
+                        <button type="button" class="btn btn-primary btn-sm float-xs-right" data-dismiss="modal">Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="tab-pane fade in active" id="edit_view" role="tabpanel">
+            <div class="alert alert-danger" role="alert">
+        <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+        <span class="sr-only">Error:</span>
+        CONFIG File not found!!
+    </div>
+        </div>
+        {% endif %}
+        <div class="tab-pane fade" id="show_view" role="tabpanel">
+            <div class="container">
+                <div class="col-xs-12 alert-warning" style="background-color: #fcf8e4; border-color: #eeac57; border-width: 3px; border-radius: 18px; padding: 20px; border-style:solid;">
+                    <br>
+                    {% if file_lines %}
+                    <pre>{% for line in file_lines %}{{ line|safe }}
+                    {% endfor %}</pre>
+                    {% else %}
+                    <div class="alert alert-danger" role="alert">
+                        <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+                        <span class="sr-only">Error:</span>
+                        File not found!!
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block styles %}
+    {{ monitor_tiles_styles() }}
+    <link href="{{ url_for('static', filename='css/bootstrap-switch.min.css') }}" rel="stylesheet">
+    <style type="text/css">
+    .bootstrap-switch .bootstrap-switch-handle-on.bootstrap-switch-withcomments {
+        color: #fff;
+        background: #0CBB43;
+        height: 80%;
+    }
+    .bootstrap-switch .bootstrap-switch-handle-off.bootstrap-switch-withoutcomments{
+        color: #fff;
+        background: #8C27D3;
+        height: 80%;
+    }
+    </style>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/bootstrap-switch.min.js') }}"></script>
+    <script>
+    $(document).ready(function() {
+        var switch_comments = {
+            size: "mini",
+            onColor: "withcomments",
+            offColor: "withoutcomments",
+            offText: "OFF",
+            onText: "ON",
+            animate: true
+        };
+        var switch_bools = {
+            size: "mini",
+            offText: "OFF",
+            onText: "ON",
+            animate: true
+        };
+        $("#switch_comments").bootstrapSwitch(switch_comments);
+        {% for section, config_opts in dict_config_content.items() %}
+            {% for var_name, (value, var_type, comment) in config_opts.items() %}
+                  {% if var_type == 'bool' %}
+                    $("#switch_{{ var_name }}").bootstrapSwitch(switch_bools);
+                  {% endif %}
+            {% endfor %}
+        {% endfor %}
+    });
+{#    $(function showTab() {#}
+{#        $('#EditorTabView a:last').tab('show')#}
+{#    });#}
+    </script>
+{% endblock %}

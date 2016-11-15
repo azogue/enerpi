@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from collections import OrderedDict
 import configparser
 import locale
 import logging
@@ -7,6 +8,7 @@ import pytz
 import shutil
 import subprocess
 import sys
+import textwrap
 from threading import Timer
 from time import time, sleep
 from enerpi import BASE_PATH, PRETTY_NAME
@@ -282,6 +284,17 @@ class EnerpiSamplerConf(object):
             return {c: _get_desc(c) for c in columns}
 
 
+def _makedirs(dest_path):
+    try:
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        os.utime(dest_path, None)
+    except PermissionError as e:
+        log('PermissionError: {}'.format(e), 'error', True, False)
+        # sudo chmod 777 ~/ENERPIDATA/enerpi.log
+        # TODO Notify error
+        sys.exit(2)
+
+
 def _funcs_tipo_output(tipo_log):
     """
     Functions for printing and logging based on type.
@@ -323,15 +336,15 @@ def log(msg, tipo, verbose=True, log_msg=True):
 
 def set_logging_conf(filename, level='DEBUG', verbose=True, with_initial_log=True):
     """Logging configuration"""
-    try:
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
-                            format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
-    except PermissionError as e:
-        log('PermissionError: {}'.format(e), 'error', True, False)
-        # sudo chmod 777 ~/ENERPIDATA/enerpi.log
-        # TODO Notify error
-        sys.exit(2)
+    _makedirs(filename)
+    # os.makedirs(os.path.dirname(filename), exist_ok=True)
+    # try:
+    logging.basicConfig(filename=filename, level=level, datefmt='%d/%m/%Y %H:%M:%S',
+                        format='%(levelname)s [%(filename)s_%(funcName)s] - %(asctime)s: %(message)s')
+    # except PermissionError as e:
+    #     log('PermissionError: {}'.format(e), 'error', True, False)
+    #     sudo chmod 777 ~/ENERPIDATA/enerpi.log
+    #     sys.exit(2)
     if with_initial_log:
         log(PRETTY_NAME, 'ok', verbose)
 
@@ -415,6 +428,168 @@ def get_lines_file(filename, tail=None, reverse=False):
     return ['Path not found: "{}"'.format(filename)]
 
 
+def config_dict_for_web_edit(lines_ini_file, with_comments=True):
+    """
+    * Divide configuration INI file with this structure:
+    [section]
+    # comment
+    ; comment
+    VARIABLE = VALUE
+    (discarding file header comments)
+
+    Make Ordered dict like:
+    ==> [(section_name,
+            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         ...
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
+         (section_name,
+            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         ...
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
+         ...]
+
+    :param lines_ini_file: :list: Content of INI file after 'readlines()'
+    :param with_comments: :bool: Include comments
+    :return: :OrderedDict:
+
+    """
+    def _is_bool_variable(value):
+        value = value.lower()
+        if (value == 'true') or (value == 'false'):
+            return True, value == 'true'
+        return False, None
+
+    config_entries = OrderedDict()
+    section, comment = None, None
+    init = False
+    for l in lines_ini_file:
+        l = l.replace('\n', '').lstrip().rstrip()
+        if l.startswith('['):
+            section = l.replace('[', '').replace(']', '')
+            init = True
+            comment = None
+            config_entries[section] = OrderedDict()
+        elif l.startswith('#') or l.startswith(';'):
+            if init and with_comments:
+                if comment is None:
+                    comment = l[1:].lstrip()
+                else:
+                    comment += ' {}'.format(l[1:].lstrip())
+        elif init and (len(l) > 0):
+            # Read variable and append (/w comments)
+            variable_name, variable_value = l.split('=')
+            variable_name = variable_name.lstrip().rstrip()
+            variable_value = variable_value.lstrip().rstrip()
+            is_bool, bool_value = _is_bool_variable(variable_value)
+            if not is_bool:
+                try:
+                    variable_value = int(variable_value)
+                    var_type = 'int'
+                except ValueError:
+                    try:
+                        variable_value = float(variable_value)
+                        var_type = 'float'
+                    except ValueError:
+                        var_type = 'str'
+            else:
+                var_type = 'bool'
+                variable_value = bool_value
+            config_entries[section][variable_name] = variable_value, var_type, comment
+            comment = None
+    return config_entries
+
+
+def config_changes(dict_web_form, dict_config):
+    """
+    Process changes in web editor
+
+    :param dict_web_form: :OrderedDict: Posted Form values
+    :param dict_config:  :OrderedDict: config dict of dicts (like the one 'config_dict_for_web_edit' returns)
+    :return: :tuple: (:bool: changed, :list: updated variables, :OrderedDict: updated dict_config)
+
+    """
+    def _is_changed(value, params, name):
+        if params[1] == 'int':
+            value = int(value)
+        elif params[1] == 'float':
+            value = float(value)
+        elif params[1] == 'bool':
+            value = (value.lower() == 'true') or (value.lower() == 'on')
+        if value != params[0]:
+            log('"{}" -> HAY CAMBIO DE {} a {} (type={})'.format(name, params[0], value, params[1]), 'debug', True)
+            return True, value
+        return False, value
+
+    dict_config_updated = dict_config.copy()
+    dict_web_form = dict_web_form.copy()
+    vars_updated = []
+    for section, entries in dict_config_updated.items():
+        for variable_name, variable_params in entries.items():
+            if variable_name in dict_web_form:
+                new_v = dict_web_form.pop(variable_name)
+                changed, new_value = _is_changed(new_v, variable_params, variable_name)
+                if changed:
+                    vars_updated.append((variable_name, variable_params[0], new_value))
+                    params_var = list(dict_config_updated[section][variable_name])
+                    params_var[0] = new_value
+                    dict_config_updated[section][variable_name] = tuple(params_var)
+            elif (variable_params[1] == 'bool') and variable_params[0]:  # Bool en off en el form y True en config
+                vars_updated.append((variable_name, variable_params[0], False))
+                params_var = list(dict_config_updated[section][variable_name])
+                params_var[0] = False
+                log('"{}" -> HAY CHECKBOX CH DE {} a {} (type={})'
+                    .format(variable_name, variable_params[0], False, variable_params[1]), 'debug', True)
+                dict_config_updated[section][variable_name] = tuple(params_var)
+    return len(vars_updated) > 0, vars_updated, dict_config_updated
+
+
+def make_ini_file(dict_config, dest_path=None):
+    """
+    Makes INI file (and writes it if dest_path is not None) from an OrderedDict
+    like the one 'config_dict_for_web_edit' returns.
+
+    * INI file with this structure:
+    [section]
+    # comment
+    ; comment
+    VARIABLE = VALUE
+
+    Ordered dict like:
+    ==> [(section_name,
+            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         ...
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
+         (section_name,
+            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
+                         ...
+                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
+         ...]
+
+    :param dict_config: :OrderedDict: Content of INI file after 'readlines()'
+    :param dest_path: :str: optional path for INI file write.
+    :return: :str: raw INI text
+
+    """
+    lines = ['# -*- coding: utf-8 -*-']
+    for section, entries in dict_config.items():
+        lines.append('[{}]'.format(section.upper()))
+        for variable_name, (value, var_type, comment) in entries.items():
+            if comment:
+                [lines.append('# {}'.format(l_wrap)) for l_wrap in textwrap.wrap(comment, 80)]
+            lines.append('{} = {}'.format(variable_name, value))
+        lines.append('')  # Separador entre secciones
+    ini_text = '\n'.join(lines)
+    if dest_path is not None:
+        _makedirs(dest_path)
+        with open(dest_path, 'w') as f:
+            f.write(ini_text)
+    return ini_text
+
+
 def check_resource_files(dest_path, origin_path=None):
     """
     Check needed files and directories in DATA_PATH. Init if needed (1º exec).
@@ -424,15 +599,9 @@ def check_resource_files(dest_path, origin_path=None):
     :return bool (dest_path exists previously)
     """
     if not os.path.exists(dest_path):
+        _makedirs(dest_path)
         if origin_path is None:
-            log('-> Making paths to "{}"'.format(dest_path), 'info', True, True)
-            try:
-                os.makedirs(dest_path, exist_ok=True)
-            except PermissionError as e:
-                log('PermissionError: {}'.format(e), 'error', True, False)
-                # sudo chmod 777 ~/ENERPIDATA/enerpi.log
-                # TODO Notify error
-                sys.exit(2)
+            log('-> Made paths to "{}"'.format(dest_path), 'info', True, True)
         else:
             origin_path = os.path.abspath(origin_path)
             if os.path.isfile(origin_path):

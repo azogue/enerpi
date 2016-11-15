@@ -8,20 +8,27 @@
     {% endif %}
     <div class="container-fluid">
         <div style="display: flex; align-items: center; justify-content: space-between;">
-            <span class="pull-left"><h4>{{ titulo|safe }}</h4></span>
+            <span class="float-xs-left"><h4>{{ titulo|safe }}</h4></span>
 
             {% if file_content|length > 1 %}
 
-            <span class="pull-right">
+            <span class="float-xs-left">
                 <a class="btn btn-primary btn-sm"
                    href="{{ url_for('download_file', file_id=file_id, as_attachment=True) }}"
                    download="{{ url_for('download_file', file_id=file_id, as_attachment=True) }}" role="button">
                     <i class="fa fa-download" aria-hidden="true"></i> Download
                 </a>
-                <a class="btn btn-danger btn-sm"
-                   href="{{ url_for('showfile', delete=True, file=file_id) }}" role="button">
-                    <i class="fa fa-trash" aria-hidden="true"></i> Delete
-                </a>
+                {% if is_logfile %}
+                    <a class="btn btn-danger btn-sm"
+                       href="{{ url_for('showfile', delete=True, file=file_id) }}" role="button">
+                        <i class="fa fa-trash" aria-hidden="true"></i> Delete
+                    </a>
+                {% else %}
+                    <a class="btn btn-warning btn-sm"
+                       href="{{ url_for('editfile', file=file_id) }}" role="button">
+                        <i class="fa fa-pencil-square-o" aria-hidden="true"></i> Edit
+                    </a>
+                {% endif %}
             </span>
             {% endif %}
         </div>

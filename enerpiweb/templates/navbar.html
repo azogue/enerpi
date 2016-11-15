@@ -6,22 +6,27 @@
         <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('index') }}">
             <strong><i class="fa fa-bolt" aria-hidden="true"></i> enerPI</strong>
         </a>
-        <form class="form-inline pull-xs-right">
-            <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('bokehplot') }}">
-                <strong><i class="fa fa-area-chart" aria-hidden="true"></i></strong></a>
-            <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('tablelast') }}">
-                <strong><i class="fa fa-table" aria-hidden="true"></i></strong></a>
-            {% if config['WITH_ML_SUBSYSTEM'] %}
-                <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('index_learning') }}">
-                    <strong><i class="fa fa-cogs" aria-hidden="true"></i></strong></a>
-            {% endif %}
-{#            <a class="navbar-brand active" href="#"></a>#}
-{#          <input class="form-control" type="text" placeholder="Search">#}
-{#          <button class="btn btn-outline-primary" type="submit">Search</button>#}
-            <a class="nav pull-right navbar-link hidden-xs" href="{{ url_for('control') }}">
-                <img id="navbar-logo" class="icon-logo" style="height: 30px;"
-                     src="{{ url_for('static', filename='img/icons/Icon-Small-40@2x.png') }}">
-            </a>
-        </form>
+        <ul class="nav navbar-nav nav-inline float-xs-right">
+             <li class="nav-item mx-0">
+                <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('bokehplot') }}">
+                    <strong><i class="fa fa-area-chart" aria-hidden="true"></i></strong></a>
+             </li>
+             <li class="nav-item mx-0">
+                <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('tablelast') }}">
+                    <strong><i class="fa fa-table" aria-hidden="true"></i></strong></a>
+             </li>
+{#                {% if config['WITH_ML_SUBSYSTEM'] %}#}
+{#                <li class="nav-item">#}
+{#                    <a class="navbar-brand active" style="margin-bottom: -2px !important; padding-bottom: 0 !important;" href="{{ url_for('index_learning') }}">#}
+{#                        <strong><i class="fa fa-cogs" aria-hidden="true"></i></strong></a>#}
+{#                </li>#}
+{#                {% endif %}#}
+            <li class="nav-item mx-0">
+                <a class="float-xs-right navbar-link hidden-xs" href="{{ url_for('control') }}">
+                    <img id="navbar-logo" class="icon-logo" style="height: 30px;"
+                         src="{{ url_for('static', filename='img/icons/Icon-Small-40@2x.png') }}">
+                </a>
+            </li>
+        </ul>
     </nav>
 {% endmacro%}

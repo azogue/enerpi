@@ -6,7 +6,7 @@
                 aria-hidden="true">
                 &times;
             </button>
-            {{ obj_alert.texto_alerta }}
+            {{ obj_alert.texto_alerta |safe }}
         </div>
     </div>
 {% endmacro %}

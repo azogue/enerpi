@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 from collections import deque
 import datetime as dt
-from flask import Response, request, redirect, url_for, render_template, send_file
+from flask import Response, request, redirect, url_for, render_template, send_file, jsonify
 import json
-import logging
 import os
 import pandas as pd
 from threading import Thread, current_thread
 from time import sleep, time
 
-from enerpi.base import DATA_PATH, CONFIG_FILENAME, TZ, get_lines_file, FILE_LOGGING, COLS_DATA, COLS_DATA_RMS, COL_TS
+from enerpi.base import (DATA_PATH, SENSORS, CONFIG_FILENAME, FILE_LOGGING,
+                         get_lines_file, log, make_ini_file, config_dict_for_web_edit, config_changes)
 from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
 from enerpiweb import app, SERVER_FILE_LOGGING, STATIC_PATH, WITH_ML_SUBSYSTEM
@@ -42,29 +42,29 @@ if WITH_ML_SUBSYSTEM:
 # Interesting files / logs to show:
 def _get_filepath_from_file_id(file_id):
     if 'flask' == file_id:
-        filename = SERVER_FILE_LOGGING
+        is_logfile, filename = True, SERVER_FILE_LOGGING
     elif 'rsc' == file_id:
-        filename = RSC_GEN_FILE_LOGGING
+        is_logfile, filename = True, RSC_GEN_FILE_LOGGING
     elif 'nginx_err' == file_id:
-        filename = '/var/log/nginx/error.log'
+        is_logfile, filename = True, '/var/log/nginx/error.log'
     elif 'nginx' == file_id:
-        filename = '/var/log/nginx/access.log'
+        is_logfile, filename = True, '/var/log/nginx/access.log'
     elif 'enerpi' == file_id:
-        filename = ENERPI_FILE_LOGGING
+        is_logfile, filename = True, ENERPI_FILE_LOGGING
     elif 'uwsgi' == file_id:
-        filename = '/var/log/uwsgi/enerpiweb.log'
+        is_logfile, filename = True, '/var/log/uwsgi/enerpiweb.log'
     elif 'config' == file_id:
-        filename = os.path.join(DATA_PATH, CONFIG_FILENAME)
+        is_logfile, filename = False, os.path.join(DATA_PATH, CONFIG_FILENAME)
     else:  # Fichero derivado del catálogo
         cat = enerpi_data_catalog(check_integrity=False)
         if 'raw_store' == file_id:
-            filename = os.path.join(cat.base_path, cat.raw_store)
+            is_logfile, filename = False, os.path.join(cat.base_path, cat.raw_store)
         elif 'catalog' == file_id:
-            filename = os.path.join(cat.base_path, cat.catalog_file)
+            is_logfile, filename = False, os.path.join(cat.base_path, cat.catalog_file)
         else:
-            logging.error('FILE_ID No reconocido: {}'.format(file_id))
-            filename = SERVER_FILE_LOGGING
-    return filename
+            log('FILE_ID No reconocido: {}'.format(file_id), 'error', False)
+            is_logfile, filename = False, SERVER_FILE_LOGGING
+    return is_logfile, filename
 
 
 def _format_event_stream(d_msg, timeout_retry=None, msg_id=None):
@@ -95,18 +95,22 @@ def ts_strftime(ts):
             return ts.strftime('%d/%m/%y')
         return ts.strftime('%d/%m/%y %H:%M')
     except AttributeError as e:
-        logging.error('AttributeError en template_filter:ts_strftime -> {}'.format(e))
+        log('AttributeError en template_filter:ts_strftime -> {}'.format(e), 'error', False)
         return str(ts)
 
 
 def _get_dataframe_buffer_data():
     global buffer_last_data
     if len(buffer_last_data) > 0:
-        df = pd.DataFrame(list(buffer_last_data))[[COL_TS, COLS_DATA_RMS[0], 'ldr', COLS_DATA[-2]]].set_index(COL_TS)
-        df[COLS_DATA_RMS[0]] = df[COLS_DATA_RMS[0]].astype(int)
-        df[COLS_DATA[-2]] = df[COLS_DATA[-2]].astype(int)
-        # TODO Resolver nombre LDR
-        df.ldr = pd.Series(df.ldr * 100).round(1)
+        df = pd.DataFrame(list(buffer_last_data))[SENSORS.columns_sampling].set_index(SENSORS.ts_column)
+        for s in SENSORS:
+            if s.is_rms:
+                df[s.name] = df[s.name].astype(int)
+            else:
+                df[s.name] = pd.Series(df[s.name] * 100).round(1)
+        for c in [SENSORS.ref_rms, SENSORS.ref_mean]:
+            if c in df:
+                df[c] = df[c].astype(int)
         return df
     return None
 
@@ -114,9 +118,10 @@ def _get_dataframe_buffer_data():
 def _get_dataframe_print_buffer_data(df=None):
     if df is None:
         df = _get_dataframe_buffer_data()
-    df_print = df.rename(columns={COLS_DATA[-2]: 'nº s.', COLS_DATA_RMS[0]: 'Power (W)', 'ldr': 'LDR (%)'})
+    d_rename = SENSORS.descriptions(df.columns, return_list=False)
+    df_print = df.rename(columns=d_rename)
     df_print['T'] = df_print.index.map(lambda x: x.time().strftime('%H:%M:%S'))
-    df_print = df_print.reset_index(drop=True)[['T', 'Power (W)', 'LDR (%)', 'nº s.']].set_index('T')
+    df_print = df_print.reset_index(drop=True)[['T'] + list(d_rename.values())].set_index('T')
     return df_print
 
 
@@ -147,13 +152,15 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None, rs_data=None, 
         else:
             df = cat.get(start=start, end=end, last_hours=last_hours)
             if (df is not None) and not df.empty:
-                df = df[[COLS_DATA_RMS[0], 'ldr', COLS_DATA[-2]]]
-                df.ldr = df['ldr'].astype(float) / 10.
+                df = df[SENSORS.columns_sampling]
+                # TODO Revisar formatos de analog mean!
+                # SENSORS
+                # df.ldr = df['ldr'].astype(float) / 10.
                 if last_hours is not None:
                     df_last_data = _get_dataframe_buffer_data()
                     if df_last_data is not None:
                         df_last_data = df_last_data.tz_localize(None)
-                        df = pd.DataFrame(pd.concat([df, df_last_data], axis=0)
+                        df = pd.DataFrame(pd.concat([df, df_last_data])
                                           ).sort_index().drop_duplicates(keep='last')
                 df = cat.resample_data(df, rs_data=rs_data, rm_data=rm_data, use_median=use_median)
     else:
@@ -163,7 +170,7 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None, rs_data=None, 
         try:
             script, divs, version = html_plot_buffer_bokeh(df, is_kwh_plot=kwh)
             toc_p = time()
-            logging.debug('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic))
+            log('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic), 'debug', False)
             yield _format_event_stream(dict(success=True, b_version=version, script_bokeh=script, bokeh_div=divs[0],
                                             took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
         except Exception as e:
@@ -183,7 +190,7 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None, rs_data=None, 
 # BROADCAST RECEIVER
 ###############################
 def _init_receiver_thread():
-    logging.info('**INIT_BROADCAST_RECEIVER en PID={}'.format(os.getpid()))
+    log('**INIT_BROADCAST_RECEIVER en PID={}'.format(os.getpid()), 'info', False)
     gen = enerpi_receiver_generator()
     count = 0
     while True:
@@ -194,14 +201,17 @@ def _init_receiver_thread():
             last_data = last.copy()
             buffer_last_data.append(last_data)
         except StopIteration:
-            logging.debug('StopIteration on counter={}'.format(count))
+            log('StopIteration on counter={}'.format(count), 'debug', False)
             if count > 0:
                 sleep(2)
                 gen = enerpi_receiver_generator()
+            else:
+                log('Not receiving broadcast msgs. StopIteration at init!', 'error', False)
+                break
         count += 1
         sleep(.5)
-    logging.warning('**BROADCAST_RECEIVER en PID={}, thread={}. CLOSED on counter={}'
-                    .format(os.getpid(), current_thread(), count))
+    log('**BROADCAST_RECEIVER en PID={}, thread={}. CLOSED on counter={}'
+        .format(os.getpid(), current_thread(), count), 'warn', False)
 
 
 @app.before_first_request
@@ -221,15 +231,15 @@ def _init_receiver():
 def stream_sensors():
 
     def _gen_stream_last_values():
-        last_ts = dt.datetime.now(tz=TZ) - dt.timedelta(minutes=1)
+        last_ts = dt.datetime.now(tz=SENSORS.TZ) - dt.timedelta(minutes=1)
         count = 0
         tic = time()
         while time() - tic < STREAM_MAX_TIME:
             global last_data
-            if COL_TS in last_data and last_data[COL_TS] > last_ts:
+            if SENSORS.ts_column in last_data and last_data[SENSORS.ts_column] > last_ts:
                 send = last_data.copy()
-                last_ts = send[COL_TS]
-                send[COL_TS] = send[COL_TS].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+                last_ts = send[SENSORS.ts_column]
+                send[SENSORS.ts_column] = send[SENSORS.ts_column].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
                 yield _format_event_stream(send)
                 count += 1
                 sleep(.5)
@@ -263,9 +273,9 @@ def index():
 def last_value_json():
     global last_data
     send = last_data.copy()
-    if COL_TS in send:
-        send[COL_TS] = send[COL_TS].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
-    return _format_event_stream(send)
+    if SENSORS.ts_column in send:
+        send[SENSORS.ts_column] = send[SENSORS.ts_column].strftime('%Y-%m-%d %H:%M:%S.%f')[:-4]
+    return jsonify(send)
 
 
 @app.route('/api/stream/table')
@@ -278,7 +288,7 @@ def table_buffer():
             toc_p = time()
             tabla = _get_html_table_buffer_data(df_print)
             toc = time()
-            logging.debug('TABLE gen in {:.3f} s'.format(toc - toc_p))
+            log('TABLE gen in {:.3f} s'.format(toc - toc_p), 'debug', False)
             yield _format_event_stream({'success': True, 'table': tabla, 'took': round(toc - toc_p, 3)})
         yield _format_event_stream('CLOSE')
 
@@ -295,14 +305,14 @@ def bokeh_table_buffer():
         if df is not None:
             script, divs, version = html_plot_buffer_bokeh(df)
             toc_p = time()
-            logging.debug('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic))
+            log('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic), 'debug', False)
             yield _format_event_stream(dict(success=True, b_version=version, script_bokeh=script, bokeh_div=divs[0],
                                             took=round(toc_p - tic, 3)))
 
             df_print = _get_dataframe_print_buffer_data(df)
             tabla = _get_html_table_buffer_data(df_print)
             toc = time()
-            logging.debug('TABLE gen in {:.3f} s'.format(toc - toc_p))
+            log('TABLE gen in {:.3f} s'.format(toc - toc_p), 'debug', False)
             yield _format_event_stream({'success': True, 'table': tabla, 'took': round(toc - toc_p, 3)})
         yield _format_event_stream('CLOSE')
 
@@ -357,7 +367,7 @@ def download_file(file_id):
     * File Download *
     :param file_id:
     """
-    filename = _get_filepath_from_file_id(file_id)
+    _, filename = _get_filepath_from_file_id(file_id)
     if os.path.exists(filename):
         if 'as_attachment' in request.args:
             return send_file(filename, as_attachment=True, attachment_filename=os.path.basename(filename))
@@ -377,11 +387,11 @@ def control():
     global last_data
     last = last_data.copy()
     try:
-        is_sender_active = (pd.Timestamp.now(tz=TZ) - last[COL_TS]) < pd.Timedelta('1min')
+        is_sender_active = (pd.Timestamp.now(tz=SENSORS.TZ) - last[SENSORS.ts_column]) < pd.Timedelta('1min')
     except KeyError:
         # last_ts, last_power, host_logger = last_data['ts'], last_data['power'], last_data['host']
         is_sender_active = False
-        last = {'host': '?', COLS_DATA_RMS[0]: -1, COL_TS: pd.Timestamp.now(tz=TZ)}
+        last = {'host': '?', SENSORS.main_column: -1, SENSORS.ts_column: pd.Timestamp.now(tz=SENSORS.TZ)}
     alerta = request.args.get('alerta', '')
     if alerta:
         alerta = json.loads(alerta)
@@ -411,18 +421,64 @@ def showfile(file='flask'):
     reverse = request.args.get('reverse', False)
     tail_lines = request.args.get('tail', None)
 
-    filename = _get_filepath_from_file_id(file)
+    is_logfile, filename = _get_filepath_from_file_id(file)
     alerta = request.args.get('alerta', '')
     if alerta:
         alerta = json.loads(alerta)
-    if not alerta and delete:
+    if not alerta and delete and is_logfile:
         with open(filename, 'w') as f:
             f.close()
         cad_delete = 'LOGFILE {} DELETED'.format(filename.upper())
-        logging.warning(cad_delete)
+        log(cad_delete, 'warn', False)
         return redirect(url_for('showfile', file=file,
                                 alerta=json.dumps({'alert_type': 'warning', 'texto_alerta': cad_delete})))
     data = get_lines_file(filename, tail=tail_lines, reverse=reverse)
-    return render_template('text_file.html', titulo='LOG File:', file_id=file,
+    return render_template('text_file.html', titulo='LOG File:' if is_logfile else 'CONFIG File:', file_id=file,
                            subtitulo='<strong>{}</strong>'.format(filename),
-                           file_content=data, filename=os.path.basename(filename), alerta=alerta)
+                           is_logfile=is_logfile, file_content=data, filename=os.path.basename(filename), alerta=alerta)
+
+
+@app.route('/editconfig/<file>', methods=['GET', 'POST'])
+def editfile(file='config'):
+    """
+    Página de edición de fichero de configuración, para encripting key y config INI
+    :param file: file_id to edit
+    """
+
+    is_logfile, filename = _get_filepath_from_file_id(file)
+    if is_logfile:
+        return redirect(url_for('index'), code=404)
+    else:
+        lines_config = get_lines_file(filename)
+        without_comments = request.args.get('without_comments', 'False')
+        without_comments = without_comments.lower() == 'true'
+        config_data = config_dict_for_web_edit(lines_config, with_comments=not without_comments)
+        alerta = request.args.get('alerta', '')
+        if alerta:
+            alerta = json.loads(alerta)
+        if request.method == 'POST':
+            hay_cambio, vars_updated, config_data_updated = config_changes(request.form, config_data)
+            if hay_cambio:
+                str_cambios = ('Configuration changes in:<br>{}<br> New config SAVED!'
+                               .format('<br>'.join(['- <strong>"{}"</strong> (before={}) -> <strong>"{}"</strong>'
+                                                   .format(name, ant, new) for name, ant, new in vars_updated])))
+                alerta = {'alert_type': 'warning', 'texto_alerta': str_cambios}
+                lines_config = make_ini_file(config_data_updated, dest_path=filename).splitlines()
+                config_data = config_data_updated
+        return render_template('edit_text_file.html', titulo='CONFIGURATION EDITOR', file_id=file,
+                               with_comments=not without_comments, abspath=filename, dict_config_content=config_data,
+                               file_lines=lines_config, filename=os.path.basename(filename), alerta=alerta)
+
+
+# TODO Implementar generación de PDF reports
+# from flask_weasyprint import HTML, render_pdf
+#
+#
+# @app.route('/api/filetopdf/<file>')
+# def filetopdf(file='flask'):
+#     """
+#     Página de vista de fichero de texto, con orden ascendente / descendente y/o nº de últimas líneas
+#     ('tail' de archivo)
+#     :param file: file_id to show
+#     """
+#     return render_pdf(url_for('showfile', file=file))
