@@ -11,7 +11,8 @@ from enerpi.catalog import EnerpiCatalog
 
 # Config:
 INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT ENERPI')
-HDF_STORE = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'HDF_STORE'))
+HDF_STORE = CONFIG.get('ENERPI_DATA', 'HDF_STORE')
+HDF_STORE_PATH = os.path.join(DATA_PATH, HDF_STORE)
 
 KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
 CONFIG_CATALOG = dict(preffix='DATA',
@@ -91,7 +92,7 @@ def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
     return path_st
 
 
-def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
+def save_raw_data(data=None, path_st=HDF_STORE_PATH, catalog=None, verb=True):
     """
     Used in a subprocess launched from enerpimeter, this functions appends new *raw data* to the HDF raw store,
      and, if data-catalog is not None, updates it.
@@ -125,7 +126,7 @@ def save_raw_data(data=None, path_st=HDF_STORE, catalog=None, verb=True):
 
 
 @timeit('get_ts_last_save')
-def get_ts_last_save(path_st=HDF_STORE, get_last_sample=False, verbose=True, n=3):
+def get_ts_last_save(path_st=HDF_STORE_PATH, get_last_sample=False, verbose=True, n=3):
     """
     Returns last data timestamp in hdf store.
 

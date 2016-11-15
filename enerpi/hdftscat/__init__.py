@@ -200,6 +200,7 @@ class HDFTimeSeriesCatalog(object):
         """
 
         index = self._load_index()
+        print('index:', index)
         if index is None:
             index = self._make_index(distribute_existent=True)
             if index is not None and not index.empty:
@@ -222,6 +223,7 @@ class HDFTimeSeriesCatalog(object):
         # print_secc('CHECK INDEX')
         index = index.copy()
         paths = index['st'].apply(lambda x: os.path.join(self.base_path, x))
+        print('paths en _check_index:', paths.values)
         times = [self._ts_filepath(p) for p in paths]
         pb_bkp = os.path.join(self.base_path, DIR_BACKUP)
         new_stores = [f.replace(self.base_path + os.path.sep, '')
@@ -749,17 +751,21 @@ class HDFTimeSeriesCatalog(object):
 
     @timeit('reprocess_all_data', verbose=True)
     def reprocess_all_data(self):
-        paths_w_summary = self.tree[(self.tree.key == self.key_summary) & self.tree.is_cat]
-        for path in paths_w_summary.st:
-            df = self.load_store(path)
-            df_bis, df_s = self.process_data_summary(df)
-            self._save_hdf([df_bis, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
+        if self.tree is not None:
+            paths_w_summary = self.tree[(self.tree.key == self.key_summary) & self.tree.is_cat]
+            for path in paths_w_summary.st:
+                df = self.load_store(path)
+                df_bis, df_s = self.process_data_summary(df)
+                self._save_hdf([df_bis, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
+        else:
+            log('No data to reprocess!', 'error', self.verbose)
 
     def get_path_hdf_store_binaries(self, rel_path=ST_TODAY):
-        subset = self.tree[self.tree.st.str.contains(rel_path)].st.values
-        if len(subset) > 0:
-            p = os.path.join(self.base_path, subset[0])
-            return p
+        if self.tree is not None:
+            subset = self.tree[self.tree.st.str.contains(rel_path)].st.values
+            if len(subset) > 0:
+                p = os.path.join(self.base_path, subset[0])
+                return p
         return None
 
     # def info_catalog(self):

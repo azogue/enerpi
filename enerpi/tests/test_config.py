@@ -16,6 +16,7 @@ def test_sensors():
     print(SENSORS.ts_column, SENSORS.main_column, SENSORS.ts_fmt)
     print(SENSORS.columns_sensors, SENSORS.n_cols_sensors)
     print(SENSORS.columns_sampling, SENSORS.n_cols_sampling)
+    print(SENSORS.descriptions(SENSORS.columns_sensors + SENSORS.columns_sampling))
 
     pp.print_secc('INCLUDED IN DATA:')
     data = {}
@@ -57,8 +58,9 @@ def test_sensors():
     pp.print_info(SENSORS[0])
     pp.print_info(SENSORS[1])
     pp.print_info(SENSORS[2])
-    pp.print_cyan(SENSORS['ldr'])
-    pp.print_cyan(SENSORS['power'])
+
+    pp.print_cyan(SENSORS[SENSORS.columns_sensors_mean[0]])
+    pp.print_cyan(SENSORS[SENSORS.columns_sensors_rms[0]])
     try:
         pp.print_cyan(SENSORS[99])
         assert 0

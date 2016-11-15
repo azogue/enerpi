@@ -1,29 +1,44 @@
 # # -*- coding: utf-8 -*-
 from crontab import CronTab
+import os
 from unittest import TestCase
 from unittest.mock import patch
 import sys
 from enerpi.config.crontasks import set_command_on_reboot, set_command_periodic, clear_cron_commands, info_crontable
-from enerpi.command_enerpi import enerpi_main_cli, make_cron_command_task_daemon
+from enerpi.tests.conftest import get_temp_catalog_for_testing
 
 
 # TODO test en set_command_periodic
 
-
 class TestCron(TestCase):
-
+    path_default_datapath = ''
+    before_tests = ''
+    tmp_dir = None
+    DATA_PATH = None
+    cat = None
     cron_orig = None
     cmd_daemon = ''
 
     @classmethod
-    def setUpClass(cls):
+    def setup_class(cls):
         """
         CRON Test Setup:
         Read existent jobs (for replace them if they are deleted)
+        Also, copy example ENERPI files & sets common data catalog for testing.
 
         """
+        # Prepara archivos:
+        (tmp_dir, data_path, cat,
+         path_default_datapath, before_tests) = get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi')
+        cls.tmp_dir = tmp_dir
+        cls.DATA_PATH = data_path
+        cls.cat = cat
+        cls.path_default_datapath = path_default_datapath
+        cls.before_tests = before_tests
         cls.cron_orig = CronTab(user=True)
         print(cls.cron_orig.crons)
+
+        from enerpi.command_enerpi import make_cron_command_task_daemon
         cls.cmd_daemon = make_cron_command_task_daemon()
         print(cls.cmd_daemon)
         info_crontable()
@@ -35,6 +50,13 @@ class TestCron(TestCase):
         Replace deleted jobs in the test
 
         """
+        # Restablece default_datapath
+        open(cls.path_default_datapath, 'w').write(cls.before_tests)
+        print('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
+        cls.tmp_dir.cleanup()
+        print(cls.path_default_datapath, cls.before_tests)
+        print(open(cls.path_default_datapath).read())
+
         print(cls.cron_orig)
         post_test_cron = CronTab(user=True)
         if (cls.cmd_daemon is not None) and (cls.cmd_daemon in [c.command for c in cls.cron_orig.crons]):
@@ -52,6 +74,7 @@ class TestCron(TestCase):
         CRON + CLI Test
 
         """
+        from enerpi.command_enerpi import enerpi_main_cli
         def _exec_cli_w_args(args):
             # noinspection PyUnresolvedReferences
             with patch.object(sys, 'argv', args):

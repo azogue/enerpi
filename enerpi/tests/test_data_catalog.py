@@ -4,39 +4,9 @@ import os
 import pandas as pd
 import pytest
 import shutil
-import tempfile
 from unittest import TestCase
-
-from enerpi.base import BASE_PATH, SENSORS
-from enerpi.api import enerpi_data_catalog
+from enerpi.tests.conftest import get_temp_catalog_for_testing
 import enerpi.prettyprinting as pp
-
-
-# @pytest.mark.parametrize(argnames, argvalues): call a test function multiple times passing in different
-# arguments in turn. argvalues generally needs to be a list of values if argnames specifies only one name or
-# a list of tuples of values if argnames specifies multiple names. Example: @parametrize('arg1', [1,2]) would lead to
-# two calls of the decorated test function, one with arg1=1 and another with arg1=2.
-# see http://pytest.org/latest/parametrize.html for more info and examples.
-
-def _get_temp_catalog_for_testing():
-    """
-    Copy example ENERPI files & sets common data catalog for testing.
-
-    """
-    pd.set_option('display.width', 300)
-    # Prepara archivos:
-    files_update_month = os.path.join(BASE_PATH, 'tests', 'rsc', 'test_update_month')
-    tmp_dir = tempfile.TemporaryDirectory(prefix='ENERPIDATA_test')
-    data_path = tmp_dir.name
-
-    try:
-        shutil.copytree(files_update_month, data_path)
-    except FileExistsError:
-        tmp_dir.cleanup()  # shutil.rmtree(data_path)
-        shutil.copytree(files_update_month, data_path)
-    cat = enerpi_data_catalog(base_path=data_path, raw_file=os.path.join(data_path, 'enerpi_data.h5'),
-                              check_integrity=False, verbose=True)
-    return tmp_dir, data_path, cat
 
 
 def _0_catalog_update_month():
@@ -44,10 +14,13 @@ def _0_catalog_update_month():
     TEST UPDATE MONTH (problemas de memoria en RPI?)
 
     """
-    tmp_dir, data_path, cat = _get_temp_catalog_for_testing()
+    (tmp_dir, data_path, cat,
+     path_default, default_before) = get_temp_catalog_for_testing(subpath_test_files='test_update_month',
+                                                                  check_integrity=False)
+
     print(os.listdir(data_path))
     n_samples = cat.tree[cat.tree['is_raw']]['n_rows'].sum()
-    raw = pd.read_hdf(os.path.join(data_path, 'enerpi_data.h5'), 'rms')
+    raw = pd.read_hdf(os.path.join(data_path, 'enerpi_data_test.h5'), 'rms')
     new_n_samples = raw.shape[0]
 
     pp.print_info(cat.tree)
@@ -73,7 +46,7 @@ def _0_catalog_update_month():
     assert cat.tree.shape[0] == 4, "2 rows for DATA_2016_MONTH_10.h5 & 2 more for DATA_2016_11_DAY_01.h5"
     assert updated_n_samples == n_samples + new_n_samples - lost_samples, "Updated data with old and new samples"
 
-    return tmp_dir, data_path, cat
+    return tmp_dir, data_path, cat, path_default, default_before
 
 
 @pytest.mark.incremental
@@ -88,10 +61,12 @@ class TestUpdateCatalog(TestCase):
         pd.set_option('display.width', 300)
         # Prepara archivos:
 
-        tmp_dir, data_path, cat = _0_catalog_update_month()
+        tmp_dir, data_path, cat, path_default, default_before = _0_catalog_update_month()
         cls.tmp_dir = tmp_dir
         cls.DATA_PATH = data_path
         cls.cat = cat
+        cls.path_default = path_default
+        cls.default_before = default_before
 
     @classmethod
     def teardown_class(cls):
@@ -99,7 +74,9 @@ class TestUpdateCatalog(TestCase):
         Cleanup of temp data on testing.
 
         """
-        pp.print_cyan('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
+        # Restablece default_datapath
+        open(cls.path_default, 'w').write(cls.default_before)
+        print('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
         cls.tmp_dir.cleanup()
 
     def test_0_catalog_update(self):
@@ -114,10 +91,11 @@ class TestUpdateCatalog(TestCase):
         print(self.cat)
 
     def test_3_catalog_get_paths_stores(self):
-        for p in set(self.cat.tree['st']):
-            path = self.cat.get_path_hdf_store_binaries(rel_path=p)
-            assert path is not None, 'Non existent hdf store PATH'
-            assert os.path.isfile(path), 'hdf store is not a file ?'
+        if self.cat.tree is not None:
+            for p in set(self.cat.tree['st']):
+                path = self.cat.get_path_hdf_store_binaries(rel_path=p)
+                assert path is not None, 'Non existent hdf store PATH'
+                assert os.path.isfile(path), 'hdf store is not a file ?'
         path_none = self.cat.get_path_hdf_store_binaries(rel_path='NO_EXISTE.h5')
         assert path_none is None
 
@@ -142,6 +120,7 @@ class TestUpdateCatalog(TestCase):
         assert s_none is None
 
     def test_6_catalog_data_resample(self):
+        # TODO PROFILE data_resample (muy lento!)
         print(self.cat)
         data = self.cat.load_store(self.cat.tree.st[0]).iloc[:100000]
         rs1 = self.cat.resample_data(data, rs_data='40min', rm_data=None, use_median=False, func_agg=np.mean)
@@ -154,6 +133,7 @@ class TestUpdateCatalog(TestCase):
         pp.print_blue(rs3_2)
 
     def test_7_catalog_operations(self):
+        from enerpi.base import SENSORS
         data_empty = pd.DataFrame([])
         data_empty_p = self.cat.process_data(data_empty)
         assert data_empty_p.empty
@@ -181,6 +161,8 @@ class TestUpdateCatalog(TestCase):
         assert d5 is None
 
     def test_8_catalog_index_update(self):
+        from enerpi.base import BASE_PATH
+        from enerpi.api import enerpi_data_catalog
         # Regen cat_file
         cat_file = os.path.join(self.DATA_PATH, self.cat.catalog_file)
         pp.print_secc('Regeneración de catalog_file: (se elimina "{}" y se crea con check_integrity=True)'
@@ -200,7 +182,7 @@ class TestUpdateCatalog(TestCase):
         pp.print_ok(new_cat_2)
 
         # Now with distributing data:
-        raw_data = self.cat.load_store(os.path.join(BASE_PATH, 'tests', 'rsc', 'test_update_month', 'enerpi_data.h5'))
+        raw_data = self.cat.load_store(os.path.join(BASE_PATH, 'tests', 'rsc', 'test_update_month', 'enerpi_data_test.h5'))
         archived_data = self.cat.load_store('DATA_YEAR_2016/DATA_2016_MONTH_10.h5')
         assert self.cat.is_raw_data(raw_data)
         assert not self.cat.is_raw_data(archived_data)

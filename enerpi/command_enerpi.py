@@ -5,12 +5,11 @@ import re
 from threading import Timer
 import sys
 from enerpi import PRETTY_NAME, DESCRIPTION
-from enerpi.base import (BASE_PATH, CONFIG, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
+from enerpi.base import (BASE_PATH, CONFIG, SENSORS, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
                          FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log)
 from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
                              extract_log_file, delete_log_file, HDF_STORE)
-from enerpi.enerpimeter import (enerpi_logger, receiver, enerpi_raw_data,
-                                DELTA_SEC_DATA, TS_DATA_MS, RMS_ROLL_WINDOW_SEC)
+from enerpi.enerpimeter import enerpi_logger, receiver, enerpi_raw_data
 from enerpi.iobroadcast import UDP_PORT
 
 
@@ -75,14 +74,14 @@ def _enerpi_arguments():
     g_d.add_argument('-s', '--silent', action='store_true', help='‼ Silent mode (Verbose mode ON BY DEFAULT in CLI)')
 
     g_ts = p.add_argument_group(title='⚒  \033[4mCurrent Meter Sampling Configuration\033[24m')
-    g_ts.add_argument('-T', '--delta', type=float, action='store', default=DELTA_SEC_DATA, metavar='∆T',
+    g_ts.add_argument('-T', '--delta', type=float, action='store', default=SENSORS.delta_sec_data, metavar='∆T',
                       help='⌚  Set Ts sampling (to database & broadcast), in seconds. Default ∆T: {} s'
-                      .format(DELTA_SEC_DATA))
-    g_ts.add_argument('-ts', type=int, action='store', default=TS_DATA_MS, metavar='∆T',
-                      help='⏱  Set Ts raw sampling, in ms. Default ∆T_s: {} ms'.format(TS_DATA_MS))
-    g_ts.add_argument('-w', '--window', type=float, action='store', default=RMS_ROLL_WINDOW_SEC, metavar='∆T',
+                      .format(SENSORS.delta_sec_data))
+    g_ts.add_argument('-ts', type=int, action='store', default=SENSORS.ts_data_ms, metavar='∆T',
+                      help='⏱  Set Ts raw sampling, in ms. Default ∆T_s: {} ms'.format(SENSORS.ts_data_ms))
+    g_ts.add_argument('-w', '--window', type=float, action='store', default=SENSORS.rms_roll_window_sec, metavar='∆T',
                       help='⚖  Set window width in seconds for instant RMS calculation. Default ∆T_w: {} s'
-                      .format(RMS_ROLL_WINDOW_SEC))
+                      .format(SENSORS.rms_roll_window_sec))
 
     return p.parse_args()
 
@@ -238,7 +237,8 @@ def enerpi_main_cli(test_mode=False):
     elif args.demo:
         set_logging_conf(FILE_LOGGING + '_demo.log', LOGGING_LEVEL, True)
         path_st = os.path.join(DATA_PATH, 'debug_buffer_disk.h5')
-        enerpi_logger(is_demo=True, verbose=verbose, path_st=path_st, ts_data=args.delta)
+        enerpi_logger(is_demo=True, verbose=verbose, path_st=path_st, delta_sampling=args.delta,
+                      roll_time=args.window, sampling_ms=args.ts, timeout=args.timeout)
     # Receiver
     else:  # elif args.receive:
         log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', verbose, False)

@@ -8,22 +8,15 @@ from threading import Timer
 from time import sleep, time
 from enerpi.base import CONFIG, SENSORS, show_pi_temperature, set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE
-from enerpi.pisampler import random_generator, enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
+from enerpi.pisampler import enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
 from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
 from enerpi.ledrgb import get_rgbled, led_info, led_alarm, blink_color
 
 
-# Current meter
-# TS_DATA_MS = 0  # Para maximizar el sampling (a costa de elevar demasiado la Tª de una RPI 3 -> ~80 ºC)
-TS_DATA_MS = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
-# ∆T para el deque donde se acumulan frames
-RMS_ROLL_WINDOW_SEC = CONFIG.getfloat('ENERPI_SAMPLER', 'RMS_ROLL_WINDOW_SEC', fallback=2.)
-DELTA_SEC_DATA = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=2)
-INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT')
-
 # Disk data store
-N_SAMPLES_BUFFER_DISK = CONFIG.getint('ENERPI_DATA', 'TS_DATA_MS', fallback=60)
-STORE_PERIODIC_CATALOG_SEC = CONFIG.getint('ENERPI_DATA', 'TS_DATA_MS', fallback=3600)
+N_SAMPLES_BUFFER_DISK = CONFIG.getint('ENERPI_DATA', 'N_SAMPLES_BUFFER_DISK', fallback=60)
+STORE_PERIODIC_CATALOG_SEC = CONFIG.getint('ENERPI_DATA', 'STORE_PERIODIC_CATALOG_SEC', fallback=3600)
+INIT_LOG_MARK = CONFIG.get('ENERPI_SAMPLER', 'INIT_LOG_MARK', fallback='INIT')
 
 # Variable global para controlar el estado de notificaciones vía RGB LED
 LED_STATE = 0
@@ -321,29 +314,16 @@ def _get_raw_chunk(data_generator, ts_data=1, verbose=True):
     # Construcción de pd.df raw_data:
     log('Making RAW data (Sampling took {:.3f} secs)'.format(toc - tic_abs), 'info', verbose)
     df = pd.DataFrame(pd.concat([pd.DataFrame(mat_v, index=pd.Series(arr_d, name='ts'),
-                                              columns=['raw_0', 'raw_power', 'raw_ldr'])
+                                              columns=SENSORS.columns_sensors[1:])
                                  for arr_d, mat_v in zip(acumulador_ts, acumulador_data)])).sort_index()
     toc_abs = time()
     log('RAW data (Total time: {:.3f} secs):\n{}\n{}'.format(toc_abs - tic_abs, df.head(7), df.tail(7)), 'ok', verbose)
     return df
 
 
-def _sender_random(path_st=HDF_STORE, ts_data=1, timeout=None, verbose=True):
-    """
-    Runs Enerpi Logger in demo mode (sends random values)
-
-    :param path_st:
-    :param ts_data:
-    :param verbose:
-    :return:
-    """
-    ok = _execfunc(_sender, random_generator(), ts_data=ts_data, path_st=path_st, timeout=timeout, verbose=verbose)
-    log('Exiting SENDER_RANDOM; status:{}'.format(ok), 'info')
-    return ok
-
-
-def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
-                   roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, timeout=None, verbose=True):
+def _enerpi_logger(path_st=HDF_STORE, delta_sampling=SENSORS.delta_sec_data,
+                   roll_time=SENSORS.rms_roll_window_sec, sampling_ms=SENSORS.ts_data_ms, timeout=None,
+                   use_dummy_sensors=False, verbose=True):
     """
     Runs ENERPI Sensor & Logger
 
@@ -352,6 +332,7 @@ def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
     :param roll_time:
     :param sampling_ms:
     :param timeout:
+    :param use_dummy_sensors:
     :param verbose:
     :return:
     """
@@ -360,14 +341,15 @@ def _enerpi_logger(path_st=HDF_STORE, delta_sampling=DELTA_SEC_DATA,
     intro = (INIT_LOG_MARK + '\n  *** Calculating RMS values with window of {} frames (deltaT={} s, sampling: {} ms)'
              .format(n_samples, roll_time, sampling_ms))
     log(intro, 'ok', True)
-    ok = _execfunc(_sender, enerpi_sampler_rms(n_samples_buffer=n_samples, delta_sampling=delta_sampling,
-                                               min_ts_ms=sampling_ms, verbose=verbose),
-                   ts_data=1, path_st=path_st, timeout=timeout, verbose=verbose)
-    log('Exiting ENERPI_LOGGER; status:{}'.format(ok), 'info', verbose)
+
+    generator = enerpi_sampler_rms(n_samples_buffer=n_samples, delta_sampling=delta_sampling, min_ts_ms=sampling_ms,
+                                   use_dummy_sensors=use_dummy_sensors, verbose=verbose)
+    ok = _execfunc(_sender, generator, ts_data=delta_sampling, path_st=path_st, timeout=timeout, verbose=verbose)
     return ok
 
 
-def enerpi_raw_data(path_st, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS, delta_secs=20, verbose=True):
+def enerpi_raw_data(path_st, roll_time=SENSORS.rms_roll_window_sec, sampling_ms=SENSORS.ts_data_ms, delta_secs=20,
+                    use_dummy_sensors=False, verbose=True):
     """
     Runs ENERPI Sensor & Logger in RAW DATA mode
 
@@ -375,6 +357,7 @@ def enerpi_raw_data(path_st, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_
     :param roll_time:
     :param sampling_ms:
     :param delta_secs:
+    :param use_dummy_sensors:
     :param verbose:
     :return:
     """
@@ -388,9 +371,10 @@ def enerpi_raw_data(path_st, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_
     intro += ('\n  ** RAW_DATA Mode ON (adquiring all samples in {} secs) (chunk={} samples) **'
               .format(delta_secs, n_samples))
     log(intro, 'ok', True)
-    raw_data = _get_raw_chunk(enerpi_raw_sampler(delta_secs=delta_secs, n_samples_buffer=n_samples,
-                                                 min_ts_ms=sampling_ms, verbose=verbose),
-                              ts_data=0, verbose=verbose)
+
+    generator = enerpi_raw_sampler(delta_secs=delta_secs, n_samples_buffer=n_samples, min_ts_ms=sampling_ms,
+                                   use_dummy_sensors=use_dummy_sensors, verbose=verbose)
+    raw_data = _get_raw_chunk(generator, ts_data=0, verbose=verbose)
     if type(raw_data) is pd.DataFrame:
         log('Exiting ENERPI_RAW_LOGGER with:\n{}'.format(raw_data.describe()), 'info', verbose)
         raw_data.to_hdf(path_st, 'raw')
@@ -400,20 +384,21 @@ def enerpi_raw_data(path_st, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_
 def enerpi_logger(path_st=None, is_demo=True, timeout=None, verbose=True, **kwargs_sender):
     """
     Starts ENERPI Logger loop.
-    """
 
+    """
     n_execs = 0
     tic = time()
     while True:
-        if is_demo:
-            _ = _sender_random(path_st=path_st, timeout=timeout, verbose=verbose, **kwargs_sender)
-            break
-        else:
-            ok = _enerpi_logger(path_st=path_st, timeout=timeout, verbose=verbose, **kwargs_sender)
-        if not ok:
+        ok = _enerpi_logger(path_st=path_st, timeout=timeout, use_dummy_sensors=is_demo,
+                            verbose=verbose, **kwargs_sender)
+        if is_demo or not ok:
+            if is_demo:
+                log('Exiting SENDER_RANDOM; status:{}'.format(ok), 'info', verbose)
+            else:
+                log('Exiting ENERPI_LOGGER; status:{}'.format(ok), 'info', verbose)
             break
         toc = time()
-        log('Waiting 10 s to init again... EXEC={}, ∆T={:.1f} s'.format(n_execs, toc - tic), 'ok', verbose, True)
+        log('Waiting 10 s to init again... EXEC={}, ∆T={:.1f} s'.format(n_execs, toc - tic), 'ok', verbose)
         sleep(10)
         tic = time()
         n_execs += 1
@@ -435,8 +420,8 @@ def enerpi_daemon_logger(with_pitemps=False):
         # Shows RPI Temps
         timer_temps = Timer(3, show_pi_temperature, args=(3,))
         timer_temps.start()
-    enerpi_logger(path_st=HDF_STORE, is_demo=False, timeout=None, verbose=False,
-                  delta_sampling=DELTA_SEC_DATA, roll_time=RMS_ROLL_WINDOW_SEC, sampling_ms=TS_DATA_MS)
+    enerpi_logger(path_st=HDF_STORE, is_demo=False, timeout=None, verbose=False, delta_sampling=SENSORS.delta_sec_data,
+                  roll_time=SENSORS.rms_roll_window_sec, sampling_ms=SENSORS.ts_data_ms)
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing desde enerpi_main_logger...', 'debug', False, True)
         timer_temps.cancel()

@@ -3,7 +3,8 @@
 from enerpi.base import CONFIG, SENSORS, DATA_PATH, FILE_LOGGING, LOGGING_LEVEL, log
 # noinspection PyUnresolvedReferences
 from enerpi.database import init_catalog, get_ts_last_save, extract_log_file, delete_log_file, HDF_STORE
-from enerpi.enerpimeter import receiver_msg_generator, msg_to_dict, TS_DATA_MS, RMS_ROLL_WINDOW_SEC, DELTA_SEC_DATA
+# noinspection PyUnresolvedReferences
+from enerpi.enerpimeter import receiver_msg_generator, enerpi_raw_data, msg_to_dict
 
 
 def enerpi_receiver_generator(verbose=False, n_msgs=None):
@@ -39,9 +40,9 @@ def enerpi_default_config():
     """
     conf = {'store': HDF_STORE,
             'DATA_PATH': DATA_PATH,
-            'delta': DELTA_SEC_DATA,
-            'window': RMS_ROLL_WINDOW_SEC,
-            'ts': TS_DATA_MS,
+            'delta': SENSORS.delta_sec_data,
+            'window': SENSORS.rms_roll_window_sec,
+            'ts': SENSORS.ts_data_ms,
             'LOGGING_LEVEL': LOGGING_LEVEL,
             'FILE_LOGGING': FILE_LOGGING}
     return conf

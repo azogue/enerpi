@@ -13,6 +13,60 @@ from enerpi.base import SENSORS, log
 # TODO Change MEAN SENSORS FOR **MEDIAN** SENSORS!
 PREC_SAMPLING = dt.timedelta(microseconds=500)
 HOST = check_output('hostname').decode().splitlines()[0]
+EXAMPLE_POWER_EV = [(0, 300), (3, 1200), (6, 3250), (8, 700), (9, 100), (10, 0), (12, 300)]
+
+
+class DummySensor(object):
+    """
+    Object for mimic a MCP Sensor.
+    """
+    def __init__(self, channel=0, power_noise=15,
+                 power_divisor=SENSORS.rms_multiplier, power_evolution=EXAMPLE_POWER_EV,
+                 signal_center=.49951124, freq_hz=50):
+        self._ch = channel
+        self._v_min = 0
+        self._v_max = 1
+        self._counter = 0
+        self._center = signal_center
+        self._power_divisor = power_divisor
+        self._noise = power_noise / self._power_divisor
+        times, values = list(zip(*power_evolution))
+        self._true_value = values[-1] / self._power_divisor
+        self._power_ev_time = np.array(times)
+        self._power_ev_values = np.array(values)
+        self._period_ev = self._power_ev_time[-1] + 1
+        self._freq = freq_hz
+        self._t0 = time()
+
+    @property
+    def elapsed(self):
+        """Elapsed time from creation"""
+        return time() - self._t0
+
+    @property
+    def software_spi(self):
+        """True (like MCP/GPIOZERO using Software SPI)"""
+        return True
+
+    @property
+    def is_active(self):
+        """True, like GPIOZERO_MCP sensor.is_active"""
+        return True
+
+    @property
+    def value(self):
+        """Mimics reading of MCP sensor"""
+        ts = self.elapsed % self._period_ev
+        value = self._power_ev_values[np.where(self._power_ev_time < ts)[0][-1]]
+        self._true_value = value / self._power_divisor
+        noise_v = 2 * (random.random() - .5) * self._noise
+        v = self._true_value + noise_v
+        return self._center + np.sqrt(2) * v * np.sin((self._freq * 2 * np.pi) * self.elapsed)
+
+    @property
+    def closed(self):
+        """Mimics closed state of MCP sensor"""
+        return True
 
 
 class AnalogSensorBuffer(object):
@@ -122,18 +176,6 @@ def msg_to_dict(msg):
     return d_data
 
 
-def random_generator():
-    """Random data generator of sampling values for DEMO mode."""
-    p_min, p_max = 180, 240 * 15
-    count = 0
-    while count < 50:
-        p = random.randint(p_min, p_max)
-        yield dt.datetime.now(), p, 1, 0, .5
-        count += 1
-    log('PROGRAMMED STOP OF RANDOM_GENERATOR', 'info', True, False)
-    raise StopIteration
-
-
 def _close_analog_sensor(sensor):
     if sensor is not None and not sensor.closed:
         sensor.close()
@@ -141,22 +183,28 @@ def _close_analog_sensor(sensor):
 
 def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSORS.delta_sec_data,
              min_ts_ms=SENSORS.ts_data_ms, delta_secs_raw_capture=None,
-             measure_ldr_divisor=SENSORS.measure_ldr_divisor, verbose=False):
+             measure_ldr_divisor=SENSORS.measure_ldr_divisor,
+             use_dummy_sensors=False, verbose=False):
     delta_sampling_calc = dt.timedelta(seconds=delta_sampling)
     con_pausa = min_ts_ms > 0
     buffers, normal_exit = [], True
     assert(len(SENSORS) > 0)
     n_samples_buffer_rms = n_samples_buffer
     n_samples_buffer_normal = n_samples_buffer // measure_ldr_divisor
+
+    if use_dummy_sensors:
+        sensor_probe, probe_type = DummySensor, 'DummySensor'
+    else:
+        sensor_probe, probe_type = MCP3008, 'MCP3008'
     try:
-        buffers = [AnalogSensorBuffer(MCP3008(channel=s.channel), s.bias,
+        buffers = [AnalogSensorBuffer(sensor_probe(channel=s.channel), s.bias,
                                       n_samples_buffer_rms if s.is_rms else n_samples_buffer_normal,
                                       rms_sensor=s.is_rms) for s in SENSORS]
 
         software_spi_mode = buffers[0].software_spi
-        log('ENERPI ANALOG SENSING WITH MCP3008 - (channel={}, raw_value={}); '
+        log('ENERPI ANALOG SENSING WITH {} - (channel={}, raw_value={:.5f}); '
             'Active:{}, Software SPI:{}, #buffer_rms:{}, #buffer:{}'
-            .format(SENSORS[0].channel, buffers[0].read(), buffers[0].is_active, software_spi_mode,
+            .format(probe_type, SENSORS[0].channel, buffers[0].read(), buffers[0].is_active, software_spi_mode,
                     n_samples_buffer_rms, n_samples_buffer_normal), 'debug', verbose)
         if software_spi_mode:
             log('SOFTWARE_SPI --> No hardware/driver present, so is going to be slower...', 'warn', verbose)
@@ -182,7 +230,7 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                     tic = time()
         else:
             cumsum_sensors_rms = np.zeros(sum([b.is_rms for b in buffers]), dtype=float)
-            cumsum_sensors_normal = np.zeros(sum([not b.is_rms for b in buffers]), dtype=float)
+            cumsum_sensors_normal = other_values = np.zeros(sum([not b.is_rms for b in buffers]), dtype=float)
             assert (cumsum_sensors_rms.shape[0] + cumsum_sensors_normal.shape[0] == len(buffers))
             stop = dt.datetime.now()
             tic = time()
@@ -205,8 +253,8 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                 if ts - stop > delta_sampling_calc - PREC_SAMPLING:
                     stop = ts
                     power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * SENSORS.rms_multiplier
-                    other_values = cumsum_sensors_normal / counter_buffer_normal
-
+                    if counter_buffer_normal > 0:
+                        other_values = cumsum_sensors_normal / counter_buffer_normal
                     yield (ts, *power_rms_values, *other_values, counter_buffer_rms, counter_buffer_normal)
                     cumsum_sensors_rms[:] = 0
                     cumsum_sensors_normal[:] = 0
@@ -237,7 +285,8 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
 
 
 def enerpi_sampler_rms(n_samples_buffer=SENSORS.n_samples_buffer_rms,
-                       delta_sampling=SENSORS.delta_sec_data, min_ts_ms=SENSORS.ts_data_ms, verbose=False):
+                       delta_sampling=SENSORS.delta_sec_data, min_ts_ms=SENSORS.ts_data_ms,
+                       use_dummy_sensors=False, verbose=False):
     """
     Generador de valores RMS de las conexiones analógicas vía MCP3008.
         - Esta función realiza el sampling de alta frecuencia y va calculando los valores RMS con un buffer (como una
@@ -251,25 +300,29 @@ def enerpi_sampler_rms(n_samples_buffer=SENSORS.n_samples_buffer_rms,
     :param n_samples_buffer: Nº de samples tenidos en cuenta para calcular el RMS instantáneo.
     :param delta_sampling: ∆T en segundos entre envíos de información (yielding)
     :param min_ts_ms: ∆T en ms mínimo entre samples. Por defecto a 0: el máximo nº de frames que pueda computarse.
+    :param use_dummy_sensors: Utiliza un generador de datos por software en lugar de usar MCP3008 (para DEMO / tests).
     :param verbose: Salida de msgs de error por sys.stdout.
 
     :yield: (ts_datetime, power_rms, noise_rms, counter_buffer, ldr_rms)
     """
     return _sampler(n_samples_buffer=n_samples_buffer,
-                    delta_sampling=delta_sampling, min_ts_ms=min_ts_ms, verbose=verbose)
+                    delta_sampling=delta_sampling, min_ts_ms=min_ts_ms,
+                    use_dummy_sensors=use_dummy_sensors, verbose=verbose)
 
 
 def enerpi_raw_sampler(delta_secs=20, n_samples_buffer=SENSORS.n_samples_buffer_rms, min_ts_ms=0,
-                       verbose=True):
+                       use_dummy_sensors=False, verbose=True):
     """
     Generador de valores en bruto de las conexiones analógicas vía MCP3008 (sampling de alta frecuencia)
 
     :param delta_secs: Nº de samples tenidos en cuenta para calcular el RMS instantáneo.
     :param n_samples_buffer: Nº de samples tenidos en cuenta para hacer el yielding.
     :param min_ts_ms: ∆T en ms mínimo entre samples. Por defecto a 0: el máximo nº de frames que pueda computarse.
+    :param use_dummy_sensors: Utiliza un generador de datos por software en lugar de usar MCP3008 (para DEMO / tests).
     :param verbose: Salida de msgs de error por sys.stdout.
 
     :yield: (ts_datetime, power_rms, noise_rms, counter_buffer, ldr_rms)
     """
     return _sampler(delta_secs_raw_capture=delta_secs,
-                    n_samples_buffer=n_samples_buffer, min_ts_ms=min_ts_ms, verbose=verbose)
+                    n_samples_buffer=n_samples_buffer, min_ts_ms=min_ts_ms,
+                    use_dummy_sensors=use_dummy_sensors, verbose=verbose)

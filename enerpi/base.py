@@ -108,7 +108,7 @@ class EnerpiSamplerConf(object):
         s_calc = self.ts_data_ms if self.ts_data_ms > 0 else 8
         self.n_samples_buffer_rms = int(round(self.rms_roll_window_sec * 1000 / s_calc))
 
-        self.delta_sec_data = CONFIG.getint('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1)
+        self.delta_sec_data = CONFIG.getfloat('ENERPI_SAMPLER', 'DELTA_SEC_DATA', fallback=1.)
         self.measure_ldr_divisor = CONFIG.getint('ENERPI_SAMPLER', 'MEASURE_LDR_DIVISOR', fallback=10)
         self.n_samples_buffer_mean = self.n_samples_buffer_rms // self.measure_ldr_divisor
         self.TZ = pytz.timezone(CONFIG.get('ENERPI_SAMPLER', 'TZ', fallback='Europe/Madrid'))
@@ -267,31 +267,6 @@ class EnerpiSamplerConf(object):
         return cols_rms, cols_mean, cols_ref
 
     def descriptions(self, columns, return_list=True):
-        """
-        Return column descriptions (as list or as dict c:desc)
-        :param columns: list of columns
-        :param return_list: :bool: False for dict return
-        :return: :list: or :dict:
-        """
-        def _get_desc(key):
-            try:
-                return self[key].description
-            except KeyError as e:
-                if key == self.ts_column:
-                    return 'TS'
-                elif key == self.ref_rms:
-                    return '# samples'
-                elif key == self.ref_mean:
-                    return '# samples_n'
-                else:
-                    raise KeyError(e)
-
-        if return_list:
-            return [_get_desc(c) for c in columns]
-        else:
-            return {c: _get_desc(c) for c in columns}
-
-    def other(self, columns, return_list=True):
         """
         Return column descriptions (as list or as dict c:desc)
         :param columns: list of columns
