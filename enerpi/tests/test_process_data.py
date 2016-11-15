@@ -107,9 +107,12 @@ class TestCatalog(TestCase):
         print(d2_none)
         print(self.cat.base_path)
         print(os.listdir(self.cat.base_path))
-        d3_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=True)
+        d3_none, d3_s_none = self.cat.get(start=None, end=None, last_hours=10,
+                                          column=SENSORS.main_column, with_summary=True)
+        print(d3_none)
         assert d2_none is None
         assert d3_none is None
+        assert d3_s_none is None
         d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=SENSORS.main_column, with_summary=True)
         assert d4 is None
         assert d4_s is None

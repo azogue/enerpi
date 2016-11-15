@@ -188,8 +188,6 @@ class HDFTimeSeriesCatalog(object):
         except AttributeError:
             log('AttributeError reading HDFTSCAT INDEX in "{}". Corrupted?\n{}\n ...Rebuilding index...'
                 .format(p, open(p, 'r').readlines()), 'error', self.verbose)
-        except OSError:
-            log('OSError reading HDFTSCAT INDEX in "{}". Rebuilding index...'.format(p), 'error', self.verbose)
         return None
 
     def _get_index(self, check_index=True):
@@ -212,12 +210,8 @@ class HDFTimeSeriesCatalog(object):
     def _save_index(self, index):
         # print_secc('Salvando INDEX')
         p = os.path.join(self.base_path, self.catalog_file)
-        try:
-            index.to_csv(p)
-            return True
-        except Exception as e:
-            log('ERROR en _save_index "{}"; [{}]'.format(p, e.__class__), 'error', self.verbose)
-            return False
+        index.to_csv(p)
+        return True
 
     def _check_index(self, index):
         # print_secc('CHECK INDEX')
@@ -257,11 +251,9 @@ class HDFTimeSeriesCatalog(object):
         return index
 
     def _load_hdf(self, rel_path, key=None, func_store=None, columns=None):
-        # print('LOADING: {}, key={}, func_st is None? {}'.format(rel_path, key, func_store is None))
         p = os.path.join(self.base_path, rel_path)
         k = key or self.key_raw
         try:
-            # tic = time()
             with pd.HDFStore(p, mode='r') as st:
                 if func_store is None:
                     if columns is None:
@@ -270,21 +262,13 @@ class HDFTimeSeriesCatalog(object):
                         data = st.select(k, columns=columns)
                 else:
                     data = func_store(st)
-            # print('load_hdf {} in {:.3f}'.format(p, time() - tic))
-            # data.info()
             return data
         except KeyError as e:
             log('load_hdf KEYERROR -> ST:"{}", KEY:{}; -> {}'.format(p, k, e), 'error', self.verbose)
-            # with pd.HDFStore(p, mode='r') as st:
-            #     log(st, 'error', self.verbose)
-            return None
         except OSError as e:
             log('load_hdf OSERROR -> ST:"{}", KEY:"{}"'
                 .format(p, k, e, e.__class__, os.path.exists(p)), 'debug', self.verbose)
-        except Exception as e:
-            log('load_hdf ERROR -> ST:"{}", KEY:"{}"; -> "{}" ["{}"]. exist?: {}'
-                .format(p, k, e, e.__class__, os.path.exists(p)), 'error', self.verbose)
-            return None
+        return None
 
     def _save_hdf(self, data, path, key, mode='a', **kwargs):
         p = os.path.join(self.base_path, path)
@@ -375,8 +359,7 @@ class HDFTimeSeriesCatalog(object):
                     return dataframe.loc[ini:fin]
                 return dataframe.loc[ini:]
             else:
-                log('GET DATA WARNING -> No valid dfs (were {}: {})'
-                    .format(len(dataframes), dataframes), 'warn', verbose)
+                log('GET DATA -> No valid dfs ({}): {})'.format(len(dataframes), dataframes), 'warn', verbose)
         except ValueError as e:
             log('GET DATA ERROR: {}'.format(e), 'error', verbose)
         return None
@@ -532,8 +515,6 @@ class HDFTimeSeriesCatalog(object):
                 shutil.copyfile(os.path.join(self.base_path, p), p_bkp)
                 os.remove(os.path.join(self.base_path, p))
 
-    # @timeit('archive_periodic')
-    # @profile
     def archive_periodic(self, new_data=None, reload_index=False):
         """
         * Archivado periódico:
@@ -776,9 +757,9 @@ class HDFTimeSeriesCatalog(object):
     #     # TODO backup a ruta alternativa, con compresión y opción de replicado de tree o compactado (x años, o total)
     #     raise NotImplementedError
     #
-    def export(self):  # , export_to='csv'):
-        # TODO terminar export?
-        all_data, all_data_s = self.get_all_data(True, True)
-        # if export_to == 'csv':
-        all_data.to_csv(os.path.join(self.base_path, 'enerpi_all_data.csv'))
-        all_data_s.to_csv(os.path.join(self.base_path, 'enerpi_all_data_summary.csv'))
+    # def export(self):  # , export_to='csv'):
+    #     # TODO terminar export?
+    #     all_data, all_data_s = self.get_all_data(True, True)
+    #     # if export_to == 'csv':
+    #     all_data.to_csv(os.path.join(self.base_path, 'enerpi_all_data.csv'))
+    #     all_data_s.to_csv(os.path.join(self.base_path, 'enerpi_all_data_summary.csv'))

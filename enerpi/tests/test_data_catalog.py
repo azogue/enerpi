@@ -149,9 +149,12 @@ class TestUpdateCatalog(TestCase):
         assert d1_none is None
         assert d1_s_none is None
         d2_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=False)
-        d3_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=True)
+        d3_none, d3_s_none = self.cat.get(start=None, end=None, last_hours=10,
+                                          column=SENSORS.main_column, with_summary=True)
+        print(d3_none)
         assert d2_none is None
         assert d3_none is None
+        assert d3_s_none is None
         d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=SENSORS.main_column, with_summary=True)
         assert not d4.empty
         assert d4_s.shape[0] == 48
@@ -182,7 +185,8 @@ class TestUpdateCatalog(TestCase):
         pp.print_ok(new_cat_2)
 
         # Now with distributing data:
-        raw_data = self.cat.load_store(os.path.join(BASE_PATH, 'tests', 'rsc', 'test_update_month', 'enerpi_data_test.h5'))
+        raw_data = self.cat.load_store(os.path.join(BASE_PATH, 'tests', 'rsc',
+                                                    'test_update_month', 'enerpi_data_test.h5'))
         archived_data = self.cat.load_store('DATA_YEAR_2016/DATA_2016_MONTH_10.h5')
         assert self.cat.is_raw_data(raw_data)
         assert not self.cat.is_raw_data(archived_data)

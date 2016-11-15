@@ -415,11 +415,7 @@ def enerpi_daemon_logger(with_pitemps=False):
     """
 
     set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
-    timer_temps = None
-    if with_pitemps:
-        # Shows RPI Temps
-        timer_temps = Timer(3, show_pi_temperature, args=(3,))
-        timer_temps.start()
+    timer_temps = show_pi_temperature(with_pitemps, 3)
     enerpi_logger(path_st=HDF_STORE, is_demo=False, timeout=None, verbose=False, delta_sampling=SENSORS.delta_sec_data,
                   roll_time=SENSORS.rms_roll_window_sec, sampling_ms=SENSORS.ts_data_ms)
     if timer_temps is not None:

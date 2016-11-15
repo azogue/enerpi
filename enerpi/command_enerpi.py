@@ -2,7 +2,6 @@
 import datetime as dt
 import os
 import re
-from threading import Timer
 import sys
 from enerpi import PRETTY_NAME, DESCRIPTION
 from enerpi.base import (BASE_PATH, CONFIG, SENSORS, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
@@ -121,11 +120,8 @@ def enerpi_main_cli(test_mode=False):
     verbose = not args.silent
 
     # CONTROL LOGIC
-    timer_temps = None
-    if args.temps:
-        # Shows RPI Temps
-        timer_temps = Timer(3, show_pi_temperature, args=(3,))
-        timer_temps.start()
+    # Shows RPI Temps
+    timer_temps = show_pi_temperature(args.temps, 3)
 
     if args.install or args.uninstall:
         from enerpi.config.crontasks import set_command_on_reboot, clear_cron_commands

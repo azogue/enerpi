@@ -51,6 +51,7 @@ class TestDaemon(TestCase):
 
         """
         from enerpi.enerdaemon import enerpi_daemon
+
         def _exec_cli_w_args(args):
             # noinspection PyUnresolvedReferences
             with patch.object(sys, 'argv', args):

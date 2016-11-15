@@ -69,6 +69,7 @@ class TestCLI(TestCase):
 
         """
         from enerpi.command_enerpi import enerpi_main_cli
+
         def _exec_cli_w_args(args):
             # noinspection PyUnresolvedReferences
             with patch.object(sys, 'argv', args):

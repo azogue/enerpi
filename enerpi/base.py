@@ -7,25 +7,15 @@ import pytz
 import shutil
 import subprocess
 import sys
+from threading import Timer
 from time import time, sleep
 from enerpi import BASE_PATH, PRETTY_NAME
+from enerpi.prettyprinting import print_err, print_red, print_info, print_ok, print_warn, print_yellowb, print_magenta
+from enerpi.pitemps import get_cpu_temp, get_gpu_temp
 
 
 ENCODING = 'UTF-8'
 CONFIG_FILENAME = 'config_enerpi.ini'
-try:
-    from enerpi.prettyprinting import (print_err, print_red, print_info, print_ok, print_warn,
-                                       print_yellowb, print_magenta)
-except ImportError:
-    print_err = print_red = print_info = print_ok = print_warn = print_yellowb = print_magenta = print
-
-HAY_TEMPS = True
-try:
-    from enerpi.pitemps import get_cpu_temp, get_gpu_temp
-except ImportError:
-    get_cpu_temp = get_gpu_temp = None
-    logging.debug('* No se encuentra el módulo "pitemps" para medir las Tªs de la RPI')
-    HAY_TEMPS = False
 
 
 class EnerpiAnalogSensor(object):
@@ -307,7 +297,7 @@ def _funcs_tipo_output(tipo_log):
         return print_ok, logging.info
     elif tipo_log == 'info':
         return print_info, logging.info
-    elif tipo_log == 'warn':
+    elif (tipo_log == 'warn') or (tipo_log == 'warning'):
         return print_warn, logging.warning
     elif tipo_log == 'magenta':
         return print_magenta, logging.warning
@@ -346,19 +336,29 @@ def set_logging_conf(filename, level='DEBUG', verbose=True, with_initial_log=Tru
         log(PRETTY_NAME, 'ok', verbose)
 
 
-def show_pi_temperature(ts=3):
+def show_pi_temperature(log_rpi_temps, ts=3):
     """
     Sensor Raspberry PI temperatures, infinite-loop of logging / printing values
 
-    :param ts:
-    :return:
+    :param log_rpi_temps: :bool: activate RPI temp logging
+    :param ts: :int: ∆T between samples
     """
-    if HAY_TEMPS:
+    def _loop_log_temps():
         while True:
             t_cpu = get_cpu_temp()
             t_gpu = get_gpu_temp()
+            if (t_cpu is None) and (t_gpu is None):
+                log('NO RPI TEMPS', 'warning', False, True)
+                break
             log('Tªs --> {:.1f} / {:.1f} ºC'.format(t_cpu, t_gpu), 'otro', False, True)
             sleep(ts)
+
+    if log_rpi_temps:
+        # Shows RPI Temps
+        timer_temps = Timer(.5, _loop_log_temps)
+        timer_temps.start()
+        return timer_temps
+    return None
 
 
 def timeit(cadena_log, verbose=False, *args_dec):
@@ -375,9 +375,6 @@ def timeit(cadena_log, verbose=False, *args_dec):
     def _real_deco(function):
         def _wrapper(*args, **kwargs):
             kwargs_print = {}
-            for k in kwargs.keys():
-                if k.startswith('print_'):
-                    kwargs_print[k] = kwargs.pop(k)
             tic = time()
             out = function(*args, **kwargs)
             if verbose:

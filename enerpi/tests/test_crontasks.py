@@ -4,7 +4,7 @@ import os
 from unittest import TestCase
 from unittest.mock import patch
 import sys
-from enerpi.config.crontasks import set_command_on_reboot, set_command_periodic, clear_cron_commands, info_crontable
+from enerpi.config.crontasks import set_command_on_reboot, clear_cron_commands, info_crontable
 from enerpi.tests.conftest import get_temp_catalog_for_testing
 
 
@@ -75,6 +75,7 @@ class TestCron(TestCase):
 
         """
         from enerpi.command_enerpi import enerpi_main_cli
+
         def _exec_cli_w_args(args):
             # noinspection PyUnresolvedReferences
             with patch.object(sys, 'argv', args):
