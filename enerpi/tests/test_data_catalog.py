@@ -125,9 +125,9 @@ class TestUpdateCatalog(TestCase):
         data = self.cat.load_store(self.cat.tree.st[0]).iloc[:100000]
         rs1 = self.cat.resample_data(data, rs_data='40min', rm_data=None, use_median=False, func_agg=np.mean)
         pp.print_green(rs1)
-        rs2 = self.cat.resample_data(data, rm_data=30, use_median=True, func_agg=np.sqrt)
+        rs2 = self.cat.resample_data(data, rm_data=30, use_median=True)
         pp.print_yellow(rs2)
-        rs3 = self.cat.resample_data(data, rs_data='2min', use_median=True, func_agg=np.mean)
+        rs3 = self.cat.resample_data(data, rs_data='2min', use_median=True)
         pp.print_blue(rs3)
         rs3_2 = self.cat.resample_data(data, rm_data='2min', use_median=False, func_agg=np.mean)
         pp.print_blue(rs3_2)

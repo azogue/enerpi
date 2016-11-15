@@ -48,8 +48,8 @@ class TimerExiter(object):
 
     __nonzero__ = __bool__
 
-    def __repr__(self):
-        return '{:.6f}'.format(time() - self.tic)
+    # def __repr__(self):
+    #     return '{:.6f}'.format(time() - self.tic)
 
 
 def _interp_colors(c1, c2, ini_v, fin_v, value):
@@ -208,7 +208,6 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
     global LED_STATE
     LED_STATE = 0
     counter, p_save = 0, None
-    normal_exit = True
     led = get_rgbled(verbose=True)
     sock_send, counter_unreachable = None, np.array([0, 0])
     catalog = init_catalog(raw_file=path_st, check_integrity=True, archive_existent=True)
@@ -224,8 +223,6 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
             tic = time()
             # Recibe sample del generador de datos
             data = next(data_generator)
-            if data is None:
-                raise KeyboardInterrupt
             # elif verbose:
             #     print('Sampled: ', dict(zip(SENSORS.columns, data)), data)
 
@@ -265,13 +262,9 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
         log('Exiting SENDER because StopIteration', 'warn', verbose)
     except KeyboardInterrupt:
         # log('Interrumpting SENDER with KeyboardInterrupt', 'warn', verbose)
-        normal_exit = False
-    if sock_send is not None:
-        sock_send.close()
-    if led is not None:
-        led.close()
-    if not normal_exit:
-        raise KeyboardInterrupt
+        pass
+    [obj.close() for obj in [sock_send, led] if obj is not None]
+    raise KeyboardInterrupt
 
 
 def _get_raw_chunk(data_generator, ts_data=1, verbose=True):

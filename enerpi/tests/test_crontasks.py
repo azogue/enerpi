@@ -29,7 +29,8 @@ class TestCron(TestCase):
         """
         # Prepara archivos:
         (tmp_dir, data_path, cat,
-         path_default_datapath, before_tests) = get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi')
+         path_default_datapath, before_tests) = get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi',
+                                                                             check_integrity=True)
         cls.tmp_dir = tmp_dir
         cls.DATA_PATH = data_path
         cls.cat = cat

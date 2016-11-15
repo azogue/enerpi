@@ -56,8 +56,7 @@ def receiver_msg_generator(verbose=True, n_msgs=None, port=UDP_PORT):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind((UDP_IP, port))
-        if verbose:
-            log(DESCRIPTION_IO, 'ok', verbose, False)
+        log(DESCRIPTION_IO, 'ok', verbose, False)
         while (n_msgs is None) or (counter < n_msgs):
             tic = time()
             data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
@@ -96,8 +95,7 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, verbose=True):
         # sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if verb:
-            log(DESCRIPTION_IO, 'ok', verb)
+        log(DESCRIPTION_IO, 'ok', verb, verb)
         return sock
 
     if sock_send is None:
@@ -110,9 +108,9 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, verbose=True):
         log('OSError: {}; C_UNREACHABLE: {}'.format(e, counter_unreachable), 'warn', verbose)
         counter_unreachable += 1
         sock_send = None
-    except Exception as e:
-        log('ERROR en sendto: {} [{}]'.format(e, e.__class__), 'err', verbose)
-        sock_send = _get_broadcast_socket()
-        sock_send.sendto(encrypted_msg_b, (UDP_IP, UDP_PORT))
+    # except Exception as e:
+    #     log('ERROR en sendto: {} [{}]'.format(e, e.__class__), 'err', verbose)
+    #     sock_send = _get_broadcast_socket()
+    #     sock_send.sendto(encrypted_msg_b, (UDP_IP, UDP_PORT))
     log('SENDED: {}'.format(msg), 'debug', verbose, False)
     return sock_send

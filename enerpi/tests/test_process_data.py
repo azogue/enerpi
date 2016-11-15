@@ -19,7 +19,9 @@ class TestCatalog(TestCase):
         pd.set_option('display.width', 300)
         # Prepara archivos:
 
-        tmp_dir, data_path, cat, path_default_datapath, before_tests = get_temp_catalog_for_testing()
+        (tmp_dir, data_path, cat,
+         path_default_datapath, before_tests) = get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi',
+                                                                             check_integrity=True)
         cls.tmp_dir = tmp_dir
         cls.DATA_PATH = data_path
         cls.cat = cat

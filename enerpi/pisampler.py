@@ -176,18 +176,13 @@ def msg_to_dict(msg):
     return d_data
 
 
-def _close_analog_sensor(sensor):
-    if sensor is not None and not sensor.closed:
-        sensor.close()
-
-
 def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSORS.delta_sec_data,
              min_ts_ms=SENSORS.ts_data_ms, delta_secs_raw_capture=None,
              measure_ldr_divisor=SENSORS.measure_ldr_divisor,
              use_dummy_sensors=False, verbose=False):
     delta_sampling_calc = dt.timedelta(seconds=delta_sampling)
     con_pausa = min_ts_ms > 0
-    buffers, normal_exit = [], True
+    buffers = []
     assert(len(SENSORS) > 0)
     n_samples_buffer_rms = n_samples_buffer
     n_samples_buffer_normal = n_samples_buffer // measure_ldr_divisor
@@ -264,24 +259,13 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                     tic = time()
     except KeyboardInterrupt:
         log('KeyboardInterrupt en PISAMPLER: Exiting...', 'warn', verbose)
-        normal_exit = False
     except OSError as e:
         log('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e), 'error', verbose)
-        normal_exit = False
     except (RuntimeError, AttributeError) as e:
         log('{} en PISAMPLER: "{}". Terminando el generador.'.format(e.__class__, e), 'error', verbose)
-        normal_exit = False
-
-    # Try to close sensors:
-    try:
-        [b.close_probe() for b in buffers]
-    except Exception as e:
-        log('ERROR "{}" en PISAMPLER intentando cerrar los sensores analógicos: "{}"'
-            .format(e.__class__, e), 'error', verbose)
-    if normal_exit:
-        yield None
-    else:
-        raise KeyboardInterrupt
+    # Exiting
+    [b.close_probe() for b in buffers]
+    raise KeyboardInterrupt
 
 
 def enerpi_sampler_rms(n_samples_buffer=SENSORS.n_samples_buffer_rms,

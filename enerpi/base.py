@@ -75,11 +75,11 @@ class EnerpiSamplerConf(object):
         self._sensors_rms = [EnerpiAnalogSensor(name, desc, ch, ch_n, True, color, bias_current)
                              for name, desc, color, ch, ch_n in zip(cols_data_rms, descr_data_rms, colors_data_rms,
                                                                     channels[:len(cols_data_rms)],
-                                                                    names_channels[:len(cols_data_rms)])]
+                                                                    names_channels[:len(cols_data_rms)]) if ch >= 0]
         self._sensors_mean = [EnerpiAnalogSensor(name, desc, ch, ch_n, False, color)
                               for name, desc, color, ch, ch_n in zip(cols_data_mean, descr_data_mean, colors_data_mean,
                                                                      channels[len(cols_data_rms):],
-                                                                     names_channels[len(cols_data_rms):])]
+                                                                     names_channels[len(cols_data_rms):]) if ch >= 0]
         # PiSampler parameters:
         # Current meter
         # Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
