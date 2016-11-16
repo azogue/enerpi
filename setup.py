@@ -76,7 +76,6 @@ setup(
     },
     # Test configuration:
     # setup_requires=['pytest-runner'],
-    tests_require=['pytest'],
+    tests_require=['pytest>=3.0.0'],
     # test_suite='nose.collector',
-    # tests_require=['nose'],
 )

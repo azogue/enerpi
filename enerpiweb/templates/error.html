@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% from 'macros.html' import alert_dismiss with context %}
+
+{% block content %}
+    <div class="jumbotron alert">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-xs-4 col-sm-3 col-md-2 col-lg-2">
+                    <img class="img-fluid img-rounded pull-xs-left" style="margin-bottom: 5px; max-width: 100%; height: auto; width: 100% \9;"
+                         src="{{ url_for('static', filename='img/icons/base.svg')}}">
+                </div>
+                <div class="col-xs-8 col-sm-9 col-md-10 col-lg-10">
+                    <h1 class="display-5">Error <strong>{{ error_e }}!!</strong></h1>
+                </div>
+            </div>
+        </div>
+        <br class="hidden-sm-down">
+        <div class="container-fluid">
+            <h3 class="display-5" style="word-wrap:break-word; overflow-wrap: break-word;">URL: <strong>{{ request.base_url }}</strong></h3>
+            <a class="btn btn-primary" href="{{ url_for('index')}}" role="button">Return home...</a>
+        </div>
+    </div>
+    {% if alerta %}
+        {{ alert_dismiss(alerta) }}
+    {% endif %}
+    <div class="container-fluid">
+        <h2 class="lead">* Error details:</h2>
+        <div class="alert alert-danger" style="word-wrap:break-word; overflow-wrap: break-word;">
+            <h3>{{ request }}</h3>
+            <p>remote_addr: <strong>{{ request.remote_addr }}</strong><br>
+{#                view_args: <strong>{{ request.view_args }}</strong><br>#}
+{#                remote_user: <strong>{{ request.remote_user }}</strong><br>#}
+                user_agent: <strong>{{ request.user_agent }}</strong><br>
+                url: <strong>{{ request.url }}</strong><br>
+{#                url_root: <strong>{{ request.url_root }}</strong><br>#}
+                url_rule: <strong>{{ request.url_rule }}</strong><br>
+                access_route: <strong>{{ request.access_route }}</strong><br>
+                args: <strong>{{ request.args }}</strong><br>
+                full_path: <strong>{{ request.full_path }}</strong>
+            </p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts%}
+    <script>
+    $('html head').find('title').text("ERROR {{ code }} - ENERPI");
+    </script>
+{% endblock %}

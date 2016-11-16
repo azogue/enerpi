@@ -122,7 +122,7 @@ class TestUpdateCatalog(TestCase):
     def test_6_catalog_data_resample(self):
         # TODO PROFILE data_resample (muy lento!)
         print(self.cat)
-        data = self.cat.load_store(self.cat.tree.st[0]).iloc[:100000]
+        data = self.cat._load_store(self.cat.tree.st[0]).iloc[:100000]
         rs1 = self.cat.resample_data(data, rs_data='40min', rm_data=None, use_median=False, func_agg=np.mean)
         pp.print_green(rs1)
         rs2 = self.cat.resample_data(data, rm_data=30, use_median=True)
@@ -185,9 +185,9 @@ class TestUpdateCatalog(TestCase):
         pp.print_ok(new_cat_2)
 
         # Now with distributing data:
-        raw_data = self.cat.load_store(os.path.join(BASE_PATH, 'tests', 'rsc',
-                                                    'test_update_month', 'enerpi_data_test.h5'))
-        archived_data = self.cat.load_store('DATA_YEAR_2016/DATA_2016_MONTH_10.h5')
+        raw_data = self.cat._load_store(os.path.join(BASE_PATH, 'tests', 'rsc',
+                                                     'test_update_month', 'enerpi_data_test.h5'))
+        archived_data = self.cat._load_store('DATA_YEAR_2016/DATA_2016_MONTH_10.h5')
         assert self.cat.is_raw_data(raw_data)
         assert not self.cat.is_raw_data(archived_data)
         archived_data.index += pd.Timestamp.now() - raw_data.index[-1]

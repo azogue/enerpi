@@ -24,31 +24,27 @@
     <script src="{{ url_for('static', filename='js/bootstrap-switch.min.js') }}"></script>
     <script>
     function updateBokehPlot(url_stream) {
-        console.log('Se procede a actualizar el plot con URL=' + url_stream);
+{#        console.log('Se procede a actualizar el plot con URL=' + url_stream);#}
         $("#bokeh-plot-took").addClass('invisible');
         var div_subst = '<div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" ';
         var url_wait_src = "{{ url_for("static", filename="img/icons/waiting2.svg")}}";
         url_wait_src = url_wait_src.replace(/.svg(\?)?([0-9]*)?/i, ".svg?" + String(new Date().getTime()));
         div_subst = div_subst + 'src="' + url_wait_src + '"></div>';
         console.log(div_subst);
-{#        $('#div-plot-bokeh').html('<div id="hueco-div-plot-bokeh" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>');#}
         $('#div-plot-bokeh').html(div_subst);
         var div_plot = $('#hueco-div-plot-bokeh');
         var cw = div_plot.width();
         div_plot.css({'height': cw * 5 / 9 + 'px'});
         sse = new EventSource(url_stream);
         sse.onmessage = function(message) {
-            console.log('Mensaje recibido!');
             if (message.data == '"CLOSE"') {
                 console.log('Cerrando EventSource (CLOSE Event)');
                 sse.close();
             } else {
                 var data = JSON.parse(message.data);
                 if (data['success']) {
-                    console.log('Mensaje recibido con success!');
                     if (data.hasOwnProperty('bokeh_div') && data.hasOwnProperty('took'))
                     {
-                        console.log('Mensaje plot!');
                         $('#div-plot-bokeh').html(data['bokeh_div']);
                         $("body").append(data['script_bokeh']);
                         $("#bokeh-plot-took").html(' (Took ' + data['took'] + ' secs, df: ' + data['took_df'] +')').removeClass('invisible');
@@ -100,8 +96,8 @@
     <br>
     <div class="container-fluid">
         <div>
-            <h4 class="pull-xs-left"><i id="titulo-graph" class="fa fa-area-chart" aria-hidden="true"></i> Visualize DATA:</h4>
-            <span id="bokeh-plot-took" class="pull-xs-right invisible"></span>
+            <h4 class="float-xs-left"><i id="titulo-graph" class="fa fa-area-chart" aria-hidden="true"></i> Visualize DATA:</h4>
+            <span id="bokeh-plot-took" class="float-xs-right invisible"></span>
         </div>
     </div>
     <div id="div-plot-bokeh" class="bokeh_div_plot">
@@ -127,7 +123,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-xs-2 hidden-md-up hidden-xs-down pull-right">
+            <div class="col-xs-2 hidden-md-up hidden-xs-down float-right">
                 <small id="ResampleHelp" class="form-text text-muted">Submit:</small>
                 <button type="button" class="btn btn-success btn-sm" onclick=submitQuery()>Query!</button>
             </div>
@@ -158,11 +154,11 @@
                         <input type="checkbox" id="switchSummaryData" value="check_kWh" class="form-control form-control-sm">
                     </div>
                 </div>
-                <div class="col-xs-7 col-sm-12 col-md-2 col-lg-1 hidden-sm-down pull-right">
+                <div class="col-xs-7 col-sm-12 col-md-2 col-lg-1 hidden-sm-down float-right">
                     <small id="ResampleHelp" class="form-text text-muted">Submit:</small>
                     <button type="button" class="btn btn-success btn-sm" onclick=submitQuery()>Query!</button>
                 </div>
-                <div class="col-xs-3 hidden-sm-up pull-right">
+                <div class="col-xs-3 hidden-sm-up float-right">
                     <small id="ResampleHelp" class="form-text text-muted">Submit:</small>
                     <button type="button" class="btn btn-success btn-sm" onclick=submitQuery()>Query!</button>
                 </div>
@@ -170,11 +166,4 @@
         </div>
         <hr>
     </div>
-{#    <div class="container-fluid">#}
-{#        <h6>MEDIA SIZE:</h6>#}
-{#        <p class="hidden-sm-up">XS</p>#}
-{#        <p class="hidden-md-up hidden-xs-down">SM</p>#}
-{#        <p class="hidden-lg-up hidden-sm-down">MD</p>#}
-{#        <p class="hidden-xs-down hidden-md-down">LG</p>#}
-{#    </div>#}
 {% endblock %}

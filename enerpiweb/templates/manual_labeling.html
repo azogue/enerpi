@@ -1,32 +1,67 @@
 {% extends "layout.html" %}
-{#{% from 'monitor_tiles.html' import monitor_tiles with context %}#}
 {% from 'macros.html' import styles_bokeh with context %}
 
 {% block styles %}
-    <link href="{{ url_for('static', filename='css/tiles.css') }}" rel="stylesheet">
     {{ styles_bokeh(b_version) }}
+    <link href="{{ url_for('static', filename='css/tiles.css') }}" rel="stylesheet">
 {% endblock %}
 
 
 {% block content %}
-    <div class="jumbotron" style="padding: 1rem; padding-bottom: 0; margin-bottom: 10px;">
+{#    (column_buttons_used_labels, botonera, input_intervalo, div_labels_event, column_form, p_interv, p_context)#}
+    <div class="jumbotron" style="padding: 1.5rem; padding-top: 10px; padding-bottom: 10px; margin-bottom: 10px;">
         <div class="container-fluid">
             <div class="row">
-                <div class="col-xs-3 col-sm-2 col-md-1 col-lg-1">
-                    <img class="img-fluid img-rounded pull-xs-left" style="max-width: 100%; height: auto; width: 100% \9;"
+                <div class="col-xs-4 col-sm-3 col-md-2 col-lg-1">
+                    <img class="img-fluid img-rounded pull-xs-right" style="max-width: 100%; height: auto; width: 100% \9;"
                          src="{{ url_for('static', filename='img/icons/base.svg')}}">
                 </div>
-                <div class="col-xs-6 col-sm-8 col-md-9 col-lg-9">
-                    <h1 class="display-5"><i class="fa fa-tags" aria-hidden="true"></i> Clasificación de consumos eléctricos</h1>
-{#                    <p>Start labeling your appliances</p>#}
+                <div class="col-xs-8 col-sm-8 col-md-9 col-lg-9">
+                    <h2 class="display-5" style="margin-bottom: -20px;">
+                        <i class="fa fa-tags" aria-hidden="true"></i> Clasificación de aparatos</h2>
+                    <div class="col-xs-10 col-sm-6 col-md-6 col-lg-4" style="margin-top: 19px;">
+                        {{ bokeh_scripts[1]|safe }}
+                    </div>
+                    <div class="col-xs-10 col-sm-9 col-md-6 col-lg-4">
+{#                    <span style="white-space:nowrap">#}
+{#                        <p style="margin-left: 50px; margin-right: 0; margin-top: 38px;">Id de evento: </p>#}
+                        <span>{{ bokeh_scripts[2]|safe }}</span>
+{#                    </span>#}
+{#                    <div class="col-xs-6 col-sm-5 col-md-4 col-lg-3">#}
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="container-fluid">
-{#        <div class="bk-root">#}
-          {{ bokeh_script|safe }}
-{#        </div>#}
+    <div id="container-for-bokeh" class="container-fluid">
+        <div class="row">
+            <div class="col-xs-12 col-sm-12 col-md-3 col-lg-2" style="padding-bottom: 40px; padding-right: 40px;">
+                <h5>Etiquetas existentes:</h5>
+                {{ bokeh_scripts[0]|safe }}
+            </div>
+{#            <div class="col-xs-12 col-sm-12 col-md-9 col-lg-10">#}
+                <div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+{#                <div class="col-xs-12 col-sm-6 col-md-5 col-lg-4">#}
+                    <div style="padding-bottom: 40px;">
+                        <h5>Intervalo actual:</h5>
+                        {{ bokeh_scripts[3]|safe }}
+                        {{ bokeh_scripts[4]|safe }}
+                    </div>
+                </div>
+{#                <div class="col-xs-12 col-sm-6 col-md-7 col-lg-8">#}
+                <div class="col-xs-12 col-sm-12 col-md-5 col-lg-6">
+                    <div>
+                        {{ bokeh_scripts[5]|safe }}
+                    </div>
+                </div>
+{#            </div>#}
+            <div class="col-xs-12 col-sm-12 col-md-9 col-lg-10">
+                <div style="margin-top: 10px; margin-left: 10px; min-height: 400px; width: 100%">
+{#                    <h5>Potencia en el día actual:</h5>#}
+                    {{ bokeh_scripts[6]|safe }}
+                </div>
+            </div>
+        </div>
     </div>
 {% endblock %}
 
@@ -40,9 +75,7 @@
             var idx_icon = id_div.indexOf('_icon_');
             if (idx_icon > 0) {
                 var button = $(this).find('button');
-{#                console.log(button);#}
                 var button_label = button.html();
-{#                console.log(button_label);#}
                 if (button_label.indexOf('<img style') == -1) {
                     var html_icon = '<img style="max-width: 20px; height: 20px; width: 20px;" src="/enerpi/static/labels_icons/' + id_div.substring(idx_icon + 6, id_div.length) + '.svg">'
                     button.html(html_icon + ' ' + button_label.trim());
@@ -56,64 +89,68 @@
         });
         console.log('saliendo de format_buttons_existent_labels');
     }
-    function set_form_props(remitente) {
-        console.log(remitente);
-        var text_input = $("input[name|='selec_label_name']");
+{#    function set_form_props(remitente) {#}
+{#        console.log(remitente);#}
+{#        var text_input = $("input[name|='selec_label_name']");#}
 {#        var check_input = $("input:checkbox[name|='selec_label_continuous']");#}
-        var check_input = $(".bk-bs-checkbox input:checkbox");
-        var select_input = $("select[name|='selec_label_type']");
-
-        console.log(check_input);
-        console.log(select_input.val());
-        console.log(select_input.attr("name"));
-        var new_label_type = $(remitente).attr("label_type");
-        var new_label_name = $(remitente).attr("label_name");
-        var new_label_cont = $(remitente).attr("label_cont");
-        console.log(new_label_type + ', ' + new_label_name + ', ' + new_label_cont);
-
-        select_input.css("border", "3px dotted blue");
-        console.log($("select[name|='selec_label_type'] option:selected"));
-        console.log($("select[name|='selec_label_type'] option[value|='" + new_label_type + "']"));
-        $("select[name|='selec_label_type'] option:selected").removeProp("selected");
-        $("select[name|='selec_label_type'] option[value|='" + new_label_type + "']").prop("selected", "selected").change();
-        console.log($("select[name|='selec_label_type'] option:selected"));
-        console.log($("select[name|='selec_label_type'] option[value|='" + new_label_type + "']"));
-
+{#        var check_input = $(".bk-bs-checkbox input:checkbox");#}
+{#        var select_input = $("select[name|='selec_label_type']");#}
+{##}
+{#        console.log(check_input);#}
+{#        console.log(select_input.val());#}
+{#        console.log(select_input.attr("name"));#}
+{#        var new_label_type = $(remitente).attr("label_type");#}
+{#        var new_label_name = $(remitente).attr("label_name");#}
+{#        var new_label_cont = $(remitente).attr("label_cont");#}
+{#        console.log(new_label_type + ', ' + new_label_name + ', ' + new_label_cont);#}
+{##}
+{#        select_input.css("border", "3px dotted blue");#}
+{#        console.log($("select[name|='selec_label_type'] option:selected"));#}
+{#        console.log($("select[name|='selec_label_type'] option[value|='" + new_label_type + "']"));#}
+{#        $("select[name|='selec_label_type'] option:selected").removeProp("selected");#}
+{#        $("select[name|='selec_label_type'] option[value|='" + new_label_type + "']").prop("selected", "selected").change();#}
+{#        console.log($("select[name|='selec_label_type'] option:selected"));#}
+{#        console.log($("select[name|='selec_label_type'] option[value|='" + new_label_type + "']"));#}
+{##}
 {#        select_input.val(new_label_type);#}
-        check_input.val(new_label_cont).change();
+{#        check_input.val(new_label_cont).change();#}
 {#        text_input.val(new_label_name).change();#}
-        text_input.prop("value", new_label_name).change();
-
-        text_input.css("border", "3px dotted blue");
+{#        text_input.prop("value", new_label_name).change();#}
+{##}
+{#        text_input.css("border", "3px dotted blue");#}
 {#        select_input.trigger('change');#}
-        text_input.trigger('change');
-        check_input.trigger('change');
+{#        text_input.trigger('change');#}
+{#        check_input.trigger('change');#}
 {#        select_input.trigger('click');#}
-        text_input.trigger('click');
-        check_input.trigger('click');
-        console.log('Vals:');
-        console.log(select_input.val());
-        console.log(text_input.val());
-        console.log(check_input.val());
-        console.log('Objs select_input, text_input, check_input:');
-        console.log(select_input);
-        console.log(text_input);
-        console.log(check_input);
-
-        console.log('TODO OK!');
-    }
+{#        text_input.trigger('click');#}
+{#        check_input.trigger('click');#}
+{#        console.log('Vals:');#}
+{#        console.log(select_input.val());#}
+{#        console.log(text_input.val());#}
+{#        console.log(check_input.val());#}
+{#        console.log('Objs select_input, text_input, check_input:');#}
+{#        console.log(select_input);#}
+{#        console.log(text_input);#}
+{#        console.log(check_input);#}
+{##}
+{#        console.log('OK!');#}
+{#    }#}
     $(document).ready(function() {
         setTimeout(format_buttons_existent_labels, 1000);
         $("div .bk-widget").change(format_buttons_existent_labels());
         $("input").change(format_buttons_existent_labels());
         $("select").change(format_buttons_existent_labels());
     });
+    var changeId;
     var resizeId;
+    $(document).on('change', '#container-for-bokeh', function() {
+        clearTimeout(resizeId);
+        console.log('change on container-for-bokeh!');
+        resizeId = setTimeout(format_buttons_existent_labels, 500);
+    });
     $(window).resize(function() {
-{#        console.log('resize!')#}
         clearTimeout(resizeId);
         resizeId = setTimeout(format_buttons_existent_labels, 500);
     });
-
 </script>
 {% endblock %}

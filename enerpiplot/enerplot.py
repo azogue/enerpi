@@ -52,6 +52,15 @@ matplotlib.rc('font', **font)
 
 
 def ch_color(x, ch=1., alpha=None):
+    """
+    Modify color applying a multiplier in every channel, or setting an alpha value
+
+    :param x:  :tuple: 3/4 channel normalized color (0->1. * 3/4 ch)
+    :param ch: :float: change coefficient
+    :param alpha: :float: alpha value
+    :return: :tuple: modified color
+
+    """
     new_c = [max(0, min(1., ch * c)) for c in x]
     if alpha is not None:
         if len(x) == 4:
@@ -233,7 +242,15 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
 
 # @timeit('write_fig_to_svg', verbose=True)
 def write_fig_to_svg(fig, name_img, preserve_ratio=False):
-    # plt.close(fig)
+    """
+    Write matplotlib figure to disk in SVG format.
+
+    :param fig: :matplotlib.figure: figure
+    :param name_img: :str: desired image path
+    :param preserve_ratio: :bool: preserve size ratio on the SVG file (default: False)
+    :return: :book: operation ok
+
+    """
     canvas = FigureCanvas(fig)
     output = BytesIO()
     imgformat = 'svg'
@@ -335,6 +352,7 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
     return fig, ax
 
 
+# TODO Parametrize generated tiles
 def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
 
     def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name):

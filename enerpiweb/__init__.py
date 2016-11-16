@@ -32,7 +32,7 @@ app.jinja_loader = jinja2.FileSystemLoader(os.path.join(basedir, 'templates'))
 
 # Views
 # noinspection PyUnresolvedReferences,PyPep8
-from enerpiweb import views
+from enerpiweb import views, views_filehandler, utils, rt_stream
 
 # wsgi
 app.wsgi_app = ProxyFix(app.wsgi_app)

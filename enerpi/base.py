@@ -287,7 +287,8 @@ class EnerpiSamplerConf(object):
 def _makedirs(dest_path):
     try:
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        os.utime(dest_path, None)
+        if os.path.exists(dest_path):
+            os.utime(dest_path, None)
     except PermissionError as e:
         log('PermissionError: {}'.format(e), 'error', True, False)
         # sudo chmod 777 ~/ENERPIDATA/enerpi.log
@@ -428,7 +429,7 @@ def get_lines_file(filename, tail=None, reverse=False):
     return ['Path not found: "{}"'.format(filename)]
 
 
-def config_dict_for_web_edit(lines_ini_file, with_comments=True):
+def config_dict_for_web_edit(lines_ini_file):
     """
     * Divide configuration INI file with this structure:
     [section]
@@ -451,7 +452,6 @@ def config_dict_for_web_edit(lines_ini_file, with_comments=True):
          ...]
 
     :param lines_ini_file: :list: Content of INI file after 'readlines()'
-    :param with_comments: :bool: Include comments
     :return: :OrderedDict:
 
     """
@@ -472,7 +472,7 @@ def config_dict_for_web_edit(lines_ini_file, with_comments=True):
             comment = None
             config_entries[section] = OrderedDict()
         elif l.startswith('#') or l.startswith(';'):
-            if init and with_comments:
+            if init:
                 if comment is None:
                     comment = l[1:].lstrip()
                 else:
@@ -512,13 +512,16 @@ def config_changes(dict_web_form, dict_config):
     """
     def _is_changed(value, params, name):
         if params[1] == 'int':
-            value = int(value)
+            try:
+                value = int(value)
+            except ValueError:
+                value = float(value)
         elif params[1] == 'float':
             value = float(value)
         elif params[1] == 'bool':
             value = (value.lower() == 'true') or (value.lower() == 'on')
         if value != params[0]:
-            log('"{}" -> HAY CAMBIO DE {} a {} (type={})'.format(name, params[0], value, params[1]), 'debug', True)
+            log('"{}" -> HAY CAMBIO DE {} a {} (type={})'.format(name, params[0], value, params[1]), 'debug', False)
             return True, value
         return False, value
 
@@ -540,7 +543,7 @@ def config_changes(dict_web_form, dict_config):
                 params_var = list(dict_config_updated[section][variable_name])
                 params_var[0] = False
                 log('"{}" -> HAY CHECKBOX CH DE {} a {} (type={})'
-                    .format(variable_name, variable_params[0], False, variable_params[1]), 'debug', True)
+                    .format(variable_name, variable_params[0], False, variable_params[1]), 'debug', False)
                 dict_config_updated[section][variable_name] = tuple(params_var)
     return len(vars_updated) > 0, vars_updated, dict_config_updated
 
@@ -653,6 +656,7 @@ almacenando la ruta absoluta a la instalación de ENERPI
     check_resource_files(data_path)
     path_file_config = os.path.join(data_path, CONFIG_FILENAME)
     if not os.path.exists(path_file_config):
+        check_resource_files(path_file_config)
         log('** Instalando fichero de configuración en: "{}"'.format(path_file_config), 'info', True, True)
         shutil.copy(os.path.join(dir_config, 'default_config_enerpi.ini'), path_file_config)
 

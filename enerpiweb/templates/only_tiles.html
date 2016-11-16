@@ -1,5 +1,14 @@
 {% extends "layout_simple.html" %}
-{% from 'monitor_tiles.html' import monitor_tiles with context %}
+{% from 'monitor_tiles.html' import monitor_tiles, monitor_tiles_styles, monitor_tiles_scripts with context %}
+
+{% block styles %}
+    {{ monitor_tiles_styles() }}
+{% endblock %}
+
 {% block content %}
     {{ monitor_tiles(include_consumption, include_ldr) }}
+{% endblock %}
+
+{% block scripts %}
+    {{ monitor_tiles_scripts() }}
 {% endblock %}

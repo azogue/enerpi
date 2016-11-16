@@ -5,6 +5,8 @@ from enerpi.base import CONFIG, SENSORS, DATA_PATH, FILE_LOGGING, LOGGING_LEVEL,
 from enerpi.database import init_catalog, get_ts_last_save, extract_log_file, delete_log_file, HDF_STORE
 # noinspection PyUnresolvedReferences
 from enerpi.enerpimeter import receiver_msg_generator, enerpi_raw_data, msg_to_dict
+# noinspection PyUnresolvedReferences
+from enerpi.iobroadcast import get_encryption_key, get_codec
 
 
 def enerpi_receiver_generator(verbose=False, n_msgs=None):

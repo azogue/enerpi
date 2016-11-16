@@ -1,6 +1,5 @@
 {% extends "layout.html" %}
-{% from 'monitor_tiles.html' import monitor_tiles with context %}
-{% from 'macros.html' import styles_bokeh, alert_dismiss with context %}
+{% from 'macros.html' import alert_dismiss with context %}
 
 {% macro tag_file_download(p, t0, tf, ns, btn_type)%}
     <a href="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
@@ -54,8 +53,8 @@
                       <div class="btn-group" role="group" aria-label="LINKS">
                         <a class="btn btn-secondary btn-outline-success" href="{{ url_for('bokehplot')}}" role="button">
                             <i class="fa fa-area-chart" aria-hidden="true"></i> Graph last</a>
-                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('tablelast')}}" role="button">
-                            <i class="fa fa-table" aria-hidden="true"></i> Table last</a>
+{#                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('tablelast')}}" role="button">#}
+{#                            <i class="fa fa-table" aria-hidden="true"></i> Table last</a>#}
                       </div>
                     </div>
                 </div>
@@ -63,7 +62,6 @@
         </div>
     </div>
     {% if alerta %}
-{#        <br>#}
         {{ alert_dismiss(alerta) }}
     {% endif %}
     <hr>
