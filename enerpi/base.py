@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from collections import OrderedDict
 import configparser
+import json
 import locale
 import logging
 import os
@@ -8,7 +8,6 @@ import pytz
 import shutil
 import subprocess
 import sys
-import textwrap
 from threading import Timer
 from time import time, sleep
 from enerpi import BASE_PATH, PRETTY_NAME
@@ -18,6 +17,7 @@ from enerpi.pitemps import get_cpu_temp, get_gpu_temp
 
 ENCODING = 'UTF-8'
 CONFIG_FILENAME = 'config_enerpi.ini'
+SENSORS_CONFIG_JSON_FILENAME = 'sensors_enerpi.json'
 
 
 class EnerpiAnalogSensor(object):
@@ -25,20 +25,72 @@ class EnerpiAnalogSensor(object):
     Object for centralize access to sensor properties, as description, color, units, etc.
 
     """
-    def __init__(self, column_name, description='', channel=0, channel_name='CH_PROBE',
-                 is_rms=True, color='0CBB43', bias=0):
+    def __init__(self, column_name, description='', channel=0, is_rms=True, unit='W', color='#0CBB43', bias=0,
+                 tile_gradient_st='', tile_gradient_end='', icon='bolt'):
         self.name = column_name
         self.description = description
         self.channel = channel
-        self.channel_name = channel_name
         self.is_rms = is_rms
-        self.unit = 'W' if is_rms else '%'
-        self.color = '#{}'.format(color)
+        self.unit = unit
+        self.color = color
         self.bias = bias
+        self.icon = icon
+        self.tile_gradient_st = tile_gradient_st
+        self.tile_gradient_end = tile_gradient_end
 
     def __repr__(self):
-        return 'ANALOG_S: {} ({}{}, ch={}, unit={})'.format(self.name, 'RMS, ' if self.is_rms else '',
-                                                            self.description, self.channel, self.unit)
+        str_type = 'RMS, ' if self.is_rms else ''
+        return ('ANALOG_S: {} ({}{}, ch={}, unit={}, color={}, bias={:.3f})'
+                .format(self.name, str_type, self.description, self.channel, self.unit, self.color, self.bias))
+
+    def to_dict(self):
+        """
+        Return dict with analog sensor properties for jinja2 templating
+
+        :return: dict
+
+        """
+        return dict(name=self.name, description=self.description, channel=self.channel, is_rms=self.is_rms,
+                    unit=self.unit, color=self.color, bias=self.bias,
+                    icon=self.icon, tile_gradient_st=self.tile_gradient_st, tile_gradient_end=self.tile_gradient_end)
+
+
+def _load_analog_sensors(sensors_json_conf):
+    """
+    Load list of 'EnerpiAnalogSensor' objects, with the ENERPI sensors user configuration
+    Format of json file:
+    [ {
+        "name": "power",
+        "analog_channel": 3,
+        "is_rms": true,
+        "unit": "W",
+        "color": "#0CBB43",
+        "tile_gradient_st": [12, 187, 67, 0.83],
+        "tile_gradient_end": [55, 245, 119, 0.27],
+        "icon": "flash",
+        "description": "Main Power"
+      }, {...}, ... ]
+
+    :param sensors_json_conf: list of dicts (from JSON config file)
+    :return list of analog sensors
+
+    """
+    def _get_rms_sensor_bias(sensor):
+        if sensor['is_rms']:
+            if 'bias' in sensor:
+                return sensor['bias']
+            # Voltage divisor for sct030 probes:
+            mcp3008_dac_prec = 10  # bits
+            niveles = 2 ** mcp3008_dac_prec - 1
+            bias_current = -(niveles // 2) / niveles
+            return bias_current
+        return 0.
+
+    analog_s = [EnerpiAnalogSensor(s['name'], s['description'], s['analog_channel'], s['is_rms'], s['unit'], s['color'],
+                                   _get_rms_sensor_bias(s), s['tile_gradient_st'], s['tile_gradient_end'], s['icon'])
+                for s in sensors_json_conf]  # JSON file sensor order
+                # for s in sorted(sensors_json_conf, key=lambda x: x['analog_channel'])]
+    return analog_s
 
 
 class EnerpiSamplerConf(object):
@@ -47,43 +99,19 @@ class EnerpiSamplerConf(object):
     color for plotting, summary info & columns, etc...
 
     """
-    def __init__(self, configparser_obj):
+    def __init__(self, configparser_obj, sensors_json_conf):
         # Read config INI file
         self._fmt_ts = configparser_obj.get('ENERPI_SAMPLER', 'FMT_TS', fallback='%Y-%m-%d %H:%M:%S.%f')
         self._col_ts = configparser_obj.get('ENERPI_SAMPLER', 'COL_TS', fallback='ts')
         self._ref_column_rms = 'ref'
         self._ref_column_mean = 'ref_n'
 
-        # Voltage divisor for sct030 probes:
-        mcp3008_dac_prec = 10  # bits
-        niveles = 2 ** mcp3008_dac_prec - 1
-        bias_current = -(niveles // 2) / niveles
+        # Get sensors:
+        sensors = _load_analog_sensors(sensors_json_conf)
+        self._sensors_rms = [s for s in sensors if s.is_rms]
+        self._sensors_mean = [s for s in sensors if not s.is_rms]
 
-        # Get columns
-        cols_data_rms = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_RMS', fallback='power').split(', ')
-        cols_data_mean = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_MEAN', fallback='noise, ldr').split(', ')
-
-        # Get descriptions
-        descr_data_rms = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_RMS', fallback='power').split(', ')
-        descr_data_mean = configparser_obj.get('ENERPI_SAMPLER', 'COLS_DATA_MEAN', fallback='noise, ldr').split(', ')
-
-        # Get colors
-        colors_data_rms = configparser_obj.get('ENERPI_SAMPLER', 'COLORS_DATA_RMS', fallback='power').split(', ')
-        colors_data_mean = configparser_obj.get('ENERPI_SAMPLER', 'COLORS_DATA_MEAN', fallback='noise, ldr').split(', ')
-        # Get channel probes
-        names_channels = list(configparser_obj['MCP3008'].keys())
-        channels = [configparser_obj.getint('MCP3008', ch_name, fallback=i) for i, ch_name in enumerate(names_channels)]
-
-        self._sensors_rms = [EnerpiAnalogSensor(name, desc, ch, ch_n, True, color, bias_current)
-                             for name, desc, color, ch, ch_n in zip(cols_data_rms, descr_data_rms, colors_data_rms,
-                                                                    channels[:len(cols_data_rms)],
-                                                                    names_channels[:len(cols_data_rms)]) if ch >= 0]
-        self._sensors_mean = [EnerpiAnalogSensor(name, desc, ch, ch_n, False, color)
-                              for name, desc, color, ch, ch_n in zip(cols_data_mean, descr_data_mean, colors_data_mean,
-                                                                     channels[len(cols_data_rms):],
-                                                                     names_channels[len(cols_data_rms):]) if ch >= 0]
-        # PiSampler parameters:
-        # Current meter
+        # PiSampler parameters (Current meter):
         # Voltaje típico RMS de la instalación a medir. (SÓLO SE ESTIMA P_ACTIVA!!)
         voltaje = CONFIG.getint('ENERPI_SAMPLER', 'VOLTAJE', fallback=236)
         # 30 A para 1 V --> Pinza amperométrica SCT030-030
@@ -136,6 +164,16 @@ class EnerpiSamplerConf(object):
     def __iter__(self):
         for x in self._sensors_rms + self._sensors_mean:
             yield x
+
+    def to_dict(self):
+        """
+        Return dict of analog sensors for jinja2 templating
+
+        :return: dict
+
+        """
+        d_sensors = {'sensors': [x.to_dict() for x in self._sensors_rms + self._sensors_mean]}
+        return d_sensors
 
     @property
     def main_column(self):
@@ -429,170 +467,6 @@ def get_lines_file(filename, tail=None, reverse=False):
     return ['Path not found: "{}"'.format(filename)]
 
 
-def config_dict_for_web_edit(lines_ini_file):
-    """
-    * Divide configuration INI file with this structure:
-    [section]
-    # comment
-    ; comment
-    VARIABLE = VALUE
-    (discarding file header comments)
-
-    Make Ordered dict like:
-    ==> [(section_name,
-            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         ...
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
-         (section_name,
-            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         ...
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
-         ...]
-
-    :param lines_ini_file: :list: Content of INI file after 'readlines()'
-    :return: :OrderedDict:
-
-    """
-    def _is_bool_variable(value):
-        value = value.lower()
-        if (value == 'true') or (value == 'false'):
-            return True, value == 'true'
-        return False, None
-
-    config_entries = OrderedDict()
-    section, comment = None, None
-    init = False
-    for l in lines_ini_file:
-        l = l.replace('\n', '').lstrip().rstrip()
-        if l.startswith('['):
-            section = l.replace('[', '').replace(']', '')
-            init = True
-            comment = None
-            config_entries[section] = OrderedDict()
-        elif l.startswith('#') or l.startswith(';'):
-            if init:
-                if comment is None:
-                    comment = l[1:].lstrip()
-                else:
-                    comment += ' {}'.format(l[1:].lstrip())
-        elif init and (len(l) > 0):
-            # Read variable and append (/w comments)
-            variable_name, variable_value = l.split('=')
-            variable_name = variable_name.lstrip().rstrip()
-            variable_value = variable_value.lstrip().rstrip()
-            is_bool, bool_value = _is_bool_variable(variable_value)
-            if not is_bool:
-                try:
-                    variable_value = int(variable_value)
-                    var_type = 'int'
-                except ValueError:
-                    try:
-                        variable_value = float(variable_value)
-                        var_type = 'float'
-                    except ValueError:
-                        var_type = 'str'
-            else:
-                var_type = 'bool'
-                variable_value = bool_value
-            config_entries[section][variable_name] = variable_value, var_type, comment
-            comment = None
-    return config_entries
-
-
-def config_changes(dict_web_form, dict_config):
-    """
-    Process changes in web editor
-
-    :param dict_web_form: :OrderedDict: Posted Form values
-    :param dict_config:  :OrderedDict: config dict of dicts (like the one 'config_dict_for_web_edit' returns)
-    :return: :tuple: (:bool: changed, :list: updated variables, :OrderedDict: updated dict_config)
-
-    """
-    def _is_changed(value, params, name):
-        if params[1] == 'int':
-            try:
-                value = int(value)
-            except ValueError:
-                value = float(value)
-        elif params[1] == 'float':
-            value = float(value)
-        elif params[1] == 'bool':
-            value = (value.lower() == 'true') or (value.lower() == 'on')
-        if value != params[0]:
-            log('"{}" -> HAY CAMBIO DE {} a {} (type={})'.format(name, params[0], value, params[1]), 'debug', False)
-            return True, value
-        return False, value
-
-    dict_config_updated = dict_config.copy()
-    dict_web_form = dict_web_form.copy()
-    vars_updated = []
-    for section, entries in dict_config_updated.items():
-        for variable_name, variable_params in entries.items():
-            if variable_name in dict_web_form:
-                new_v = dict_web_form.pop(variable_name)
-                changed, new_value = _is_changed(new_v, variable_params, variable_name)
-                if changed:
-                    vars_updated.append((variable_name, variable_params[0], new_value))
-                    params_var = list(dict_config_updated[section][variable_name])
-                    params_var[0] = new_value
-                    dict_config_updated[section][variable_name] = tuple(params_var)
-            elif (variable_params[1] == 'bool') and variable_params[0]:  # Bool en off en el form y True en config
-                vars_updated.append((variable_name, variable_params[0], False))
-                params_var = list(dict_config_updated[section][variable_name])
-                params_var[0] = False
-                log('"{}" -> HAY CHECKBOX CH DE {} a {} (type={})'
-                    .format(variable_name, variable_params[0], False, variable_params[1]), 'debug', False)
-                dict_config_updated[section][variable_name] = tuple(params_var)
-    return len(vars_updated) > 0, vars_updated, dict_config_updated
-
-
-def make_ini_file(dict_config, dest_path=None):
-    """
-    Makes INI file (and writes it if dest_path is not None) from an OrderedDict
-    like the one 'config_dict_for_web_edit' returns.
-
-    * INI file with this structure:
-    [section]
-    # comment
-    ; comment
-    VARIABLE = VALUE
-
-    Ordered dict like:
-    ==> [(section_name,
-            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         ...
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
-         (section_name,
-            OrderedDict([(VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment)),
-                         ...
-                         (VARIABLE, (VALUE, 'int|float|bool|text', comment))])),
-         ...]
-
-    :param dict_config: :OrderedDict: Content of INI file after 'readlines()'
-    :param dest_path: :str: optional path for INI file write.
-    :return: :str: raw INI text
-
-    """
-    lines = ['# -*- coding: utf-8 -*-']
-    for section, entries in dict_config.items():
-        lines.append('[{}]'.format(section.upper()))
-        for variable_name, (value, var_type, comment) in entries.items():
-            if comment:
-                [lines.append('# {}'.format(l_wrap)) for l_wrap in textwrap.wrap(comment, 80)]
-            lines.append('{} = {}'.format(variable_name, value))
-        lines.append('')  # Separador entre secciones
-    ini_text = '\n'.join(lines)
-    if dest_path is not None:
-        _makedirs(dest_path)
-        with open(dest_path, 'w') as f:
-            f.write(ini_text)
-    return ini_text
-
-
 def check_resource_files(dest_path, origin_path=None):
     """
     Check needed files and directories in DATA_PATH. Init if needed (1º exec).
@@ -616,19 +490,26 @@ def check_resource_files(dest_path, origin_path=None):
         log('** check_resource_files OK', 'debug', True, True)
         return False
     elif oct(os.stat(dest_path).st_mode)[-3:] != '777':
-        os.chmod(dest_path, 0o777)
+        log('Permission trouble in "{}" --> {}'.format(dest_path, oct(os.stat(dest_path).st_mode)[-3:]), 'warning', True)
+        try:
+            os.chmod(dest_path, 0o777)
+        except PermissionError:
+            log('Permission error in "{}" --> {}. Cant set 777'
+                .format(dest_path, oct(os.stat(dest_path).st_mode)[-3:]), 'error', True)
+            return False
     return True
 
 
-def _get_config():
+def get_config_enerpi():
     """
     Loads or generates ini file for ENERPI (& ENERPIweb) configuration.
 
     1) Looks for variable path DATA_PATH in file .../enerpi/config/.enerpi_data_path
     2) Tries to load 'config_enerpi.ini' from DATA_PATH, as user custom config.
+    2) Tries to load 'sensors_enerpi.json' from DATA_PATH, as user custom settings for analog sensors.
     3) If not present, generates it copying the default configuration.
 
-    :return: :configparser: loaded object
+    :return: :str: data_path, :configparser: loaded object, :dict:, enerpi sensors configuration
     """
 
     # Load DATA_PATH:
@@ -652,15 +533,15 @@ almacenando la ruta absoluta a la instalación de ENERPI
             .format(path_default_datapath, e, e.__class__), 'error', True, True)
         data_path = os.path.expanduser('~/ENERPIDATA')
 
-    # Checks paths & re-gen if not existent
+    # Checks paths & re-gen configuration if not existent
     check_resource_files(data_path)
+
+    # Config parser
     path_file_config = os.path.join(data_path, CONFIG_FILENAME)
     if not os.path.exists(path_file_config):
         check_resource_files(path_file_config)
         log('** Instalando fichero de configuración en: "{}"'.format(path_file_config), 'info', True, True)
         shutil.copy(os.path.join(dir_config, 'default_config_enerpi.ini'), path_file_config)
-
-    # Config parser
     configp = configparser.RawConfigParser()
     try:
         configp.read(path_file_config, encoding=ENCODING)
@@ -668,11 +549,24 @@ almacenando la ruta absoluta a la instalación de ENERPI
         log('Error loading configuration INI file in "{}". Exception {} [{}]. Using defaults...'
             .format(path_file_config, e, e.__class__), 'error', True, True)
         configp.read(os.path.join(dir_config, 'default_config_enerpi.ini'), encoding=ENCODING)
-    return data_path, configp
+
+    # Sensors
+    path_file_sensors_config = os.path.join(data_path, SENSORS_CONFIG_JSON_FILENAME)
+    if not os.path.exists(path_file_sensors_config):
+        check_resource_files(path_file_sensors_config)
+        log('** Instalando fichero de configuración en: "{}"'.format(path_file_sensors_config), 'info', True, True)
+        shutil.copy(os.path.join(dir_config, 'default_sensors_enerpi.json'), path_file_sensors_config)
+    try:
+        config_s = json.load(open(path_file_sensors_config, encoding=ENCODING))
+    except Exception as e:
+        log('Error loading sensors JSON configuration file in "{}". Exception {} [{}]. Using defaults...'
+            .format(path_file_sensors_config, e, e.__class__), 'error', True, True)
+        config_s = json.load(open(os.path.join(dir_config, 'default_sensors_enerpi.json'), encoding=ENCODING))
+    return data_path, configp, config_s
 
 
 # Loads configuration
-DATA_PATH, CONFIG = _get_config()
+DATA_PATH, CONFIG, SENSORS_THEME = get_config_enerpi()
 FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
 LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 
@@ -681,4 +575,4 @@ CUSTOM_LOCALE = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*
 locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
 
 # ANALOG SENSORS WITH MCP3008 (Rasp.io Analog Zero)
-SENSORS = EnerpiSamplerConf(CONFIG)
+SENSORS = EnerpiSamplerConf(CONFIG, SENSORS_THEME)

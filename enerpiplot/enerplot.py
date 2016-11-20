@@ -2,7 +2,6 @@
 import datetime as dt
 from io import BytesIO
 import locale
-import logging
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -11,7 +10,7 @@ import matplotlib.patches as mp
 import numpy as np
 import os
 import re
-from enerpi.base import CONFIG, DATA_PATH, CUSTOM_LOCALE, timeit
+from enerpi.base import CONFIG, SENSORS, DATA_PATH, CUSTOM_LOCALE, timeit, log
 
 
 IMG_BASEPATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
@@ -263,8 +262,7 @@ def write_fig_to_svg(fig, name_img, preserve_ratio=False):
         with open(name_img, 'wb') as f:
             f.write(svg_out)
     except Exception as e:
-        logging.error('HA OCURRIDO UN ERROR GRABANDO SVG A DISCO: {}'.format(e))
-        print('HA OCURRIDO UN ERROR GRABANDO SVG A DISCO: {}'.format(e))
+        log('HA OCURRIDO UN ERROR GRABANDO SVG A DISCO: {} [{}]'.format(e, e.__class__), 'error', True)
         return False
     return True
 
@@ -296,10 +294,10 @@ def _adjust_tile_limits(name, ylim, date_ini, date_fin, ax):
     yticks = list(ax.get_yticks())[1:-1]
     yticks_l = [v for v in yticks if (v - ylim[0] < (2 * (ylim[1] - ylim[0]) / 3)) and (v > ylim[0])]
     ax.set_yticks(yticks)
-    if name == 'power':
+    if name in SENSORS.columns_sensors_rms:
         ax.set_yticklabels([str(round(float(y / 1000.), 1)) + 'kW' for y in yticks_l])
         ax.tick_params(pad=-45)
-    elif name == 'ldr':
+    elif name in SENSORS.columns_sensors_mean:
         ax.set_yticklabels([str(round(float(y / 10.))) + '%' for y in yticks_l])
         ax.tick_params(pad=-40)
     else:
@@ -310,6 +308,7 @@ def _adjust_tile_limits(name, ylim, date_ini, date_fin, ax):
 
 @timeit('plot_tile_last_24h')
 def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1), alpha=1, alpha_fill=.5):
+    """Plot sensor evolution with 'tile' style (for webserver svg backgrounds)"""
     matplotlib.rcParams['axes.linewidth'] = 0
     if ax is None:
         fig, ax = _prep_axis_tile(color)
@@ -332,10 +331,11 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
             ax.bar(data_s.index, data_s.values, width=1 / 28, edgecolor=color, color=list(color) + [.5], linewidth=lw)
             ax.xaxis.set_major_locator(mpd.HourLocator((0, 12)))
         else:
-            if data_s.name == 'power':
+            if data_s.name in SENSORS.columns_sensors_rms:
                 div = 500
                 ylim = (0, np.ceil((data_s.max() + div / 5) / div) * div)
-            else:  # ldr
+            else:
+                assert data_s.name in SENSORS.columns_sensors_mean
                 div = 100
                 ylim = (0, np.ceil((data_s.max() + div) // div) * div)
             data_s = data_s
@@ -362,6 +362,7 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
             figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
             write_fig_to_svg(figure, name_img=file)
 
+    fig = ax = None
     total_hours = last_hours[0]
     last_data, last_data_c = catalog.get(last_hours=last_hours[0], with_summary=True)
     if (last_data is not None) and (len(last_data) > 2):
@@ -369,15 +370,19 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
         xlim = mpd.date2num(ahora - dt.timedelta(hours=last_hours[0])), mpd.date2num(ahora)
         delta = xlim[1] - xlim[0]
 
-        fig, ax = plot_tile_last_24h(catalog.resample_data(last_data.power, rs_data='5min'), barplot=False)
-        _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data.power.name)
+        # fig, ax = plot_tile_last_24h(catalog.resample_data(last_data.power, rs_data='5min'), barplot=False)
+        for c in SENSORS.columns_sensors_rms:
+            fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='5min'), barplot=False)
+            _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
+            plt.cla()
+            fig.set_figwidth(_tile_figsize()[0])
 
-        plt.cla()
-        fig.set_figwidth(_tile_figsize()[0])
-        fig, ax = plot_tile_last_24h(catalog.resample_data(last_data.ldr, rs_data='30s', use_median=True),
-                                     barplot=False, ax=ax, fig=fig)
-        _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data.ldr.name)
+        for c in SENSORS.columns_sensors_mean:
+            fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='30s', use_median=True),
+                                         barplot=False, ax=ax, fig=fig)
+            _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
 
+        # TODO Revisión tiles kWh
         if len(last_data_c) > 1:
             fig, ax = plot_tile_last_24h(last_data_c.kWh, barplot=True)
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data_c.kWh.name)

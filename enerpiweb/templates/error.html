@@ -24,6 +24,12 @@
         {{ alert_dismiss(alerta) }}
     {% endif %}
     <div class="container-fluid">
+        {% if traceback %}
+        <h2 class="lead">Traceback:</h2>
+        <div class="alert alert-danger" style="word-wrap:break-word; overflow-wrap: break-word;">
+            <p>{{ traceback|safe }}</p>
+        </div>
+        {% endif %}
         <h2 class="lead">* Error details:</h2>
         <div class="alert alert-danger" style="word-wrap:break-word; overflow-wrap: break-word;">
             <h3>{{ request }}</h3>

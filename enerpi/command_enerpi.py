@@ -6,15 +6,13 @@ import sys
 from enerpi import PRETTY_NAME, DESCRIPTION
 from enerpi.base import (BASE_PATH, CONFIG, SENSORS, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
                          FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log)
-from enerpi.database import (operate_hdf_database, get_ts_last_save, init_catalog, show_info_data,
-                             extract_log_file, delete_log_file, HDF_STORE)
-from enerpi.enerpimeter import enerpi_logger, receiver, enerpi_raw_data
-from enerpi.iobroadcast import UDP_PORT
 
 
 # Config:
 DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK', fallback='enerpi_plot_{:%Y%m%d_%H%M}.png')
 IMG_TILES_BASEPATH = os.path.join(BASE_PATH, '..', 'enerpiweb', 'static', 'img', 'generated')
+UDP_PORT = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
+HDF_STORE = CONFIG.get('ENERPI_DATA', 'HDF_STORE')
 
 
 def _enerpi_arguments():
@@ -61,7 +59,7 @@ def _enerpi_arguments():
     g_st = p.add_argument_group(title='⚙  \033[4mHDF Store Options\033[24m')
     g_st.add_argument('--store', action='store', metavar='ST', default=HDF_STORE,
                       help='✏️  Set the .h5 file where save the HDF store.\n     Default: "{}"'.format(HDF_STORE))
-    g_st.add_argument('--backup', action='store', metavar='BKP', help='☔ Backup the HDF Store')
+    g_st.add_argument('--backup', action='store', metavar='BKP', help='☔ Backup ALL data in CSV format')
     g_st.add_argument('--clear', action='store_true', help='☠ \033[31mDelete the HDF Store database\033[39m')
     g_st.add_argument('--clearlog', action='store_true', help='⚠ Delete the LOG FILE at: "{}"'.format(FILE_LOGGING))
     g_st.add_argument('-i', '--info', action='store_true', help='︎ℹ Show data info')
@@ -101,6 +99,16 @@ def make_cron_command_task_daemon():
     return cmd_logger.format(**local_params)
 
 
+def _clean_store_path(path_st):
+    if os.path.pathsep not in path_st:
+        path_st = os.path.join(DATA_PATH, path_st)
+    else:
+        path_st = os.path.abspath(path_st)
+    if not os.path.splitext(path_st)[1]:
+        path_st += '.h5'
+    return path_st
+
+
 def enerpi_main_cli(test_mode=False):
     """
     Uso de ENERPI desde CLI
@@ -133,8 +141,13 @@ def enerpi_main_cli(test_mode=False):
 
             log('** Installing CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'ok', True, False)
             set_command_on_reboot(cmd_logger, verbose=verbose)
-            os.chmod(DATA_PATH, 0o777)
-            [os.chmod(os.path.join(base, f), 0o777) for base, dirs, files in os.walk(DATA_PATH) for f in files + dirs]
+            try:
+                os.chmod(DATA_PATH, 0o777)
+                [os.chmod(os.path.join(base, f), 0o777)
+                 for base, dirs, files in os.walk(DATA_PATH) for f in files + dirs]
+            except PermissionError:
+                log("Can't set 777 permissions on {0}/* files...\nDo it manually, please: 'sudo chmod 777 -R {0}'"
+                    .format(DATA_PATH), 'warning', True, False)
         else:
             log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
             clear_cron_commands([cmd_logger], verbose=verbose)
@@ -155,16 +168,32 @@ def enerpi_main_cli(test_mode=False):
 
         # Delete LOG File
         if args.clearlog:
-            delete_log_file(FILE_LOGGING, verbose=verbose)
+            from enerpi.database import delete_log_file
 
+            delete_log_file(FILE_LOGGING, verbose=verbose)
         # Data Store Config
-        path_st = operate_hdf_database(args.store, path_backup=args.backup, clear_database=args.clear)
+        # TODO Eliminar operate_hdf_database
+        path_st = _clean_store_path(args.store)
+        existe_st = os.path.exists(path_st)
+        if not existe_st:
+            log('HDF Store not found at "{}"'.format(path_st), 'warn', True)
+        # path_st = operate_hdf_database(args.store, path_backup=None, clear_database=False)
 
         # Starts ENERPI Logger
         if args.enerpi:
+            from enerpi.enerpimeter import enerpi_logger
+
             enerpi_logger(is_demo=False, verbose=verbose, path_st=path_st, delta_sampling=args.delta,
                           roll_time=args.window, sampling_ms=args.ts, timeout=args.timeout)
+        elif args.backup:
+            from enerpi.database import init_catalog
+            # Export data to CSV:
+            catalog = init_catalog(raw_file=path_st, check_integrity=False)
+            all_data = catalog.export(args.backup)
+            log('ALL DATA:\n{}'.format(all_data), 'ok', True, False)
         elif args.raw:
+            from enerpi.enerpimeter import enerpi_raw_data
+
             # Raw mode
             delta_secs = args.raw
             raw_data = enerpi_raw_data(path_st.replace('.h5', '_raw_sample.h5'), delta_secs=delta_secs,
@@ -178,6 +207,8 @@ def enerpi_main_cli(test_mode=False):
             plt.show()
         # Shows database info
         elif args.info or args.filter or args.plot or args.plot_tiles:
+            from enerpi.database import init_catalog, show_info_data
+
             catalog = init_catalog(raw_file=path_st, check_integrity=False)
             if args.plot_tiles:
                 from enerpiplot.enerplot import gen_svg_tiles
@@ -214,10 +245,14 @@ def enerpi_main_cli(test_mode=False):
                     log('Image stored in "{}"'.format(img_name), 'ok', verbose, True)
         # Shows database info
         else:  # Shows last 10 entries
+            from enerpi.database import get_ts_last_save
+
             last = get_ts_last_save(path_st, get_last_sample=True, verbose=verbose, n=10)
             log('Showing last 10 entries in {}:\n{}'.format(path_st, last), 'info', verbose, False)
     # Shows & extract info from LOG File
     elif args.log:
+        from enerpi.database import extract_log_file
+
         data_log = extract_log_file(FILE_LOGGING, extract_temps=True, verbose=verbose)
         try:
             df_temps = data_log[data_log.temp.notnull()].drop(['tipo', 'msg', 'debug_send'], axis=1).dropna(axis=1)
@@ -231,18 +266,22 @@ def enerpi_main_cli(test_mode=False):
             print('No se encuentran datos de Tª de RPI en el LOG')
     # Demo sender
     elif args.demo:
+        from enerpi.enerpimeter import enerpi_logger
+
         set_logging_conf(FILE_LOGGING + '_demo.log', LOGGING_LEVEL, True)
         path_st = os.path.join(DATA_PATH, 'debug_buffer_disk.h5')
         enerpi_logger(is_demo=True, verbose=verbose, path_st=path_st, delta_sampling=args.delta,
                       roll_time=args.window, sampling_ms=args.ts, timeout=args.timeout)
     # Receiver
     else:  # elif args.receive:
+        from enerpi.enerpimeter import receiver
+
         log('{}\n   {}'.format(PRETTY_NAME, DESCRIPTION), 'ok', verbose, False)
         receiver(verbose=verbose, timeout=args.timeout, port=args.port)
-    log('Exiting from ENERPI CLI...', 'debug', True)
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing...', 'debug', True)
         timer_temps.cancel()
+    log('Exiting from ENERPI CLI...', 'debug', True)
     if not test_mode:
         sys.exit(0)
 

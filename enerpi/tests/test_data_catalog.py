@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import pytest
 import shutil
+from time import time
 from unittest import TestCase
 from enerpi.tests.conftest import get_temp_catalog_for_testing
 import enerpi.prettyprinting as pp
@@ -120,19 +121,36 @@ class TestUpdateCatalog(TestCase):
         assert s_none is None
 
     def test_6_catalog_data_resample(self):
-        # TODO PROFILE data_resample (muy lento!)
         print(self.cat)
+        # tic = time()
         data = self.cat._load_store(self.cat.tree.st[0]).iloc[:100000]
-        rs1 = self.cat.resample_data(data, rs_data='40min', rm_data=None, use_median=False, func_agg=np.mean)
+        # toc_load = time()
+        rs1 = self.cat.resample_data(data, rs_data='40min', use_median=False, func_agg=np.mean)
+        # toc_rs40m = time()
         pp.print_green(rs1)
-        rs2 = self.cat.resample_data(data, rm_data=30, use_median=True)
-        pp.print_yellow(rs2)
         rs3 = self.cat.resample_data(data, rs_data='2min', use_median=True)
+        # toc_rs2m_median = time()
         pp.print_blue(rs3)
-        rs3_2 = self.cat.resample_data(data, rm_data='2min', use_median=False, func_agg=np.mean)
-        pp.print_blue(rs3_2)
+        # msg = 'RESAMPLE TIMES:\n'
+        # msg += '\t{} --> {:.3f} secs\n'.format('LOAD', toc_load - tic)
+        # msg += '\t{} --> {:.3f} secs\n'.format('rs40m', toc_rs40m - toc_load)
+        # msg += '\t{} --> {:.3f} secs\n'.format('rs2m_median', toc_rs2m_median - toc_rs40m)
+        # pp.print_ok(msg)
 
-    def test_7_catalog_operations(self):
+    def test_7_catalog_data_resample_11days(self):
+        print(self.cat)
+        tic = time()
+        data = self.cat._load_store(self.cat.tree.st[0]).iloc[:1000000]
+        toc_load = time()
+        rs1 = self.cat.resample_data(data, rs_data='1h')
+        toc_1 = time()
+        pp.print_green(rs1)
+        msg = 'RESAMPLE TIMES:\n'
+        msg += '\t{} --> {:.3f} secs\n'.format('LOAD', toc_load - tic)
+        msg += '\t{} --> {:.3f} secs\n'.format('rs_1h', toc_1 - toc_load)
+        pp.print_ok(msg)
+
+    def test_8_catalog_operations(self):
         from enerpi.base import SENSORS
         data_empty = pd.DataFrame([])
         data_empty_p = self.cat.process_data(data_empty)
@@ -163,7 +181,7 @@ class TestUpdateCatalog(TestCase):
         print(d5)
         assert d5 is None
 
-    def test_8_catalog_index_update(self):
+    def test_9_catalog_index_update(self):
         from enerpi.base import BASE_PATH
         from enerpi.api import enerpi_data_catalog
         # Regen cat_file

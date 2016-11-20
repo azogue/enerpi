@@ -9,14 +9,11 @@ from enerpi.base import DATA_PATH, CONFIG, log
 
 
 # LAN broadcasting
-UDP_IP = CONFIG.get('BROADCAST', 'UDP_IP', fallback="192.168.1.255")
-UDP_PORT = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
-DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}".format(UDP_IP, UDP_PORT)
-KEY_FILE = os.path.join(DATA_PATH, CONFIG.get('BROADCAST', 'KEY_FILE', fallback='.secret_key'))
+_UDP_IP = CONFIG.get('BROADCAST', 'UDP_IP', fallback="192.168.1.255")
+_DESCRIPTION_IO = "\tSENDER - RECEIVER vía UDP. Broadcast IP: {}, PORT: {}"
 
 
-# TODO Automatize get encryption key (for tests)?
-def get_encryption_key(key_file):
+def get_encryption_key(key_file=None):
     """
     Encryption key for symmetric encryption. URL-safe base64-encoded 32-byte key
 
@@ -26,6 +23,8 @@ def get_encryption_key(key_file):
     :return: :bytes: encryption_key
     """
 
+    if key_file is None:
+        key_file = os.path.join(DATA_PATH, CONFIG.get('BROADCAST', 'KEY_FILE', fallback='.secret_key'))
     try:
         secret_key = open(key_file).read().encode()
     except FileNotFoundError:
@@ -45,7 +44,7 @@ def get_encryption_key(key_file):
     return secret_key
 
 
-def get_codec(secret_key):
+def get_codec(secret_key=None):
     """
     Get Fernet CODEC from secret_key with an AssertionError if Fernet error raises.
 
@@ -53,7 +52,8 @@ def get_codec(secret_key):
     :return: Fernet()
 
     """
-    # secret_key = get_encryption_key(key_file)
+    if secret_key is None:
+        secret_key = get_encryption_key()
     try:
         codec = Fernet(secret_key)
         return codec
@@ -64,10 +64,7 @@ def get_codec(secret_key):
         # sys.exit(-1)
 
 
-CODEC = get_codec(get_encryption_key(KEY_FILE))
-
-
-def receiver_msg_generator(verbose=True, n_msgs=None, port=UDP_PORT, codec=CODEC):
+def receiver_msg_generator(verbose=True, n_msgs=None, port=None, codec=None):
     """
     Generador de mensajes en el receptor de la emisión en la broadcast IP. Recibe los mensajes y los desencripta.
     También devuelve los tiempos implicados en la recepción (~ el ∆T entre mensajes) y el proceso de desencriptado.
@@ -77,11 +74,17 @@ def receiver_msg_generator(verbose=True, n_msgs=None, port=UDP_PORT, codec=CODEC
     :param codec: :Fernet obj: Fernet object for decrypting msgs.
     :yield: msg, ∆T_msg, ∆T_decryp
     """
+    if port is None:
+        port = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
+    if codec is None:
+        codec = get_codec(get_encryption_key())
+
     sock, counter = None, 0
+    udp_ip = _UDP_IP
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((UDP_IP, port))
-        log(DESCRIPTION_IO, 'ok', verbose, False)
+        sock.bind((udp_ip, port))
+        log(_DESCRIPTION_IO.format(udp_ip, port), 'ok', verbose, False)
         while (n_msgs is None) or (counter < n_msgs):
             tic = time()
             data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
@@ -90,7 +93,7 @@ def receiver_msg_generator(verbose=True, n_msgs=None, port=UDP_PORT, codec=CODEC
                 msg = codec.decrypt(data).decode()
             except InvalidToken as e:
                 log('InvalidToken ERROR: {}. La clave es correcta?\n* KEY: "{}"'
-                    .format(e, get_encryption_key(key_file=KEY_FILE)), 'error', verbose, True)
+                    .format(e, get_encryption_key()), 'error', verbose, True)
                 break
             toc_dcry = time()
             yield msg, toc_msg - tic, toc_dcry - toc_msg
@@ -105,13 +108,14 @@ def receiver_msg_generator(verbose=True, n_msgs=None, port=UDP_PORT, codec=CODEC
     raise StopIteration
 
 
-def broadcast_msg(msg, counter_unreachable, sock_send=None, codec=CODEC, verbose=True):
+def broadcast_msg(msg, counter_unreachable, sock_send=None, codec=None, port=None, verbose=True):
     """
     Emisión de datos en modo broadcast UDP (para múltiples receptores) como mensaje de texto encriptado.
     :param msg: Cadena de texto a enviar.
     :param counter_unreachable: np.array([0, 0]) de control de emisiones incorrectas (seguidas y totales)
     :param sock_send: Socket de envío broadcast. Se devuelve para su reutilización.
     :param codec: :Fernet obj: Fernet object for encrypting msgs.
+    :param port: # de puerto de retransmisión.
     :param verbose: Imprime en stout mensajes de error y de envío de datos
     :return: sock_send
     """
@@ -121,14 +125,18 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, codec=CODEC, verbose
         # sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 32)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        log(DESCRIPTION_IO, 'ok', verb, verb)
+        log(_DESCRIPTION_IO.format(_UDP_IP, port), 'ok', verb, verb)
         return sock
 
+    if codec is None:
+        codec = get_codec()
+    if port is None:
+        port = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
     if sock_send is None:
         sock_send = _get_broadcast_socket()
     encrypted_msg_b = codec.encrypt(msg.encode())
     try:
-        sock_send.sendto(encrypted_msg_b, (UDP_IP, UDP_PORT))
+        sock_send.sendto(encrypted_msg_b, (_UDP_IP, port))
         counter_unreachable[0] = 0
     except OSError as e:  # [Errno 101] Network is unreachable
         log('OSError: {}; C_UNREACHABLE: {}'.format(e, counter_unreachable), 'warn', verbose)
@@ -137,6 +145,6 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, codec=CODEC, verbose
     # except Exception as e:
     #     log('ERROR en sendto: {} [{}]'.format(e, e.__class__), 'err', verbose)
     #     sock_send = _get_broadcast_socket()
-    #     sock_send.sendto(encrypted_msg_b, (UDP_IP, UDP_PORT))
+    #     sock_send.sendto(encrypted_msg_b, (_UDP_IP, UDP_PORT))
     log('SENDED: {}'.format(msg), 'debug', verbose, False)
     return sock_send

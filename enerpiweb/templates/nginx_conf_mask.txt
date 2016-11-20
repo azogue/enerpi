@@ -14,7 +14,7 @@ server {
     location /enerpi/ {
         include uwsgi_params;
         uwsgi_param {path_enerpiweb}/__main__.py /enerpi;
-        uwsgi_pass unix:/tmp/enerpiweb.sock;
+        uwsgi_pass unix:/tmp/enerpiweb_uwsgi.sock;
         uwsgi_read_timeout 300;
     }
 }

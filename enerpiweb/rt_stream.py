@@ -5,7 +5,7 @@ from flask import Response, request, render_template, jsonify
 import json
 import os
 import pandas as pd
-from threading import Thread, current_thread
+from threading import Thread, Event, current_thread
 from time import sleep, time
 
 from enerpi.base import SENSORS, log
@@ -15,7 +15,6 @@ from enerpiweb import app
 
 
 BUFFER_MAX_SAMPLES = 1800
-STREAM_MAX_TIME = 1800
 BOKEH_VERSION = get_bokeh_version()
 
 # GLOBAL VARIABLES FOR ENERPI DATA BROADCAST
@@ -39,11 +38,11 @@ def stream_is_alive():
     return is_sender_active, last
 
 
-def _format_event_stream(d_msg, timeout_retry=None, msg_id=None):
-    if msg_id is not None:
-        return 'id: {}\ndata: {}\n\n'.format(msg_id, json.dumps(d_msg))
-    if timeout_retry is not None:
-        return 'retry: {}\ndata: {}\n\n'.format(timeout_retry, json.dumps(d_msg))
+def _format_event_stream(d_msg):  # , timeout_retry=None, msg_id=None):
+    # if msg_id is not None:
+    #     return 'id: {}\ndata: {}\n\n'.format(msg_id, json.dumps(d_msg))
+    # if timeout_retry is not None:
+    #     return 'retry: {}\ndata: {}\n\n'.format(timeout_retry, json.dumps(d_msg))
     return 'data: {}\n\n'.format(json.dumps(d_msg))
 
 
@@ -72,7 +71,7 @@ def _get_dataframe_buffer_data():
 
 
 def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
-                           rs_data=None, rm_data=None, use_median=False, kwh=False):
+                           rs_data=None, use_median=False, kwh=False):
     tic = time()
     if start or end or last_hours:
         cat = enerpi_data_catalog(check_integrity=False)
@@ -91,11 +90,12 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
                         df_last_data = df_last_data.tz_localize(None)
                         df = pd.DataFrame(pd.concat([df, df_last_data])
                                           ).sort_index().drop_duplicates(keep='last')
-                df = cat.resample_data(df, rs_data=rs_data, rm_data=rm_data, use_median=use_median)
+                df = cat.resample_data(df, rs_data=rs_data, use_median=use_median)
     else:
         df = _get_dataframe_buffer_data()
     toc_df = time()
     if df is not None and not df.empty:
+        print('BOKEH_P:\n{}\n--> {}, {}'.format(df.head(), df.shape, df.columns))
         try:
             script, divs, version = html_plot_buffer_bokeh(df, is_kwh_plot=kwh)
             toc_p = time()
@@ -103,13 +103,13 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
             yield _format_event_stream(dict(success=True, b_version=version, script_bokeh=script, bokeh_div=divs[0],
                                             took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
         except Exception as e:
-            msg = 'ERROR en: BOKEH PLOT: {} [{}]'.format(e, e.__class__)
+            msg = 'ERROR in: BOKEH PLOT: {} [{}]'.format(e, e.__class__)
             print(msg)
             yield _format_event_stream(dict(success=False, error=msg))
     else:
-        msg = ('No hay datos para BOKEH PLOT: start={}, end={}, last_hours={}, '
-               'rs_data={}, rm_data={}, use_median={}, kwh={}<br>--> DATA: {}'
-               .format(start, end, last_hours, rs_data, rm_data, use_median, kwh, df))
+        msg = ('No data for BOKEH PLOT: start={}, end={}, last_hours={}, '
+               'rs_data={}, use_median={}, kwh={}<br>--> DATA: {}'
+               .format(start, end, last_hours, rs_data, use_median, kwh, df))
         # print(msg.replace('<br>', '\n'))
         yield _format_event_stream(dict(success=False, error=msg))
     yield _format_event_stream('CLOSE')
@@ -118,30 +118,52 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
 ###############################
 # BROADCAST RECEIVER
 ###############################
-def _init_receiver_thread():
-    log('**INIT_BROADCAST_RECEIVER en PID={}'.format(os.getpid()), 'info', False)
-    gen = enerpi_receiver_generator()
-    count = 0
-    while True:
-        try:
-            last = next(gen)
-            global last_data
-            global buffer_last_data
-            last_data = last.copy()
-            buffer_last_data.append(last_data)
-            # print('DEBUG STREAM: last_data --> ', last_data)
-        except StopIteration:
-            log('StopIteration on counter={}'.format(count), 'debug', False)
-            if count > 0:
-                sleep(2)
-                gen = enerpi_receiver_generator()
-            else:
-                log('Not receiving broadcast msgs. StopIteration at init!', 'error', False)
-                break
-        count += 1
-        sleep(.5)
-    log('**BROADCAST_RECEIVER en PID={}, thread={}. CLOSED on counter={}'
-        .format(os.getpid(), current_thread(), count), 'warn', False)
+class ReceiverThread(Thread):
+    """
+    Thread for receiving real-time broadcast values from ENERPI LOGGER
+    """
+    def __init__(self):
+        self._stopevent = Event()
+        Thread.__init__(self, name='ReceiverThread')
+
+    def run(self):
+        """ main control loop """
+        log('**INIT_BROADCAST_RECEIVER en PID={}'.format(os.getpid()), 'info', False)
+        gen = enerpi_receiver_generator()
+        count = 0
+        while not self._stopevent.isSet():
+            try:
+                last = next(gen)
+                global last_data
+                global buffer_last_data
+                last_data = last.copy()
+                buffer_last_data.append(last_data)
+                # print('DEBUG STREAM: last_data --> ', last_data)
+            except StopIteration:
+                log('StopIteration on counter={}'.format(count), 'debug', True)
+                if count > 0:
+                    sleep(2)
+                    gen = enerpi_receiver_generator()
+                else:
+                    log('Not receiving broadcast msgs. StopIteration at init!', 'error', False)
+                    break
+            count += 1
+            sleep(.5)
+        log('**BROADCAST_RECEIVER en PID={}, thread={}. CLOSED on counter={}'
+            .format(os.getpid(), current_thread(), count), 'warn', True)
+
+    # def stop(self):
+    #     """ Stop the thread and wait for it to end. """
+    #     log('EN STOP!', 'error', True)
+    #     self._stopevent.set()
+    #     Thread.join(self)
+
+    # def __del__(self):
+    #     """ Stop the thread and wait for it to end. """
+    #     log('PASANDO POR AQUÍ', 'error', True)
+    #     self._stopevent.set()
+    #     Thread.join(self)
+    #     Thread._delete(self)
 
 
 @app.before_first_request
@@ -149,7 +171,7 @@ def _init_receiver():
     global thread_receiver
     # Broadcast receiver
     if not thread_receiver:
-        thread_receiver = Thread(target=_init_receiver_thread)
+        thread_receiver = ReceiverThread()
         thread_receiver.setDaemon(True)
         thread_receiver.start()
 
@@ -184,7 +206,8 @@ def stream_sensors():
         last_ts = dt.datetime.now(tz=SENSORS.TZ) - dt.timedelta(minutes=1)
         count = 0
         tic = time()
-        while time() - tic < STREAM_MAX_TIME:
+        stream_max_time = app.config['STREAM_MAX_TIME']
+        while time() - tic < stream_max_time:
             global last_data
             if SENSORS.ts_column in last_data and last_data[SENSORS.ts_column] > last_ts:
                 send = last_data.copy()
@@ -221,8 +244,6 @@ def bokeh_buffer(start=None, end=None, last_hours=None):
         kwargs.update(kwh=request.args['kwh'] == 'true')
     if 'rs_data' in request.args:
         kwargs.update(rs_data=request.args['rs_data'])
-    if 'rm_data' in request.args:
-        kwargs.update(rm_data=request.args['rm_data'])
     if 'use_median' in request.args:
         kwargs.update(use_median=request.args['use_median'])
     return Response(_gen_stream_data_bokeh(**kwargs), mimetype='text/event-stream')
@@ -239,5 +260,20 @@ def index():
     """
     global buffer_last_data
     with_last_samples = 'table' in request.args
-    return render_template('index.html', include_consumption=True, include_ldr=True,
+    data_monitor = SENSORS.to_dict()
+    data_monitor.update(ts=SENSORS.ts_column)
+    return render_template('index.html', include_consumption=True, data_monitor=data_monitor,
                            with_last_samples=with_last_samples, last_samples=list(buffer_last_data))
+
+
+@app.route('/api/monitor')
+def only_tiles():
+    """
+    Url route for showing only the real-time monitoring tiles
+    (for emmbed in another place, e.g.)
+
+    """
+    consumption = request.args.get('consumption', 'false') != 'false'
+    data_monitor = SENSORS.to_dict()
+    data_monitor.update(ts=SENSORS.ts_column)
+    return render_template('only_tiles.html', include_consumption=consumption, data_monitor=data_monitor)

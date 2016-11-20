@@ -325,8 +325,12 @@ class HDFTimeSeriesCatalog(object):
 
         def _get_paths_interval(ts_ini, ts_fin=None):
             ahora = pd.Timestamp.now()
-            ts_ini = pd.Timestamp(ts_ini)
-            ts_fin = pd.Timestamp(ts_fin) if ts_fin else ahora
+            try:
+                ts_ini = pd.Timestamp(ts_ini)
+                ts_fin = pd.Timestamp(ts_fin) if ts_fin else ahora
+            except ValueError as e:
+                log('ValueError "{}" in _get_paths with ts_ini={} & ts_fin={}'.format(e, ts_ini, ts_fin), 'error')
+                return []
             periods = (ts_fin.year * 12 + ts_fin.month) - (ts_ini.year * 12 + ts_ini.month)
             index = pd.DatetimeIndex(freq='M', start=ts_ini.date(), periods=periods + 1)
             paths = []
@@ -732,7 +736,7 @@ class HDFTimeSeriesCatalog(object):
         return self.get(start=self.min_ts, with_summary=with_summary_data)
 
     @staticmethod
-    def resample_data(data, rs_data=None, rm_data=None, use_median=False, func_agg=np.mean):
+    def resample_data(data, rs_data=None, use_median=False, func_agg=np.mean):
 
         def _median(arr):
             return 0 if arr.shape[0] == 0 else np.nanmedian(arr)
@@ -740,9 +744,7 @@ class HDFTimeSeriesCatalog(object):
         if data is not None and not data.empty:
             if use_median:
                 func_agg = _median
-            if rm_data is not None:
-                data = data.rolling(rm_data).apply(func_agg)
-            elif rs_data is not None:
+            if rs_data is not None:
                 data = data.resample(rs_data, label='left').apply(func_agg)
         return data
 
@@ -779,10 +781,22 @@ class HDFTimeSeriesCatalog(object):
     # def backup(self, path_backup, compact_data=None):
     #     # TODO backup a ruta alternativa, con compresión y opción de replicado de tree o compactado (x años, o total)
     #     raise NotImplementedError
-    #
-    # def export(self):  # , export_to='csv'):
-    #     # TODO terminar export?
-    #     all_data, all_data_s = self.get_all_data(True, True)
-    #     # if export_to == 'csv':
-    #     all_data.to_csv(os.path.join(self.base_path, 'enerpi_all_data.csv'))
-    #     all_data_s.to_csv(os.path.join(self.base_path, 'enerpi_all_data_summary.csv'))
+
+    def export(self, filename='enerpi_all_data.csv'):
+        """
+        Get all samples & export to CSV file
+
+        :param filename: destination path of CSV file
+        :return: pandas DataFrame with all data
+
+        """
+        path_export = os.path.join(self.base_path, filename)
+        log('EXPORT ALL DATA TO CSV --> "{}"'.format(path_export), 'info', self.verbose)
+        all_data = self.get_all_data(False)
+        if (all_data is not None) and not all_data.empty:
+            all_data.to_csv(path_export)
+            log('EXPORT ALL DATA TO CSV DONE! ({} samples, from {:%d-%m-%y %H:%M} to {:%d-%m-%y %H:%M})'
+                .format(len(all_data), all_data.index[0], all_data.index[-1]), 'info', self.verbose)
+        else:
+            log('NO DATA TO EXPORT! (all_data={})'.format(all_data), 'error', self.verbose)
+        return all_data

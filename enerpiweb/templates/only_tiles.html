@@ -6,9 +6,9 @@
 {% endblock %}
 
 {% block content %}
-    {{ monitor_tiles(include_consumption, include_ldr) }}
+    {{ monitor_tiles(data_monitor, include_consumption) }}
 {% endblock %}
 
 {% block scripts %}
-    {{ monitor_tiles_scripts() }}
+    {{ monitor_tiles_scripts(data_monitor) }}
 {% endblock %}

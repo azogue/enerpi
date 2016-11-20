@@ -6,7 +6,6 @@ from enerpi.base import BASE_PATH, log
 from enerpiweb import basedir, CONFIG, DATA_PATH, check_resource_files, app as application
 from enerpi.prettyprinting import print_secc, print_cyan, print_red, print_magenta
 
-
 FLASK_WEBSERVER_PORT = CONFIG.getint('ENERPI_WEBSERVER', 'FLASK_WEBSERVER_PORT', fallback=7777)
 PERIOD_MINUTES_RSC_GEN = CONFIG.getint('ENERPI_WEBSERVER', 'RSC_GEN_EVERY_MINUTES', fallback=15)
 USER_SERVER = CONFIG.get('ENERPI_WEBSERVER', 'USER_SERVER', fallback='www-data')
@@ -14,7 +13,7 @@ NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
 UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'
 
 
-def _make_cron_command_task_periodic_rscgen():
+def make_cron_command_task_periodic_rscgen():
     """
     CRON task for generate web resources with enerpiplot.mule_rscgen.py
     Example command:
@@ -105,7 +104,7 @@ def main():
     elif args.install or args.uninstall:
         from enerpi.config.crontasks import set_command_periodic, clear_cron_commands
         # INSTALL / UNINSTALL CRON TASKS & KEY
-        cmd_server = _make_cron_command_task_periodic_rscgen()
+        cmd_server = make_cron_command_task_periodic_rscgen()
         if args.install:
             log('** (Re-)Create webserver config files:', 'ok', True, False)
             _make_webserver_config(overwrite=True)

@@ -1,0 +1,46 @@
+[
+  {
+    "name": "power_1",
+    "analog_channel": 3,
+    "is_rms": true,
+    "unit": "W",
+    "color": "#0CBB43",
+    "tile_gradient_st": [12, 187, 67, 0.83],
+    "tile_gradient_end": [55, 245, 119, 0.27],
+    "icon": "flash",
+    "description": "Main Power"
+  },
+  {
+    "name": "power_2",
+    "analog_channel": 5,
+    "is_rms": true,
+    "unit": "W",
+    "color": "#0C8534",
+    "tile_gradient_st": [12, 133, 52, 0.83],
+    "tile_gradient_end": [45, 200, 97, 0.27],
+    "icon": "bolt",
+    "description": "Power c2"
+  },
+  {
+    "analog_channel": 7,
+    "name": "ldr",
+    "is_rms": false,
+    "unit": "%",
+    "color": "#F4D83F",
+    "tile_gradient_st": [244, 216, 63, 0.83],
+    "tile_gradient_end": [219, 221, 13, 0.33],
+    "icon": "lightbulb-o",
+    "description": "Ilumination"
+  },
+  {
+    "name": "noise",
+    "analog_channel": 0,
+    "is_rms": false,
+    "unit": "%",
+    "color": "#3494BB",
+    "tile_gradient_st": [52, 148, 187, 0.83],
+    "tile_gradient_end": [52, 148, 187, 0.27],
+    "icon": "plug",
+    "description": "Noise"
+  }
+]

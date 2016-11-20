@@ -1,8 +1,21 @@
 {% from 'macros.html' import style_class_greyscale %}
 
-{% macro monitor_tile_stream(title, type_data, mag, unit, class_ts, class_value, glyp) %}
+{#.tile-enerpi_data-power {#}
+{#    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(12, 187, 67, 0.83), rgba(55, 245, 119, 0.27));}#}
+{#.tile-enerpi_data-power-text { color: #10371a; }#}
+{#.tile-enerpi_data-kWh {#}
+{#    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(140, 39, 211, 0.83), rgba(191, 160, 245, 0.27));}#}
+{#.tile-enerpi_data-kWh-text { color: #2c1037; }#}
+{#.tile-enerpi_data-ldr {#}
+{#    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(244, 216, 63, 0.83), rgba(219, 221, 13, 0.33));}#}
+{#.tile-enerpi_data-ldr-text { color: #333718; }#}
+
+
+{% macro monitor_tile_stream(title, type_data, mag, unit, glyp, c1, c2) %}
 <div id="tile-{{ type_data + '-' + mag }}"
-     class="tile-monitor tile-monitor-{{ type_data}} tile-{{ type_data + '-' + mag }}">
+{#     class="tile-monitor tile-{{ type_data + '-' + mag }}">#}
+     class="tile-monitor"
+     style="background-image: radial-gradient(farthest-corner at 70% 70%, {{ c1|color }}, {{ c2|color }});">
      <img id="tile-{{ type_data + '-' + mag }}-img" class="tile-img-bg" alt="last 24h ev."
           src="{{ url_for('static', filename='img/generated/tile_{}_{}_last_72h.svg'.format(type_data, mag)) }}">
     <div class="tile-monitor-innerContent">
@@ -12,11 +25,11 @@
             {% else %}
                 <strong>{{ title }}:</strong>
             {% endif %}
-            <br><span class="tile-monitor-label-sub {{ class_ts }}"></span>
+            <br><span class="tile-monitor-label-sub stream-ts-{{ mag }}"></span>
         </span>
         <span id="tile-{{ type_data + '-' + mag }}-text" class="pull-right tile-{{ type_data + '-' + mag }}-text">
             <p class="tile-monitor-unit">{{ unit }}</p>
-            <p class="tile-monitor-value {{ class_value }}"></p>
+            <p class="tile-monitor-value stream-{{ mag }}">??</p>
         </span>
     </div>
 </div>
@@ -29,19 +42,19 @@
 {#    {{ style_class_greyscale('tile-monitor:hover', 50) }}#}
 {% endmacro %}
 
-{% macro monitor_tiles(with_consumption, with_ldr) %}
+{% macro monitor_tiles(data_monitor, with_consumption) %}
 <div class="tile-monitor-container-join">
-    {{ monitor_tile_stream('POWER', 'enerpi_data', 'power', 'W', 'stream-ts-power', 'stream-power', 'flash') }}
-    {% if with_ldr %}
-    {{ monitor_tile_stream('ILUMINATION', 'enerpi_data', 'ldr', '%', 'stream-ts-ldr', 'stream-ldr', 'lightbulb-o') }}
-    {% endif %}
+    {% for s in data_monitor['sensors'] %}
+      {{ monitor_tile_stream(s['description'].upper(), 'enerpi_data', s['name'], s['unit'], s['icon'], s['tile_gradient_st'], s['tile_gradient_end']) }}
+    {% endfor %}
+{#    TODO tiles summary #}
     {% if with_consumption %}
-    {{ monitor_tile_stream('CONSUMPTION', 'enerpi_data', 'kWh', 'kWh', 'stream-ts-kWh', 'stream-kWh', 'bar-chart') }}
+    {{ monitor_tile_stream('CONSUMPTION', 'enerpi_data', 'kWh', 'kWh', 'bar-chart', (140, 39, 211, 0.83), (191, 160, 245, 0.27)) }}
     {% endif %}
 </div>
 {% endmacro %}
 
-{% macro monitor_tiles_scripts() %}
+{% macro monitor_tiles_scripts(data_monitor) %}
     <script src="https://raw.github.com/phstc/jquery-dateFormat/master/dist/jquery-dateFormat.min.js"></script>
     <script type="text/javascript">
         function refresh_static_tile_bg(type_data, type_mag) {
@@ -108,8 +121,9 @@
                 checkTilesWithWidth();
                 $(window).on('resize', '', {}, checkTilesWithWidth);
 
-                execAndSetIntervalSwitchTileBg('enerpi_data', 'power');
-                execAndSetIntervalSwitchTileBg('enerpi_data', 'ldr');
+                {% for s in data_monitor['sensors'] %}
+                    execAndSetIntervalSwitchTileBg('enerpi_data', '{{ s['name'] }}');
+                {% endfor %}
                 execAndSetIntervalSwitchTileBg('enerpi_data', 'kWh');
 
                 var sse = new EventSource('{{ url_for("stream_sensors")}}');
@@ -124,29 +138,33 @@
                         var hay_table = table.length > 0;
                         var tile = $('.tile-monitor-' + 'enerpi_data');
                         var text_values = tile.find('p.tile-monitor-value');
-{#                        $('#text-streams').html('Real time from: "' + data.host + '"');#}
-                        $('.stream-ts-power').html(data.ts);
-                        $('.stream-power').html(data.power);
-{#                        $('.stream-ts-kWh').html(data.ts);#}
-{#                        $('.stream-kWh').html(Math.round(data.noise * 100) / 100);#}
-                        $('.stream-ts-ldr').html(data.ts);
-                        $('.stream-ldr').html(Math.round(data.ldr * 1000) / 10);
+{#                        console.log(data);#}
+                        {% set ts_column = data_monitor['ts'] %}
+                        {% for s in data_monitor['sensors'] %}
+                            $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}']);
+                            {% if s['is_rms'] %}
+                            $('.stream-' + '{{ s['name'] }}').html(data['{{ s['name'] }}']);
+                            {% else %}
+                            $('.stream-' + '{{ s['name'] }}').html(Math.round(data['{{ s['name'] }}'] * 1000) / 10);
+                            {% endif %}
+                        {% endfor %}
                         text_values.addClass(animate_value);
                         delay_remove_class(text_values, animate_value, 500);
-                        if (hay_table) {
-                            var new_row = '<tr><td>' + $.format.date(data.ts, "HH:mm:ss")
-                                    + '</td><td style="text-align: left" class="hidden-md-down">' + data.msg + '</td><td><strong>'
-                                    + data.power + '</strong></td><td>' + (100 * data.ldr).toFixed(1) + '</td><td>'
-                                    + data.ref + '</td><td class="hidden-xs-down">' + data.noise + '</td></tr>'
-                            table.prepend(new_row);
-                        }
+{#                    TODO Rehacer tabla stream valores#}
+{#                        if (hay_table) {#}
+{#                            var new_row = '<tr><td>' + $.format.date(data.ts, "HH:mm:ss")#}
+{#                                    + '</td><td style="text-align: left" class="hidden-md-down">' + data.msg + '</td><td><strong>'#}
+{#                                    + data.power + '</strong></td><td>' + (100 * data.ldr).toFixed(1) + '</td><td>'#}
+{#                                    + data.ref + '</td><td class="hidden-xs-down">' + data.noise + '</td></tr>'#}
+{#                            table.prepend(new_row);#}
+{#                        }#}
                     }
                 };
             });
     </script>
 {% endmacro %}
 
-{% macro table_last_samples_with_stream(last_samples) %}
+{% macro table_last_samples_with_stream(data_monitor, last_samples) %}
 <div id="container_table_stream" class="container-fluid">
     <div class="col-xs-12 px-auto">
     <h3><strong><span class="glyphicons glyphicons-stats"></span>Last samples:</strong></h3>
@@ -158,10 +176,13 @@
             <tr>
                 <th>Time</th>
                 <th class="hidden-md-down">Raw MSG</th>
-                <th>Power (W)</th>
-                <th>LDR (%)</th>
-                <th>nº samples</th>
-                <th class="hidden-xs-down">noise</th>
+                {% for s in data_monitor['sensors'] %}
+                    <th>{{ s['description'] }} ({{ s['unit'] }})</th>
+{#                <th>Power (W)</th>#}
+{#                <th>LDR (%)</th>#}
+{#                <th>nº samples</th>#}
+{#                <th class="hidden-xs-down">noise</th>#}
+                {% endfor %}
             </tr>
         </thead>
         <tbody id="table_body_stream">
@@ -169,10 +190,22 @@
             <tr>
             <td>{{ sample['ts'].strftime('%H:%M:%S') }}</td>
             <td style="text-align: left" class="hidden-md-down">{{ sample['msg'] }}</td>
-            <td><strong>{{ sample['power']|int }}</strong></td>
-            <td>{{ (sample['ldr'] * 100)|round(1)}}</td>
-            <td>{{ sample['ref']|int }}</td>
-            <td class="hidden-xs-down">{{ sample['noise'] }}</td>
+
+            {% for s in data_monitor['sensors'] %}
+            {% if s['is_rms'] %}
+                <td>{{ sample[s['name']]|int }}</td>
+            {% else %}
+                <td>{{ (sample[s['name']] * 100)|round(1)}}</td>
+            {% endif  %}
+{#                <th>Power (W)</th>#}
+{#                <th>LDR (%)</th>#}
+{#                <th>nº samples</th>#}
+{#                <th class="hidden-xs-down">noise</th>#}
+            {% endfor %}
+{#            <td><strong>{{ sample['power']|int }}</strong></td>#}
+{#            <td>{{ (sample['ldr'] * 100)|round(1)}}</td>#}
+{#            <td>{{ sample['ref']|int }}</td>#}
+{#            <td class="hidden-xs-down">{{ sample['noise'] }}</td>#}
             </tr>
         {% endfor %}
         </tbody>

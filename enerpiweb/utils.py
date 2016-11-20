@@ -1,9 +1,33 @@
 # -*- coding: utf-8 -*-
 import datetime as dt
 from flask import request, render_template
-
 from enerpi.base import log
 from enerpiweb import app
+
+
+@app.template_filter('color')
+def filter_color(color):
+    """
+    jinja2 template filter for color conversion to CSS text
+    :param color: color as 3/4 items tuple/list, or as hex color like '#aabbcc' or 'aabbcc'
+    :return: :str: css color
+
+    """
+    if (type(color) is list) or (type(color) is tuple):
+        try:
+            rgb = [str(int(x)) for x in color[:3]]
+        except ValueError as e:
+            print(e)
+            rgb = [str(max(0, min(255, int(round(255 * x))))) for x in color[:3]]
+        if len(color) == 3:
+            return 'rgb({})'.format(', '.join(rgb))
+        else:
+            return 'rgba({})'.format(', '.join(rgb + [str(color[3])]))
+    else:
+        assert type(color) is str
+        if not color.startswith('#'):
+            return '#{}'.format(color)
+        return color
 
 
 @app.template_filter('text_date')
@@ -60,8 +84,8 @@ def page_not_found(e):
     :param e: error
 
     """
-    log('page_not_found: {}, url={}'.format(e, request.url), 'error')
-    return render_template('error.html', error_e=e, code=404), 404
+    log('page_not_found: {}, url={}'.format(e, request.url), 'error', False)
+    return render_template('error.html', error_e=e, code=404, traceback=None), 404
 
 
 @app.errorhandler(500)
@@ -72,4 +96,4 @@ def internal_server_error(e):
 
     """
     log('INTERNAL_SERVER_ERROR: {}, request={}'.format(e, request), 'error')
-    return render_template('error.html', error_e=e, code=500), 500
+    return render_template('error.html', error_e=e, code=500, traceback=None), 500

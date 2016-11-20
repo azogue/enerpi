@@ -94,7 +94,7 @@ def test_pitemps():
     """
     from enerpi.pitemps import get_cpu_temp, get_gpu_temp
 
-    out = subprocess.check_output('pitemps', timeout=5)
+    out = subprocess.check_output('pitemps', timeout=7)
     pp.print_ok(out)
     print(get_cpu_temp())
     print(get_gpu_temp())

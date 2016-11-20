@@ -47,7 +47,7 @@ class TestCatalog(TestCase):
         print(self.DATA_PATH)
         print(self.cat)
         print(CONFIG.sections())
-        for s in ['ENERPI_DATA', 'ENERPI_WEBSERVER', 'ENERPI_SAMPLER', 'BROADCAST', 'MCP3008', 'RGBLED']:
+        for s in ['ENERPI_DATA', 'ENERPI_WEBSERVER', 'ENERPI_SAMPLER', 'BROADCAST', 'RGBLED']:
             pp.print_cyan(list(CONFIG[s].keys()))
             pp.print_red(list(CONFIG[s].values()))
 

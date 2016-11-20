@@ -107,22 +107,31 @@ def save_raw_data(data=None, path_st=HDF_STORE_PATH, catalog=None, verb=True):
         if data is not None and type(data) is not pd.DataFrame:
             data = pd.DataFrame(data, columns=SENSORS.columns_sampling
                                 ).set_index(SENSORS.ts_column).dropna().astype(float)
-            with pd.HDFStore(path_st, mode='a', complevel=9, complib='blosc') as st:
-                st.append(KEY, data)
-                if catalog is not None:
-                    df_tot = st[KEY]
-                    log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)),
-                        'debug', verb)
+            mode = 'a' if os.path.exists(path_st) else 'w'
+            try:
+                with pd.HDFStore(path_st, mode=mode, complevel=9, complib='blosc') as st:
+                    st.append(KEY, data)
+                    if catalog is not None:
+                        df_tot = st[KEY]
+                        log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)),
+                            'debug', verb)
+            except OSError as e:
+                log('OSError "{}" trying to open "{}" in "{}" mode (save_in_store)'
+                    .format(e, path_st, mode), 'error', True)
+                # TODO NOTIFY Error
+                return -1
             if catalog is not None:
                 try:
                     catalog.update_catalog(data=df_tot)
                 except Exception as e:
                     log('Exception "{}" [{}] en update_catalog (save_in_store)'
                         .format(e, e.__class__), 'error', True)
-                    # TODO Notificación del error!
+                    # TODO NOTIFY Error
+                    return -1
         return True
     except ValueError as e:
         log('ValueError en save_in_store: {}'.format(e), 'error', True)
+        return -1
 
 
 @timeit('get_ts_last_save')

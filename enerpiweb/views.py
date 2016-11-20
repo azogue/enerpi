@@ -2,8 +2,6 @@
 from flask import request, redirect, url_for, render_template, jsonify
 import json
 import os
-
-from enerpi.base import log
 from enerpi.api import enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version
 from enerpiweb import app, WITH_ML_SUBSYSTEM
@@ -26,15 +24,6 @@ if WITH_ML_SUBSYSTEM:
 #############################
 # INDEX & ROUTES
 #############################
-# TODO RESTART APP (RELOAD CONFIG!):
-@app.route('/reloadserver/')
-def reloadserver():
-    log('Se procede a intentar reiniciar el servidor', 'debug', True)
-    os.system('sudo service uwsgi-emperor restart')
-    log('Ha funcionado??', 'debug', True)
-    return redirect(url_for('index'))
-
-
 # TODO Fix layout of control buttons
 @app.route('/control')
 def control():
@@ -59,18 +48,6 @@ def control():
                                       'path_catalog': os.path.join(cat.base_path, cat.catalog_file),
                                       'ts_init': cat.min_ts, 'ts_catalog': cat.index_ts},
                            d_last_msg=last, is_sender_active=is_sender_active, list_stores=paths_rel, alerta=alerta)
-
-
-@app.route('/api/monitor')
-def only_tiles():
-    """
-    Url route for showing only the real-time monitoring tiles
-    (for emmbed in another place, e.g.)
-
-    """
-    ldr = request.args.get('ldr', 'true') == 'true'
-    consumption = request.args.get('consumption', 'false') != 'false'
-    return render_template('only_tiles.html', include_consumption=consumption, include_ldr=ldr)
 
 
 @app.route('/api/help', methods=['GET'])
@@ -99,6 +76,7 @@ def base_index():
     return redirect(url_for('index'))
 
 
+# TODO Corregir 'SECRET_KEY': None
 # @app.route('/allroutes')
 # def allroutes():
 #     routes = []

@@ -1,13 +1,12 @@
 {% extends "layout.html" %}
-{% from 'monitor_tiles.html' import monitor_tiles, monitor_tiles_styles, monitor_tiles_scripts with context %}
-{% from 'monitor_tiles.html' import table_last_samples_with_stream with context %}
+{% from 'monitor_tiles.html' import monitor_tiles, monitor_tiles_styles, monitor_tiles_scripts, table_last_samples_with_stream with context %}
 
 {% block styles %}
     {{ monitor_tiles_styles() }}
 {% endblock %}
 
 {% block content %}
-    {{ monitor_tiles(include_consumption, include_ldr) }}
+    {{ monitor_tiles(data_monitor, include_consumption) }}
     <br class="hidden-xs hidden-sm">
 {#    <div class="jumbotron hidden-xs">#}
 {#        <div class="container-fluid">#}
@@ -16,11 +15,11 @@
 {#    </div>#}
     {% if with_last_samples %}
     <div class="container-fluid">
-        {{ table_last_samples_with_stream(last_samples) }}
+        {{ table_last_samples_with_stream(data_monitor, last_samples) }}
     </div>
     {% endif %}
 {% endblock %}
 
 {% block scripts %}
-    {{ monitor_tiles_scripts() }}
+    {{ monitor_tiles_scripts(data_monitor) }}
 {% endblock %}

@@ -107,7 +107,7 @@ class Daemon:
         # Check for a pidfile to see if the daemon already runs
         pid = self._get_pid()
         if pid:
-            message = "pidfile %s already exist. Daemon already running?\n"
+            message = "pidfile %s already exist. Daemon already running? (PID={})\n".format(pid)
             sys.stderr.write(message % self.pidfile)
             if self.test_mode:
                 return False
@@ -132,10 +132,12 @@ class Daemon:
         try:
             while 1:
                 os.kill(pid, SIGTERM)
-                time.sleep(0.1)
-        except OSError as err:
+                time.sleep(0.2)
+        except (ProcessLookupError, OSError) as err:
+            # print('Exception en STOP pid={}: {} [{}]'.format(pid, err, err.__class__))
             err = str(err)
-            if err.find("No such process") > 0:
+            # TODO buscar el pid de otra forma para no depender de locale
+            if (err.find("No such process") > 0) or (err.find("No existe el proceso") > 0):
                 self.delpid()
             else:
                 print('OSError: ', err)
@@ -150,7 +152,7 @@ class Daemon:
         pid = self._get_pid()
 
         if pid:
-            message = "pidfile %s exist. Daemon is running\n"
+            message = "pidfile %s exist. Daemon is running with PID={}\n".format(pid)
             sys.stdout.write(message % self.pidfile)
             print('STATUS OK!')
             return  # not an error in a restart

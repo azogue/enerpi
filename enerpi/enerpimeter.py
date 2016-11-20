@@ -7,9 +7,9 @@ import pandas as pd
 from threading import Timer
 from time import sleep, time
 from enerpi.base import CONFIG, SENSORS, show_pi_temperature, set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL
-from enerpi.database import init_catalog, save_raw_data, HDF_STORE
+from enerpi.database import init_catalog, save_raw_data, HDF_STORE_PATH
 from enerpi.pisampler import enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
-from enerpi.iobroadcast import broadcast_msg, receiver_msg_generator
+from enerpi.iobroadcast import get_codec, broadcast_msg, receiver_msg_generator
 from enerpi.ledrgb import get_rgbled, led_info, led_alarm, blink_color
 
 
@@ -126,8 +126,11 @@ def _show_cli_bargraph(d_data, ancho_disp=80, v_max=4000):
         n_big += 1
     line = '⚡ {:%H:%M:%S.%f}'.format(d_data[SENSORS.ts_column])[:-3] + ': '
     cols_rms, cols_mean, cols_ref = SENSORS.included_columns_sampling(d_data)
+    line += '\033[1m({}) \033[1m'.format(d_data[SENSORS.ref_rms])
     for c in cols_rms:
         line += '\033[1m{:.0f} W\033[1m; '.format(d_data[c])
+
+    line += '\033[33mm({}) \033[32m'.format(d_data[SENSORS.ref_mean])
     for c in cols_mean:
         line += '\033[33m{}={:.3f} \033[32m'.format(c, d_data[c])
     leng_intro = len(line)
@@ -146,7 +149,7 @@ def _get_console_cols_size(len_preffix=25):
 
 
 def _receiver(verbose=True, timeout=None, port=None):
-    gen = receiver_msg_generator(verbose=verbose, port=port)
+    gen = receiver_msg_generator(verbose=verbose, port=port, codec=get_codec())
     counter_msgs, last_msg = 0, ''
     leng_intro = len('⚡ 16:10:38.326: 3433 W; LDR=0.481 ︎')
     n_cols_bar, hay_consola = _get_console_cols_size(leng_intro)
@@ -196,7 +199,7 @@ def receiver(verbose=True, timeout=None, port=None):
 
 
 # ENERPI logger
-def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=True):
+def _sender(data_generator, ts_data=1, path_st=HDF_STORE_PATH, timeout=None, verbose=True):
 
     def _save_buffer(buffer, process_save, path_store, data_catalog, v):
         if process_save is not None and process_save.is_alive():
@@ -218,6 +221,8 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
     tic_abs = time()
 
     cond_while = True if timeout is None else TimerExiter(timeout)
+    codec = get_codec()
+    port = CONFIG.getint('BROADCAST', 'UDP_PORT', fallback=57775)
     try:
         while cond_while:
             tic = time()
@@ -228,7 +233,7 @@ def _sender(data_generator, ts_data=1, path_st=HDF_STORE, timeout=None, verbose=
 
             # Broadcast mensaje
             sock_send = broadcast_msg(tuple_to_dict_json(data), counter_unreachable,
-                                      sock_send=sock_send, verbose=verbose)
+                                      sock_send=sock_send, verbose=verbose, codec=codec, port=port)
             if (counter_unreachable[0] > 1) and (LED_STATE == 0):  # 2x blink rojo ERROR NETWORK
                 _set_led_state_alarm(led, time_blinking=2.5, timeout=3)
 
@@ -314,7 +319,7 @@ def _get_raw_chunk(data_generator, ts_data=1, verbose=True):
     return df
 
 
-def _enerpi_logger(path_st=HDF_STORE, delta_sampling=SENSORS.delta_sec_data,
+def _enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
                    roll_time=SENSORS.rms_roll_window_sec, sampling_ms=SENSORS.ts_data_ms, timeout=None,
                    use_dummy_sensors=False, verbose=True):
     """
@@ -409,7 +414,7 @@ def enerpi_daemon_logger(with_pitemps=False):
 
     set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
     timer_temps = show_pi_temperature(with_pitemps, 3)
-    enerpi_logger(path_st=HDF_STORE, is_demo=False, timeout=None, verbose=False, delta_sampling=SENSORS.delta_sec_data,
+    enerpi_logger(path_st=HDF_STORE_PATH, is_demo=False, timeout=None, verbose=False, delta_sampling=SENSORS.delta_sec_data,
                   roll_time=SENSORS.rms_roll_window_sec, sampling_ms=SENSORS.ts_data_ms)
     if timer_temps is not None:
         log('Stopping RPI TEMPS sensing desde enerpi_main_logger...', 'debug', False, True)

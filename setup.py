@@ -49,7 +49,8 @@ setup(
         'enerpiweb': ['templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
     install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7', 'cryptography>=1.5.2', 'gpiozero>=1.3.1',
-                      'matplotlib>=1.5.3', 'termcolor>=1.1.0', 'flask>=0.11.1', 'bokeh>=0.12.3', 'python-crontab'],
+                      'matplotlib>=1.5.3', 'termcolor>=1.1.0', 'flask>=0.11.1', 'bokeh>=0.12.3', 'python-crontab',
+                      'jsondiff'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,

@@ -1,15 +1,25 @@
-.tile-enerpi_data-power {
-    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(12, 187, 67, 0.83), rgba(55, 245, 119, 0.27));}
-.tile-enerpi_data-power-text { color: #10371a; }
-.tile-enerpi_data-kWh {
-    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(140, 39, 211, 0.83), rgba(191, 160, 245, 0.27));}
-.tile-enerpi_data-kWh-text { color: #2c1037; }
-.tile-enerpi_data-ldr {
-    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(244, 216, 63, 0.83), rgba(219, 221, 13, 0.33));}
-.tile-enerpi_data-ldr-text { color: #333718; }
+/*.tile-enerpi_data-power {*/
+    /*background-image: radial-gradient(farthest-corner at 70% 70%, rgba(12, 133, 52, 0.83), rgba(45, 200, 97, 0.27));*/
+    /*background-image: radial-gradient(farthest-corner at 70% 70%, rgba(12, 187, 67, 0.83), rgba(55, 245, 119, 0.27));}*/
+/*.tile-enerpi_data-power {*/
+    /*background-image: radial-gradient(farthest-corner at 70% 70%, rgba(52, 148, 187, 0.83), rgba(52, 148, 187, 0.27));}*/
+/*.tile-enerpi_data-power-text { color: #10371a; }*/
+/*.tile-enerpi_data-kWh {*/
+    /*background-image: radial-gradient(farthest-corner at 70% 70%, rgba(140, 39, 211, 0.83), rgba(191, 160, 245, 0.27));}*/
+/*.tile-enerpi_data-kWh-text { color: #191d18; }*/
+/*.tile-enerpi_data-ldr {*/
+    /*background-image: radial-gradient(farthest-corner at 70% 70%, rgba(244, 216, 63, 0.83), rgba(219, 221, 13, 0.33));*/
+    /*color: rgb(244, 216, 63);*/
+    /*color: #F4D83F;*/
+    /*color: #0CBB43;*/
+    /*color: rgb(12, 187, 67);*/
+    /*color: #8C27D3;*/
+    /*color: #972625;*/
+    /*color: #f4af38;*/
+    /*color: #F4D83F;*/
 
 div.flex-img-container {
-    background-color: rgba(13, 85, 35, 0.41);
+    /*background-color: rgba(13, 85, 35, 0.41);*/
     position: relative;
     top: 0;
     bottom: 0;
