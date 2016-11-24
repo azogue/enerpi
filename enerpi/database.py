@@ -26,10 +26,11 @@ CONFIG_CATALOG = dict(preffix='DATA',
                       verbose=False)
 
 
-def init_catalog(base_path=DATA_PATH, **kwargs):
+def init_catalog(sensors=None, base_path=DATA_PATH, **kwargs):
     """
     Get ENERPI data catalog for access & operation with params.
 
+    :param sensors: Sensors config object (class EnerpiSamplerConf)
     :param base_path: :str: ENERPIDATA base path
     :param kwargs: :dict: parameters
     :return: :EnerpiCatalog:
@@ -38,7 +39,7 @@ def init_catalog(base_path=DATA_PATH, **kwargs):
     conf.update(base_path=base_path)
     if kwargs:
         conf.update(**kwargs)
-    return EnerpiCatalog(**conf)
+    return EnerpiCatalog(sensors=sensors, **conf)
 
 
 def _clean_store_path(path_st):

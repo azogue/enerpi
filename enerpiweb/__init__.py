@@ -14,7 +14,7 @@ SERVER_FILE_LOGGING = os.path.join(STATIC_PATH,
                                    CONFIG.get('ENERPI_WEBSERVER', 'FILE_LOGGING_WEB', fallback='enerpiweb.log'))
 PREFIX_WEB = CONFIG.get('ENERPI_WEBSERVER', 'PREFIX_WEB', fallback='/enerpi')
 BASECOLOR = '#{}'.format(CONFIG.get('ENERPI_WEBSERVER', 'BASECOLOR_HEX', fallback='0CBB43'))
-check_resource_files(STATIC_PATH, os.path.join(basedir, 'static'))
+check_resource_files(STATIC_PATH, os.path.join(basedir, 'static'), verbose=False)
 
 # WITH_WEB = CONFIG.getboolean('ENERPI_WEBSERVER', 'WITH_WEBSERVER', fallback=True)
 WITH_ML_SUBSYSTEM = CONFIG.getboolean('ENERPI_WEBSERVER', 'WITH_ML', fallback=False)
@@ -27,7 +27,10 @@ app.jinja_env.lstrip_blocks = True
 app.jinja_env.cache = {}
 # app.config['TESTING'] = True
 # app.config['PROPAGATE_EXCEPTIONS'] = True
-app.config['PREFIX_WEB'] = PREFIX_WEB
+app.config['WTF_CSRF_ENABLED'] = True
+# TODO regen new key for each run!
+app.config['SECRET_KEY'] = 'lalalalala'
+# app.config['PREFIX_WEB'] = PREFIX_WEB
 app.config['STREAM_MAX_TIME'] = 1800
 app.config['BASECOLOR'] = BASECOLOR
 app.config['WITH_ML_SUBSYSTEM'] = WITH_ML_SUBSYSTEM

@@ -4,7 +4,7 @@ import atexit
 import os
 import sys
 import time
-from signal import SIGTERM
+from signal import SIGTERM, SIGKILL
 
 
 class Daemon:
@@ -130,13 +130,15 @@ class Daemon:
 
         # Try killing the daemon process
         try:
-            while 1:
+            retries = 0
+            while retries < 3:
+                retries += 1
                 os.kill(pid, SIGTERM)
                 time.sleep(0.2)
+            os.kill(pid, SIGKILL)
         except (ProcessLookupError, OSError) as err:
             # print('Exception en STOP pid={}: {} [{}]'.format(pid, err, err.__class__))
             err = str(err)
-            # TODO buscar el pid de otra forma para no depender de locale
             if (err.find("No such process") > 0) or (err.find("No existe el proceso") > 0):
                 self.delpid()
             else:

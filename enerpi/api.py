@@ -59,11 +59,3 @@ def enerpi_data_catalog(check_integrity=False, **kwargs):
     :return: :EnerpiCatalog:
     """
     return init_catalog(check_integrity=check_integrity, **kwargs)
-
-
-# def get_last_saved_data(path_st=HDF_STORE, get_last_sample=True, verbose=True, n=10):
-#     return get_ts_last_save(path_st, get_last_sample=get_last_sample, verbose=verbose, n=n)
-
-
-# def enerpi_log(log_file=FILE_LOGGING, extract_temps=False, verbose=True):
-#     return extract_log_file(log_file, extract_temps=extract_temps, verbose=verbose)

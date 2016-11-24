@@ -37,7 +37,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
-        'Programming Language :: Python :: 3.4',
+        # 'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Operating System :: Unix'],
     packages=packages,
@@ -48,9 +48,11 @@ setup(
         'enerpi': ['config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
         'enerpiweb': ['templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
-    install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7', 'cryptography>=1.5.2', 'gpiozero>=1.3.1',
-                      'matplotlib>=1.5.3', 'termcolor>=1.1.0', 'flask>=0.11.1', 'bokeh>=0.12.3', 'python-crontab',
-                      'jsondiff'],
+    install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7',
+                      'flask>=0.11.1', 'wtforms>=2.1',  'cryptography>=1.5.2',
+                      'gpiozero>=1.3.1', 'RPi.GPIO>=0.6.3',
+                      'matplotlib>=1.5.3', 'bokeh>=0.12.3', 'termcolor>=1.1.0',
+                      'python-crontab', 'jsondiff>=1.0.0'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,

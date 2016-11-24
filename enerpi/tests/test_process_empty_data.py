@@ -2,44 +2,14 @@
 import os
 import pandas as pd
 import pytest
-from unittest import TestCase
+from enerpi.tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
-from enerpi.tests.conftest import get_temp_catalog_for_testing
 
 
 @pytest.mark.incremental
-class TestCatalog(TestCase):
+class TestEnerpiProcessEmptyData(TestCaseEnerpi):
 
-    @classmethod
-    def setup_class(cls):
-        """
-        Copy example ENERPI files & sets common data catalog for testing.
-
-        """
-        pd.set_option('display.width', 300)
-        # Prepara archivos:
-
-        (tmp_dir, data_path, cat,
-         path_default_datapath, before_tests) = get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi',
-                                                                             check_integrity=True)
-        cls.tmp_dir = tmp_dir
-        cls.DATA_PATH = data_path
-        cls.cat = cat
-        cls.path_default_datapath = path_default_datapath
-        cls.before_tests = before_tests
-
-    @classmethod
-    def teardown_class(cls):
-        """
-        Cleanup of temp data on testing.
-
-        """
-        # Restablece default_datapath
-        open(cls.path_default_datapath, 'w').write(cls.before_tests)
-        pp.print_cyan('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
-        cls.tmp_dir.cleanup()
-        print(cls.path_default_datapath, cls.before_tests)
-        print(open(cls.path_default_datapath).read())
+    cat_check_integrity = True
 
     def test_0_config(self):
         from enerpi.base import CONFIG
@@ -66,14 +36,14 @@ class TestCatalog(TestCase):
                 assert path is not None, 'Non existent hdf store PATH'
                 assert os.path.isfile(path), 'hdf store is not a file ?'
         path_none = self.cat.get_path_hdf_store_binaries(rel_path='NO_EXISTE.h5')
-        assert path_none is None
+        self.assertIsNone(path_none)
 
     def test_4_catalog_get_all_data(self):
         all_data = self.cat.get_all_data(with_summary_data=False)
         all_data_2, summary_data = self.cat.get_all_data(with_summary_data=True)
-        assert all_data is None
-        assert all_data_2 is None
-        assert summary_data is None
+        self.assertIsNone(all_data)
+        self.assertIsNone(all_data_2)
+        self.assertIsNone(summary_data)
 
     def test_5_catalog_summary(self):
         pp.print_yellowb(self.cat.tree)
@@ -87,24 +57,22 @@ class TestCatalog(TestCase):
         # s4 = self.cat.get_summary(last_hours=last_hours)
         # pp.print_ok(s4)
         s_none = self.cat.get_summary(end='2010-01-01')
-        assert s_none is None
+        self.assertIsNone(s_none)
 
     def test_6_catalog_operations(self):
         from enerpi.base import SENSORS
         data_empty = pd.DataFrame([])
         data_empty_p = self.cat.process_data(data_empty)
         assert data_empty_p.empty
-        data_empty_p2, data_empty_s,  = self.cat.process_data_summary(data_empty)
-        assert data_empty_p2.empty
-        assert data_empty_s is None
-        data_empty_p3, data_empty_s2, data_empty_s_ex = self.cat.process_data_summary_extra(data_empty)
-        assert data_empty_p3.empty
-        assert data_empty_s2 is None
-        assert data_empty_s_ex is None
+        data_empty_s = self.cat.process_data_summary(data_empty)
+        self.assertIsNone(data_empty_s)
+        data_empty_s2, data_empty_s_ex = self.cat.process_data_summary_extra(data_empty)
+        self.assertIsNone(data_empty_s2)
+        self.assertIsNone(data_empty_s_ex)
 
         d1_none, d1_s_none = self.cat.get(start='2010-01-01', end='2010-03-01', with_summary=True)
-        assert d1_none is None
-        assert d1_s_none is None
+        self.assertIsNone(d1_none)
+        self.assertIsNone(d1_s_none)
         d2_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=False)
         print(d2_none)
         print(self.cat.base_path)
@@ -112,12 +80,23 @@ class TestCatalog(TestCase):
         d3_none, d3_s_none = self.cat.get(start=None, end=None, last_hours=10,
                                           column=SENSORS.main_column, with_summary=True)
         print(d3_none)
-        assert d2_none is None
-        assert d3_none is None
-        assert d3_s_none is None
+        self.assertIsNone(d2_none)
+        self.assertIsNone(d3_none)
+        self.assertIsNone(d3_s_none)
         d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=SENSORS.main_column, with_summary=True)
-        assert d4 is None
-        assert d4_s is None
+        self.assertIsNone(d4)
+        self.assertIsNone(d4_s)
 
         d5 = self.cat.get(start='2016-10-01', end='2016-09-02', column=SENSORS.main_column)
-        assert d5 is None
+        self.assertIsNone(d5)
+
+    def test_7_export_data(self):
+        exported_1 = self.cat.export(filename='enerpi_all_data_test_1.csv')
+        pp.print_cyan(exported_1)
+        self.assertEqual(exported_1, None)
+
+
+if __name__ == '__main__':
+    import unittest
+
+    unittest.main()

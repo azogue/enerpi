@@ -19,9 +19,9 @@ COL_MAIN_RMS = COLS_SENSORS_RMS[0]
 COL_MAIN_MEAN = COLS_SENSORS_MEAN[0]
 
 COL_TS = SENSORS.ts_column
-COLS_DATA = [*COLS_SENSORS_RMS, *COLS_SENSORS_MEAN, SENSORS.ref_rms]
-B_SENSORS_RMS = [True] * len(COLS_SENSORS_RMS) + [False] * len(COLS_SENSORS_MEAN)
-assert len(B_SENSORS_RMS) == len(COLS_DATA) - 1
+COLS_DATA = COLS_SENSORS_RMS + COLS_SENSORS_MEAN + [SENSORS.ref_rms]
+B_SENSORS_RMS = [True] * len(COLS_SENSORS_RMS) + [False] * len(COLS_SENSORS_MEAN) + [True]
+# assert len(B_SENSORS_RMS) == len(COLS_DATA) - 1
 COLORS_DATA = [SENSORS[s].color for s in COLS_DATA[:-1]] + ['#FF0077']
 UNITS_DATA = [SENSORS[s].unit for s in COLS_DATA[:-1]] + ['']
 FMT_TOOLTIP_DATA = ['{0}'] * len(COLS_SENSORS_RMS) + ['{0.0}'] * len(COLS_SENSORS_MEAN) + ['{0}']
@@ -38,7 +38,7 @@ locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
 # locale.setlocale(locale.LC_ALL, locale.getlocale())
 # locale.setlocale(locale.LC_ALL, CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale())))
 
-TOOLS = "pan,xwheel_zoom,box_zoom,reset,save,crosshair"
+TOOLS = "pan,xwheel_zoom,ywheel_zoom,box_zoom,reset,save,crosshair"
 P_WIDTH = 900
 P_HEIGHT = 500
 
@@ -128,11 +128,12 @@ def _plot_patch_series(fig_plot, pd_series, **kwargs_patch):
     fig_plot.patch(x, y, **kwargs_patch)
 
 
-def _plot_bokeh_multi_index(data_plot, **fig_kwargs):
+def _plot_bokeh_raw(data_plot, **fig_kwargs):
     # Bokeh does not work very well!! with timezones:
     data_plot = data_plot.tz_localize(None)
-
-    y_range = [0, max(500, int(np.ceil(data_plot[COL_MAIN_RMS].max().max() / ROUND_W) * ROUND_W))]
+    for c in COLS_SENSORS_MEAN:
+        data_plot[c] /= 10.
+    y_range = [0, max(500, int(np.ceil(data_plot[[COL_MAIN_RMS, SENSORS.ref_rms]].max().max() / ROUND_W) * ROUND_W))]
     minmax_ejes = [y_range, [0, 100]]
 
     extremos = _get_extremos_dia(data_plot)
@@ -164,7 +165,7 @@ def _plot_bokeh_multi_index(data_plot, **fig_kwargs):
             p.add_layout(LinearAxis(**axkw), pos)
 
     # Make data source w/ time hover
-    data = ColumnDataSource(_append_hover(data_plot.round(2), multi_day=(extremos[1] - extremos[0]).days > 1))
+    data = ColumnDataSource(_append_hover(data_plot, multi_day=(extremos[1] - extremos[0]).days > 1))
 
     # Plot lines of analog sensors
     for s, is_rms, color in zip(COLS_DATA, B_SENSORS_RMS, COLORS_DATA):
@@ -249,4 +250,4 @@ def html_plot_buffer_bokeh(data_plot, is_kwh_plot=False, **fig_kwargs):
     if is_kwh_plot:
         return _return_html_comps([_plot_bokeh_hourly(data_plot, **fig_kwargs)])
     else:
-        return _return_html_comps([_plot_bokeh_multi_index(data_plot, **fig_kwargs)])
+        return _return_html_comps([_plot_bokeh_raw(data_plot, **fig_kwargs)])

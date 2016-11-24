@@ -20,12 +20,12 @@
                          src="{{ url_for('static', filename='img/icons/base.svg')}}">
                 </div>
                 <div class="col-xs-6 col-sm-8 col-md-9 col-lg-9">
-                    <h1 class="display-5">EnerPi Control</h1>
-                    {% if is_sender_active %}
-                        <h6>Status: <strong class="tag tag-pill tag-success">ACTIVE</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
-                    {% else %}
-                        <h6>Status: <strong class="tag tag-pill tag-danger">OFF</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
-                    {% endif %}
+                    <h1 class="display-5">EnerPI Control</h1>
+{#                    {% if is_sender_active %}#}
+{#                        <h6>Status: <strong class="tag tag-pill tag-success">ACTIVE</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>#}
+{#                    {% else %}#}
+{#                        <h6>Status: <strong class="tag tag-pill tag-danger">OFF</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>#}
+{#                    {% endif %}#}
                 </div>
                 <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">
                     <br class="hidden-sm hidden-xs">
@@ -38,7 +38,7 @@
                         <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='enerpi', tail=200, reverse=True)}}" role="button"><i class="fa fa-bolt" aria-hidden="true"></i> EnerPi LOG</a>
                       </div>
                       <div class="btn-group" role="group" aria-label="ENERPI CONFIG">
-                        <a class="btn btn-outline-danger btn-block" href="{{ url_for('showfile', file='config')}}" role="button"><i class="fa fa-sliders" aria-hidden="true"></i> ENERPI Configuration</a>
+                        <a class="btn btn-outline-danger btn-block" href="{{ url_for('editfile', file='config')}}" role="button"><i class="fa fa-sliders" aria-hidden="true"></i> ENERPI Configuration</a>
                       </div>
                       <br class="hidden-sm hidden-xs">
                       <div class="btn-group" role="group" aria-label="UWSGI+NGINX LOGs">
@@ -48,25 +48,58 @@
                       </div>
                     </div>
                 </div>
-                <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">
-                    <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with enerPI links to plots & tables">
-                      <div class="btn-group" role="group" aria-label="LINKS">
-                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('bokehplot')}}" role="button">
-                            <i class="fa fa-area-chart" aria-hidden="true"></i> Graph last</a>
-{#                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('tablelast')}}" role="button">#}
-{#                            <i class="fa fa-table" aria-hidden="true"></i> Table last</a>#}
-                      </div>
-                    </div>
-                </div>
+{#                <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">#}
+{#                    <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with enerPI links to plots & tables">#}
+{#                      <div class="btn-group" role="group" aria-label="LINKS">#}
+{#                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('bokehplot')}}" role="button">#}
+{#                            <i class="fa fa-area-chart" aria-hidden="true"></i> Graph last</a>#}
+{#                      </div>#}
+{#                    </div>#}
+{#                </div>#}
             </div>
         </div>
     </div>
     {% if alerta %}
         {{ alert_dismiss(alerta) }}
     {% endif %}
+{#    <hr>#}
+    <div class="container-fluid">
+        <h3><strong><i class="fa fa-fire-extinguisher" aria-hidden="true"></i> enerPI logger administration</strong></h3>
+        <hr>
+        <div class="col-xs-12 col-sm-6 col-md-4 col-lg-4">
+        {% if is_sender_active %}
+            <h6>Status: <strong class="tag tag-pill tag-success">ACTIVE</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
+        {% else %}
+            <h6>Status: <strong class="tag tag-pill tag-danger">OFF</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
+        {% endif %}
+        </div>
+        <div class="col-xs-12 col-sm-6 col-md-4 col-lg-4">
+        <div class="btn-toolbar button-wrapper float-sm-right float-md-left" role="toolbar" aria-label="Toolbar for ENERPI Logger stderr/stdout">
+            <div class="btn-group" role="group" aria-label="DEBUG">
+                <a class="btn btn-secondary btn-sm btn-outline-primary" href="{{ url_for('showfile', file='daemon_out', tail=500)}}" role="button">Daemon OUT</a>
+                <a class="btn btn-secondary btn-sm btn-outline-primary" href="{{ url_for('showfile', file='daemon_err', tail=500)}}" role="button">Daemon ERR</a>
+            </div>
+        </div>
+        </div>
+        <div class="col-xs-12 col-sm-12 col-md-4 col-lg-4">
+        <div class=" button-wrapper float-sm-right" role="toolbar" aria-label="Toolbar for ENERPI Logger Control">
+            <form method="POST">
+                {{ form_operate.hidden_tag() }}
+                <div class="btn-group" role="group" aria-label="Start-Stop">
+                    <input class="btn btn-secondary btn-sm btn-outline-{% if is_sender_active %}danger{% else %}success{% endif %}"
+                           type="submit" formaction="{{ url_for('startstop', service='enerpi')}}"
+                           value="{% if is_sender_active %}Stop{% else %}Start{% endif %} logger">
+                    <input class="btn btn-secondary btn-sm btn-outline-danger"
+                           type="submit" formaction="{{ url_for('startstop', service='machine')}}"
+                           value="Reboot system">
+                </div>
+            </form>
+        </div>
+        </div>
+    </div>
     <hr>
     <div class="container-fluid">
-        <h3><strong><i class="fa fa-database" aria-hidden="true"></i> HDF Data Stores</strong> for download <small>(from {{ d_catalog['ts_init']|ts_strftime }})</small></h3>
+        <h3><strong><i class="fa fa-database" aria-hidden="true"></i> HDF data stores</strong> <small>(from {{ d_catalog['ts_init']|ts_strftime }})</small></h3>
         <hr>
         <h6 style="line-height: 1.5em;">
             <a href="{{ url_for('download_file', file_id='catalog', as_attachment=True) }}"

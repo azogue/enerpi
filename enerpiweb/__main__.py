@@ -11,7 +11,7 @@ from enerpi.base import set_logging_conf
 # sys.stdout = sys.stderr
 
 # Establecemos logging
-check_resource_files(os.path.dirname(SERVER_FILE_LOGGING))
+check_resource_files(os.path.dirname(SERVER_FILE_LOGGING), verbose=True)
 set_logging_conf(SERVER_FILE_LOGGING, level=LOGGING_LEVEL_SERVER, verbose=True, with_initial_log=True)
 # logging.debug('->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGING))
 

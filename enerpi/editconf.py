@@ -20,19 +20,19 @@ ENERPI_CONFIG_FILES = {
     'config': {
         'order': 0,
         'filename': 'config_enerpi.ini',
-        'text_button': '<i class="fa fa-check-square-o" aria-hidden="true"></i> Edit ENERPI config',
+        'text_button': '<i class="fa fa-check-square-o" aria-hidden="true"></i> ENERPI config',
         'show_switch_comments': True,
     },
     'sensors': {
         'order': 1,
         'filename': 'sensors_enerpi.json',
-        'text_button': '<i class="fa fa-wrench" aria-hidden="true"></i> Edit SENSORS config',
+        'text_button': '<i class="fa fa-wrench" aria-hidden="true"></i> SENSORS',
         'show_switch_comments': False,
     },
     'encryption_key': {
         'order': 2,
         'filename': os.path.join(DATA_PATH, CONFIG.get('BROADCAST', 'KEY_FILE', fallback='.secret_key')),
-        'text_button': '<i class="fa fa-user-secret" aria-hidden="true"></i> Edit SECRET Key',
+        'text_button': '<i class="fa fa-user-secret" aria-hidden="true"></i> Secret Key',
         'show_switch_comments': False,
     },
 }
@@ -147,7 +147,7 @@ def _web_edit_enerpi_sensors_json(lines_json):
     try:
         sensors_json = json.loads('\n'.join(lines_json), encoding=ENCODING)
         t, sub = TITLE_EDIT_JS_SENSORS, SUBTITLE_EDIT_JS_SENSORS
-        d_conf = OrderedDict([(t, OrderedDict([(sub, (json.dumps(sensors_json), 'text', None))]))])
+        d_conf = OrderedDict([(t, OrderedDict([(sub, (json.dumps(sensors_json, indent=1), 'text', None))]))])
         return True, d_conf
     except json.decoder.JSONDecodeError as e:
         # TODO gestión errores edición
@@ -172,14 +172,13 @@ def _web_edit_enerpi_encryption_key(key_file_lines):
         key = key_file_lines[0]
     except AssertionError:
         msg = 'ERROR Reading CRYPTO Key (incorrect # of lines): {}'.format(key_file_lines)
-        log(msg, 'error')
+        log(msg, 'error', False)
         return False, {'error': msg}
-    print(key)
     try:
         _ = get_codec(key.encode())
     except AssertionError as e:
         msg = 'ASSERT WITH CRYPTO_KEY: {}, KEY="{}"'.format(e, key)
-        log(msg, 'error')
+        log(msg, 'error', False)
         return False, {'error': msg}
     t, sub = TITLE_EDIT_CRYPTOKEY, SUBTITLE_EDIT_CRYPTOKEY
     return [key], OrderedDict([(t, OrderedDict([(sub, (key, 'text', None))]))])
@@ -244,10 +243,6 @@ def _web_post_changes_enerpi_config_ini(dict_web_form, lines_config, dict_config
         if (value is None) or (len(value) == 0):
             msg = 'INI Value ERROR: key={}, value="{}", (type={})'.format(name, value, params[1])
             return False, value, msg
-        print('_is_changed:')
-        print(value)
-        print(params)
-        print(name)
         try:
             if params[1] == 'int':
                 try:
@@ -321,15 +316,19 @@ def _web_post_changes_enerpi_sensors_json(dict_web_form, lines_config, dict_conf
         if diff_json:
             if dest_filepath is not None:
                 log('New JSON Sensors config ("{}")\nwill be saved in "{}"'
-                    .format(new_json, dest_filepath), 'warning', True)
+                    .format(new_json, dest_filepath), 'warning', False)
                 with open(dest_filepath, 'w') as f:
-                    json.dump(new_json, f)
+                    json.dump(new_json, f, indent=1)
             str_cambios = ('Configuration changes in ENERPI SENSORS:<br>{}<br> New config SAVED!'
                            .format('JSON DIFF- <strong>"{}"</strong>'.format(diff_json)))
             log(str_cambios, 'debug', False)
             alerta = {'alert_type': 'warning', 'texto_alerta': str_cambios}
             if dest_filepath is not None:
-                lines_config, dict_config = _web_edit_enerpi_sensors_json(dest_filepath)
+                lines_config = get_lines_file(dest_filepath)
+                ok, dict_config = _web_edit_enerpi_sensors_json(lines_config)
+                if not ok:
+                    alerta['alert_type'] = 'error'
+                    alerta['texto_alerta'] += '\nNEW JSON SENSORS FILE NOT VALID!! FIX IT, PLEASE'
     except json.decoder.JSONDecodeError:
         msg_err = ('JSONDecodeError in web_post_changes_enerpi_sensors_json: {}'.format(dict_config[t][sub]))
         alerta = {'alert_type': 'error', 'texto_alerta': msg_err}
@@ -358,7 +357,7 @@ def _web_post_changes_enerpi_encryption_key(dict_web_form, lines_keyfile, dict_k
             _ = get_codec(new_key.encode())
             if len(new_key) > 10:
                 if dest_filepath is not None:
-                    log('The new KEY ("{}")\nwill be saved in "{}"\n'.format(new_key, dest_filepath), 'warning', True)
+                    log('The new KEY ("{}")\nwill be saved in "{}"\n'.format(new_key, dest_filepath), 'warning', False)
                     with open(dest_filepath, 'wb') as f:
                         f.write(new_key.encode())
                 str_cambios = ('Configuration changes in encryption key:<br>{}<br> New config SAVED!'
@@ -367,20 +366,20 @@ def _web_post_changes_enerpi_encryption_key(dict_web_form, lines_keyfile, dict_k
                 log(str_cambios, 'debug', False)
                 alerta = {'alert_type': 'warning', 'texto_alerta': str_cambios}
                 lines_keyfile = [new_key]
-                dict_key_file = dict_web_form
+                dict_key_file = OrderedDict([(t, OrderedDict([(sub, (new_key, 'text', None))]))])
         except AssertionError as e:
             alerta = {'alert_type': 'danger', 'texto_alerta': 'Not a valid KEY: {}. New KEY was: {}'.format(e, new_key)}
     return alerta, lines_keyfile, dict_key_file
 
 
 def check_uploaded_config_file(file_id, f_obj, dest_filepath=None):
-    """Check uploaded configuration file and save it if correct.
+    """Check uploaded configuration file and save it if correct. Return dict for web alert
 
     :param file_id: config file id
     :param f_obj: :werkzeug.datastructures.FileStorage: uploaded file object
     :param dest_filepath: optional destination path for uploaded file
 
-    :return: (file ok, web alert)
+    :return: (web alert)
     """
     file_name, file_extension = os.path.splitext(f_obj.filename)
     fmem = BytesIO()
@@ -390,8 +389,7 @@ def check_uploaded_config_file(file_id, f_obj, dest_filepath=None):
     lines = content.splitlines()
     if len(content) < 20:
         msg = 'Incorrect uploaded file (too short!): {}'.format(content)
-        alerta = {'alert_type': 'danger', 'texto_alerta': msg}
-        return False, alerta
+        return {'alert_type': 'danger', 'texto_alerta': msg}
     if (file_id == 'config') and (file_extension == '.ini') and (f_obj.mimetype == 'application/octet-stream'):
         ok_file, error = _web_edit_enerpi_config_ini(lines)
     elif (file_id == 'sensors') and (file_extension == '.json') and (f_obj.mimetype == 'application/json'):
@@ -399,13 +397,14 @@ def check_uploaded_config_file(file_id, f_obj, dest_filepath=None):
     elif (file_id == 'encryption_key') and (f_obj.mimetype == 'application/octet-stream'):
         ok_file, error = _web_edit_enerpi_encryption_key(lines)
     else:
-        return False, {'alert_type': 'danger', 'texto_alerta': 'FileId not recognized: {}'.format(file_id)}
+        return {'alert_type': 'danger', 'texto_alerta': 'FileId not recognized: {}'.format(file_id)}
     if not ok_file:
-        return False, {'alert_type': 'danger', 'texto_alerta': error['error']}
+        return {'alert_type': 'danger', 'texto_alerta': error['error']}
     if dest_filepath is not None:
-        f_obj.save(dest_filepath)
-    return True, {'alert_type': 'success',
-                  'texto_alerta': 'Uploaded file "{}" as replacement in "{}"!'.format(f_obj.filename, dest_filepath)}
+        with open(dest_filepath, 'w') as f:
+            f.write(content)
+    return {'alert_type': 'success',
+            'texto_alerta': 'Uploaded file "{}" as replacement in "{}"!'.format(f_obj.filename, dest_filepath)}
 
 
 def web_config_edition_data(file_id, filepath, d_edition_form=None):
@@ -446,6 +445,7 @@ def web_config_edition_data(file_id, filepath, d_edition_form=None):
     ok_lines, config_data = f_edit_file(lines_config)
     if not ok_lines:
         alerta = {'alert_type': 'danger', 'texto_alerta': config_data['error']}
+        log('NOT OK in web_config_edition_data: {}'.format(web_config_edition_data), 'warning', False)
     elif d_edition_form is not None:
         alerta, lines_config, config_data = f_post_file(d_edition_form, lines_config, config_data, filepath)
     return alerta, lines_config, config_data

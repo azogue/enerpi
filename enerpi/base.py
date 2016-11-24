@@ -89,7 +89,6 @@ def _load_analog_sensors(sensors_json_conf):
     analog_s = [EnerpiAnalogSensor(s['name'], s['description'], s['analog_channel'], s['is_rms'], s['unit'], s['color'],
                                    _get_rms_sensor_bias(s), s['tile_gradient_st'], s['tile_gradient_end'], s['icon'])
                 for s in sensors_json_conf]  # JSON file sensor order
-                # for s in sorted(sensors_json_conf, key=lambda x: x['analog_channel'])]
     return analog_s
 
 
@@ -122,7 +121,7 @@ class EnerpiSamplerConf(object):
         self.rms_multiplier = self.voltaje * a_ref * v_ref
 
         # Sampling:
-        self.ts_data_ms = CONFIG.getint('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
+        self.ts_data_ms = CONFIG.getfloat('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
         # ∆T para el deque donde se acumulan frames
         self.rms_roll_window_sec = CONFIG.getfloat('ENERPI_SAMPLER', 'RMS_ROLL_WINDOW_SEC', fallback=2.)
         s_calc = self.ts_data_ms if self.ts_data_ms > 0 else 8
@@ -467,37 +466,34 @@ def get_lines_file(filename, tail=None, reverse=False):
     return ['Path not found: "{}"'.format(filename)]
 
 
-def check_resource_files(dest_path, origin_path=None):
+def check_resource_files(dest_path, origin_path=None, verbose=True):
     """
     Check needed files and directories in DATA_PATH. Init if needed (1º exec).
 
     :param dest_path:
     :param origin_path:
-    :return bool (dest_path exists previously)
+    :param verbose:
+
     """
     if not os.path.exists(dest_path):
         _makedirs(dest_path)
-        if origin_path is None:
-            log('-> Made paths to "{}"'.format(dest_path), 'info', True, True)
-        else:
+        if origin_path is not None:
             origin_path = os.path.abspath(origin_path)
             if os.path.isfile(origin_path):
-                log('-> Copying resource file from "{}" to "{}"'.format(origin_path, dest_path), 'info', True, True)
+                log('-> Copying resource file from "{}" to "{}"'.format(origin_path, dest_path), 'info', verbose)
                 shutil.copy(origin_path, dest_path)
             else:
-                log('-> Replicating tree from "{}" to "{}"'.format(origin_path, dest_path), 'info', True, True)
+                log('-> Replicating tree from "{}" to "{}"'.format(origin_path, dest_path), 'info', verbose)
                 shutil.copytree(origin_path, dest_path)
-        log('** check_resource_files OK', 'debug', True, True)
-        return False
+        log('** check_resource_files OK', 'debug', verbose)
     elif oct(os.stat(dest_path).st_mode)[-3:] != '777':
-        log('Permission trouble in "{}" --> {}'.format(dest_path, oct(os.stat(dest_path).st_mode)[-3:]), 'warning', True)
+        log('Permission trouble in "{}" --> {}'
+            .format(dest_path, oct(os.stat(dest_path).st_mode)[-3:]), 'warning', verbose)
         try:
             os.chmod(dest_path, 0o777)
         except PermissionError:
             log('Permission error in "{}" --> {}. Cant set 777'
-                .format(dest_path, oct(os.stat(dest_path).st_mode)[-3:]), 'error', True)
-            return False
-    return True
+                .format(dest_path, oct(os.stat(dest_path).st_mode)[-3:]), 'error', verbose)
 
 
 def get_config_enerpi():
@@ -565,10 +561,16 @@ almacenando la ruta absoluta a la instalación de ENERPI
     return data_path, configp, config_s
 
 
+# TODO Revisión reload_config
+def reload_config():
+    global SENSORS, DATA_PATH, CONFIG, SENSORS_THEME
+
+    DATA_PATH, CONFIG, SENSORS_THEME = get_config_enerpi()
+    SENSORS = EnerpiSamplerConf(CONFIG, SENSORS_THEME)
+
+
 # Loads configuration
 DATA_PATH, CONFIG, SENSORS_THEME = get_config_enerpi()
-FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
-LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 
 # Set Locale
 CUSTOM_LOCALE = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))
@@ -576,3 +578,13 @@ locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
 
 # ANALOG SENSORS WITH MCP3008 (Rasp.io Analog Zero)
 SENSORS = EnerpiSamplerConf(CONFIG, SENSORS_THEME)
+
+# Logging files & other common paths:
+FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
+LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
+
+STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH'))
+SERVER_FILE_LOGGING_RSCGEN = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
+NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
+UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'
+IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')

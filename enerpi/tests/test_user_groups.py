@@ -13,7 +13,7 @@ def _checkoutput(cmd):
     return code, out
 
 
-def get_user_groups(user='www-data', verbose=True):
+def _get_user_groups(user='www-data', verbose=True):
     # pi : pi kmem sudo video spi
     # www-data : www-data video spi
     # staff procmod everyone localaccounts _appserverusr admin _appserveradm _lpadmin com.apple.access_screensharing
@@ -30,11 +30,11 @@ def get_user_groups(user='www-data', verbose=True):
         return False, out
 
 
-def check_user_groups(user='www-data', desired_groups=('gpio', 'spi'), fix=False):
+def _check_user_groups(user='www-data', desired_groups=('gpio', 'spi'), fix=False):
     # spi i2c gpio video kmem www-data
     existent_groups = _checkoutput(['groups'])[1].split()
     not_existent_groups = [g for g in desired_groups if g not in existent_groups]
-    user_exists, user_groups = get_user_groups(user)
+    user_exists, user_groups = _get_user_groups(user)
     if not user_exists:
         print("ERROR: USER '{}' don't exist: {}".format(user, '\n'.join(user_groups.split('\n')[:-1])))
         return False
@@ -62,10 +62,12 @@ def check_user_groups(user='www-data', desired_groups=('gpio', 'spi'), fix=False
 
 
 def test_user_groups():
-
+    """
+    Test for user & groups membership operations in linux environment
+    """
     def _formatted_test(user_t, groups_t, fix=False):
         print('*' * 80 + '\nTEST (u="{}", g="{}", fix=False):'.format(user_t, groups_t))
-        res = check_user_groups(user=user_t, desired_groups=groups_t, fix=fix)
+        res = _check_user_groups(user=user_t, desired_groups=groups_t, fix=fix)
         print('********** TEST RESULT = {} **********'.format(res) + '\n' + '*' * 80)
         return res
 
@@ -122,10 +124,16 @@ def test_user_groups():
 
 
 def test_www_data_in_rpi():
+    """
+    Test for check user & groups membership needed to run ENERPI with:
+        · The ENERPI logger daemon, running every reboot with CRON
+        · The ENERPI flask webserver, running under NGINX + UWSGI-EMPEROR
 
+    """
+    # TODO check CUSTOM user & webserver user (from user CONFIG)
     def _formatted_test(user_t, groups_t, fix=False):
         print('*' * 80 + '\nTEST (u="{}", g="{}", fix=False):'.format(user_t, groups_t))
-        res = check_user_groups(user=user_t, desired_groups=groups_t, fix=fix)
+        res = _check_user_groups(user=user_t, desired_groups=groups_t, fix=fix)
         print('********** TEST RESULT = {} **********'.format(res) + '\n' + '*' * 80)
         return res
 
@@ -134,7 +142,7 @@ def test_www_data_in_rpi():
         needed_groups = [('spi', ), ('gpio', 'kmem')]
         print('\nCHECKING GROUPS MEMBERSHIP FOR USER "{}"'.format(user))
         groups_exist = _checkoutput(['groups'])[1].split()
-        user_exists, user_groups = get_user_groups(user)
+        user_exists, user_groups = _get_user_groups(user)
         print('EXISTENT GROUPS: "{}"'.format(groups_exist))
         print('GROUPS WITH USER {} (exist={}): "{}"'.format(user, user_exists, user_groups))
         assert user_exists

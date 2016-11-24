@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
-from flask import request, redirect, url_for, render_template, jsonify
+from flask import request, redirect, url_for, render_template, jsonify, abort
 import json
+from threading import Timer
 import os
+import sys
+from enerpi.base import log
 from enerpi.api import enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version
 from enerpiweb import app, WITH_ML_SUBSYSTEM
 from enerpiweb.rt_stream import stream_is_alive
+from enerpiweb.forms import DummyForm
 
 
-COLOR_BASE = app.config['BASECOLOR']
 BOKEH_VERSION = get_bokeh_version()
 
 if WITH_ML_SUBSYSTEM:
@@ -43,15 +46,19 @@ def control():
                      for p, t0, tf, n in zip(df['st'], df['ts_ini'], df['ts_fin'], df['n_rows'])]
     else:
         paths_rel = []
+    form_operate = DummyForm()
     return render_template('control_panel.html',
                            d_catalog={'path_raw_store': os.path.join(cat.base_path, cat.raw_store),
                                       'path_catalog': os.path.join(cat.base_path, cat.catalog_file),
                                       'ts_init': cat.min_ts, 'ts_catalog': cat.index_ts},
-                           d_last_msg=last, is_sender_active=is_sender_active, list_stores=paths_rel, alerta=alerta)
+                           d_last_msg=last, is_sender_active=is_sender_active, list_stores=paths_rel,
+                           form_operate=form_operate,
+                           alerta=alerta)
 
 
 @app.route('/api/help', methods=['GET'])
 def api_help():
+    """Return JSON with app routes"""
     # TODO hacer tabla en html con url rules:
     endpoints = [rule.rule for rule in app.url_map.iter_rules()
                  if rule.endpoint != 'static']
@@ -76,15 +83,34 @@ def base_index():
     return redirect(url_for('index'))
 
 
-# TODO Corregir 'SECRET_KEY': None
-# @app.route('/allroutes')
-# def allroutes():
-#     routes = []
-#     for rule in app.url_map.iter_rules():
-#         # To show how to do it, we are going to filter what type of
-#         # request are we going to show, for example here we are only
-#         # going to use GET requests
-#         if "GET" in rule.methods:
-#             url = rule.rule
-#             routes.append(url)
-#     return render_template('sysadmin/routes.html', routes=routes)
+# TODO Gestión logger y webserver
+def _system_operation(cmd):
+    log('SYSTEM_OPERATION CMD: "{}"'.format(cmd), 'debug', False)
+    os.system(cmd)
+    log('Still alive?? (pid={})'.format(os.getpid()), 'debug', False)
+
+
+@app.route('/api/restart/<service>', methods=['POST'])
+def startstop(service='enerpi'):
+    """
+    Endpoint for control ENERPI in RPI. Only for dev mode.
+    It can restart the ENERPI daemon logger or even reboot the machine for a fresh start after a config change.
+    :param service: service id ('enerpi' for reloading the logger, or 'machine' for a reboot)
+
+    """
+    log('En {}!, con service="{}", request.form={}'.format(request.url_rule, service, request.form), 'debug', False)
+    form, cmd, msg = DummyForm(), None, None
+    if form.validate_on_submit():
+        if service == 'enerpi':
+            python_pathbin = os.path.dirname(sys.executable)
+            cmd = '{}/enerpi-daemon restart'.format(python_pathbin)
+            msg = 'Restarting ENERPI logger... ({})'.format(cmd)
+        elif service == 'machine':
+            cmd = 'sudo reboot now'
+            msg = 'Rebooting! MACHINE... see you soon... ({})'.format(cmd)
+        if cmd is not None:
+            log(msg, 'debug', False)
+            t = Timer(3, _system_operation, args=(cmd,))
+            t.start()
+            return redirect(url_for('control', alerta=json.dumps({'alert_type': 'warning', 'texto_alerta': msg})))
+    return abort(500)

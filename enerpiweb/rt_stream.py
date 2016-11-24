@@ -30,19 +30,14 @@ def stream_is_alive():
     global last_data
     last = last_data.copy()
     try:
-        is_sender_active = (pd.Timestamp.now(tz=SENSORS.TZ) - last[SENSORS.ts_column]) < pd.Timedelta('1min')
+        is_sender_active = (pd.Timestamp.now(tz=SENSORS.TZ) - last[SENSORS.ts_column]) < pd.Timedelta('20s')
     except KeyError:
-        # last_ts, last_power, host_logger = last_data['ts'], last_data['power'], last_data['host']
         is_sender_active = False
         last = {'host': '?', SENSORS.main_column: -1, SENSORS.ts_column: pd.Timestamp.now(tz=SENSORS.TZ)}
     return is_sender_active, last
 
 
-def _format_event_stream(d_msg):  # , timeout_retry=None, msg_id=None):
-    # if msg_id is not None:
-    #     return 'id: {}\ndata: {}\n\n'.format(msg_id, json.dumps(d_msg))
-    # if timeout_retry is not None:
-    #     return 'retry: {}\ndata: {}\n\n'.format(timeout_retry, json.dumps(d_msg))
+def _format_event_stream(d_msg):
     return 'data: {}\n\n'.format(json.dumps(d_msg))
 
 
@@ -53,19 +48,16 @@ def _get_dataframe_buffer_data():
         try:
             df = df[SENSORS.columns_sampling].set_index(SENSORS.ts_column)
         except KeyError as e:
-            log('KeyError "{}" in _get_dataframe_buffer_data'.format(e), 'error')
+            log('KeyError "{}" in _get_dataframe_buffer_data'.format(e), 'error', True)
             df = df[list(filter(lambda x: x in df, SENSORS.columns_sampling))].set_index(SENSORS.ts_column)
         for s in filter(lambda x: x.name in df, SENSORS):
             if s.is_rms:
-                df[s.name] = df[s.name].astype(int)
+                df[s.name] = df[s.name].round(0).astype('float32')
             else:
-                df[s.name] = pd.Series(df[s.name] * 100).round(1)
+                df[s.name] = pd.Series(df[s.name] * 1000).round(0).astype('int16')
         for c in filter(lambda x: x in df, [SENSORS.ref_rms, SENSORS.ref_mean]):
             if c in df:
-                try:
-                    df[c] = df[c].astype(int)
-                except ValueError:
-                    df[c] = df[c].astype(float).astype(int)
+                df[c] = df[c].astype('int16')
         return df
     return None
 
@@ -80,10 +72,6 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
         else:
             df = cat.get(start=start, end=end, last_hours=last_hours)
             if (df is not None) and not df.empty:
-                df = df[SENSORS.columns_sampling]
-                # TODO Revisar formatos de analog mean!
-                # SENSORS
-                # df.ldr = df['ldr'].astype(float) / 10.
                 if last_hours is not None:
                     df_last_data = _get_dataframe_buffer_data()
                     if df_last_data is not None:
@@ -95,22 +83,15 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
         df = _get_dataframe_buffer_data()
     toc_df = time()
     if df is not None and not df.empty:
-        print('BOKEH_P:\n{}\n--> {}, {}'.format(df.head(), df.shape, df.columns))
-        try:
-            script, divs, version = html_plot_buffer_bokeh(df, is_kwh_plot=kwh)
-            toc_p = time()
-            log('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic), 'debug', False)
-            yield _format_event_stream(dict(success=True, b_version=version, script_bokeh=script, bokeh_div=divs[0],
-                                            took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
-        except Exception as e:
-            msg = 'ERROR in: BOKEH PLOT: {} [{}]'.format(e, e.__class__)
-            print(msg)
-            yield _format_event_stream(dict(success=False, error=msg))
+        script, divs, version = html_plot_buffer_bokeh(df, is_kwh_plot=kwh)
+        toc_p = time()
+        log('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic), 'debug', False)
+        yield _format_event_stream(dict(success=True, b_version=version, script_bokeh=script, bokeh_div=divs[0],
+                                        took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
     else:
         msg = ('No data for BOKEH PLOT: start={}, end={}, last_hours={}, '
                'rs_data={}, use_median={}, kwh={}<br>--> DATA: {}'
                .format(start, end, last_hours, rs_data, use_median, kwh, df))
-        # print(msg.replace('<br>', '\n'))
         yield _format_event_stream(dict(success=False, error=msg))
     yield _format_event_stream('CLOSE')
 
@@ -151,19 +132,6 @@ class ReceiverThread(Thread):
             sleep(.5)
         log('**BROADCAST_RECEIVER en PID={}, thread={}. CLOSED on counter={}'
             .format(os.getpid(), current_thread(), count), 'warn', True)
-
-    # def stop(self):
-    #     """ Stop the thread and wait for it to end. """
-    #     log('EN STOP!', 'error', True)
-    #     self._stopevent.set()
-    #     Thread.join(self)
-
-    # def __del__(self):
-    #     """ Stop the thread and wait for it to end. """
-    #     log('PASANDO POR AQUÍ', 'error', True)
-    #     self._stopevent.set()
-    #     Thread.join(self)
-    #     Thread._delete(self)
 
 
 @app.before_first_request

@@ -2,10 +2,11 @@
 from flask import request, redirect, url_for, render_template, send_file, abort
 import json
 import os
-from enerpi.base import DATA_PATH, FILE_LOGGING, get_lines_file, log
+from enerpi.base import DATA_PATH, FILE_LOGGING, get_lines_file, log, UWSGI_CONFIG_FILE
 from enerpi.editconf import web_config_edition_data, check_uploaded_config_file, ENERPI_CONFIG_FILES
 from enerpi.api import enerpi_data_catalog
 from enerpiweb import app, SERVER_FILE_LOGGING, STATIC_PATH
+from enerpiweb.forms import FileForm
 
 
 def _get_filepath_from_file_id(file_id):
@@ -23,7 +24,11 @@ def _get_filepath_from_file_id(file_id):
     elif 'enerpi' == file_id:
         is_logfile, filename = True, FILE_LOGGING
     elif 'uwsgi' == file_id:
-        is_logfile, filename = True, '/var/log/uwsgi/enerpiweb.log'
+        is_logfile, filename = True, '/var/log/uwsgi/{}.log'.format(os.path.splitext(UWSGI_CONFIG_FILE)[0])
+    elif 'daemon_out' == file_id:
+        is_logfile, filename = True, '/tmp/enerpi_out.txt'
+    elif 'daemon_err' == file_id:
+        is_logfile, filename = True, '/tmp/enerpi_err.txt'
     else:  # Fichero derivado del catálogo
         cat = enerpi_data_catalog(check_integrity=False)
         if 'raw_store' == file_id:
@@ -49,7 +54,10 @@ def download_hdfstore_file(relpath_store=None):
     """
     cat = enerpi_data_catalog(check_integrity=False)
     path_file = cat.get_path_hdf_store_binaries(relpath_store)
+    print('En download_hdfstore_file with path_file: "{}", relpath: "{}", cat:\n{}'
+          .format(path_file, relpath_store, cat))
     if (path_file is not None) and os.path.exists(path_file):
+        print('Dentro IF')
         if 'as_attachment' in request.args:
             return send_file(path_file, as_attachment=True, attachment_filename=os.path.basename(path_file))
         return send_file(path_file, as_attachment=False)
@@ -72,6 +80,24 @@ def download_file(file_id):
             msg = json.dumps({'alert_type': 'danger',
                               'texto_alerta': 'El archivo "{}" ({}) no existe!'.format(filename, file_id)})
             return redirect(url_for('control', alerta=msg))
+    return abort(404)
+
+
+@app.route('/api/filedownload/debug/', methods=['POST'])
+def download_file_debug():
+    """
+    * File Download *
+    Post request with relative file path under DATA_PATH (debugging purposes)
+
+    """
+    form = FileForm()
+    if form.validate_on_submit():
+        # relpath = relpath.split(':')
+        relpath = form.pathfile
+        # abspath = os.path.join(DATA_PATH, *relpath)
+        abspath = os.path.join(DATA_PATH, relpath)
+        if os.path.exists(abspath):
+            return send_file(abspath, as_attachment=True, attachment_filename=os.path.basename(abspath))
     return abort(404)
 
 
@@ -105,7 +131,6 @@ def showfile(file='flask'):
     return abort(404)
 
 
-# noinspection PyCallingNonCallable
 @app.route('/api/editconfig/', methods=['GET'])
 @app.route('/api/editconfig/<file>', methods=['GET', 'POST'])
 def editfile(file='config'):
@@ -119,11 +144,8 @@ def editfile(file='config'):
         alerta = request.args.get('alerta', '')
         if alerta:
             alerta = json.loads(alerta)
-        config_files = list(sorted(ENERPI_CONFIG_FILES.keys(), key=lambda x: ENERPI_CONFIG_FILES[x]['order']))
-        if file in config_files:
-            config_files.remove(file)
         extra_links = [(ENERPI_CONFIG_FILES[f_id]['text_button'], url_for('editfile', file=f_id))
-                       for f_id in config_files]
+                       for f_id in sorted(ENERPI_CONFIG_FILES.keys(), key=lambda x: ENERPI_CONFIG_FILES[x]['order'])]
         show_switch_comments = ENERPI_CONFIG_FILES[file]['show_switch_comments']
         if not show_switch_comments:
             without_comments = True
@@ -156,11 +178,9 @@ def uploadfile(file):
             log('uploading logfile {} [{}]!!!'.format(file, filename), 'error', True)
             return redirect(url_for('index'), code=404)
         f = request.files['file']
-        ok_upload, alert = check_uploaded_config_file(file, f, dest_filepath=None)
+        alert = check_uploaded_config_file(file, f, dest_filepath=filename)
         if alert:
             alert = json.dumps(alert)
-        # if ok_upload:
-        #     return redirect(url_for('editfile', file=file, alerta=alert))
         return redirect(url_for('editfile', file=file, alerta=alert))
     return abort(500)
 

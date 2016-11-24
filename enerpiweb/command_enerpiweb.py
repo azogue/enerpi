@@ -2,15 +2,14 @@
 import argparse
 import os
 import sys
-from enerpi.base import BASE_PATH, log
+from enerpi.base import BASE_PATH, log, NGINX_CONFIG_FILE, UWSGI_CONFIG_FILE
 from enerpiweb import basedir, CONFIG, DATA_PATH, check_resource_files, app as application
 from enerpi.prettyprinting import print_secc, print_cyan, print_red, print_magenta
+
 
 FLASK_WEBSERVER_PORT = CONFIG.getint('ENERPI_WEBSERVER', 'FLASK_WEBSERVER_PORT', fallback=7777)
 PERIOD_MINUTES_RSC_GEN = CONFIG.getint('ENERPI_WEBSERVER', 'RSC_GEN_EVERY_MINUTES', fallback=15)
 USER_SERVER = CONFIG.get('ENERPI_WEBSERVER', 'USER_SERVER', fallback='www-data')
-NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
-UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'
 
 
 def make_cron_command_task_periodic_rscgen():
@@ -56,7 +55,7 @@ def _make_webserver_config(overwrite=False):
                                                  ).replace('{filename}', NGINX_CONFIG_FILE)
 
         # Copy config files to DATA_PATH
-        check_resource_files(DATA_PATH)
+        check_resource_files(DATA_PATH, verbose=True)
         with open(os.path.join(DATA_PATH, UWSGI_CONFIG_FILE), 'w') as f:
             f.write(uwsgi_conf)
         with open(os.path.join(DATA_PATH, NGINX_CONFIG_FILE), 'w') as f:

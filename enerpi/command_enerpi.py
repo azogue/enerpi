@@ -188,7 +188,7 @@ def enerpi_main_cli(test_mode=False):
         elif args.backup:
             from enerpi.database import init_catalog
             # Export data to CSV:
-            catalog = init_catalog(raw_file=path_st, check_integrity=False)
+            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False)
             all_data = catalog.export(args.backup)
             log('ALL DATA:\n{}'.format(all_data), 'ok', True, False)
         elif args.raw:
@@ -209,7 +209,7 @@ def enerpi_main_cli(test_mode=False):
         elif args.info or args.filter or args.plot or args.plot_tiles:
             from enerpi.database import init_catalog, show_info_data
 
-            catalog = init_catalog(raw_file=path_st, check_integrity=False)
+            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False)
             if args.plot_tiles:
                 from enerpiplot.enerplot import gen_svg_tiles
 

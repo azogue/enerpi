@@ -1,68 +1,23 @@
 # -*- coding: utf-8 -*-
 import os
 import subprocess
-from unittest import TestCase
-from unittest.mock import patch
-import sys
-from enerpi.tests.conftest import get_temp_catalog_for_testing
+from enerpi.tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
 
 
-class TestCLI(TestCase):
-
-    path_default_datapath = ''
-    before_tests = ''
-    tmp_dir = None
-    DATA_PATH = None
-    cat = None
-
-    @classmethod
-    def setup_class(cls):
-        """
-        Copy example ENERPI files & sets common data catalog for testing.
-
-        """
-        # Prepara archivos:
-        (tmp_dir, data_path, cat,
-         path_default_datapath, before_tests) = get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi',
-                                                                             check_integrity=True)
-        open(os.path.join(data_path, '.enerpi_test_key'), 'wb').write(b'AAnLKyZ_1bRBvizbBI2DRjIIY30G3DYCRY0LDWTzTsQ=')
-        cls.tmp_dir = tmp_dir
-        cls.DATA_PATH = data_path
-        cls.cat = cat
-        cls.path_default_datapath = path_default_datapath
-        cls.before_tests = before_tests
-
-    @classmethod
-    def teardown_class(cls):
-        """
-        Cleanup of temp data on testing.
-
-        """
-        # Restablece default_datapath
-        open(cls.path_default_datapath, 'w').write(cls.before_tests)
-        print('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
-        cls.tmp_dir.cleanup()
-        print(cls.path_default_datapath, cls.before_tests)
-        print(open(cls.path_default_datapath).read())
+# TODO resolver problema de salida con CTRL+C (en RPI)
+class TestEnerpiCLI(TestCaseEnerpi):
 
     def test_script_enerpi(self):
         """
         ENERPI CLI Testing with subprocess.check_output.
 
         """
-        def _exec_cli_w_args(args, timeout=None):
-            try:
-                out = subprocess.check_output(args, timeout=timeout).decode()
-                pp.print_ok(out)
-            except subprocess.TimeoutExpired as e:
-                pp.print_warn(e)
-
-        _exec_cli_w_args(['enerpi', '-i'])
-        _exec_cli_w_args(['enerpi', '-l'])
-        _exec_cli_w_args(['enerpi', '--config'])
-        _exec_cli_w_args(['enerpi', '--demo', '-ts', '0', '-T', '.01', '--timeout', '2'], timeout=3)
-        _exec_cli_w_args(['enerpi', '--timeout', '3'], timeout=7)
+        self.exec_subprocess(['enerpi', '-i'])
+        self.exec_subprocess(['enerpi', '-l'])
+        self.exec_subprocess(['enerpi', '--config'])
+        self.exec_subprocess(['enerpi', '--demo', '-ts', '0', '-T', '.01', '--timeout', '2'], timeout=3)
+        self.exec_subprocess(['enerpi', '--timeout', '3'], timeout=7)
 
     def test_main_cli(self):
         """
@@ -71,20 +26,13 @@ class TestCLI(TestCase):
         """
         from enerpi.command_enerpi import enerpi_main_cli
 
-        def _exec_cli_w_args(args):
-            # noinspection PyUnresolvedReferences
-            with patch.object(sys, 'argv', args):
-                pp.print_secc('TESTING CLI with sys.argv: {}'.format(sys.argv))
-                enerpi_main_cli(test_mode=True)
-
-        _exec_cli_w_args(['test_cli', '-i'])
-        _exec_cli_w_args(['test_cli', '-l'])
-        _exec_cli_w_args(['test_cli', '--config'])
-        #  enerpi --demo -ts 1 -T .5 --timeout 15 -w .5
-        _exec_cli_w_args(['test_cli', '--demo', '-ts', '0', '-T', '.3', '--timeout', '3', '--temps'])
-        # _exec_cli_w_args(['test_cli', '--raw', '-ts', '0', '-T', '.3', '--timeout', '3', '--temps'])
-        # _exec_cli_w_args(['test_cli', '--timeout', '3'])
-        _exec_cli_w_args(['test_cli', '-f', '-ts', '0', '-T', '.01'])
+        self.exec_func_with_sys_argv(enerpi_main_cli, ['test_cli', '-i'], test_mode=True)
+        self.exec_func_with_sys_argv(enerpi_main_cli, ['test_cli', '-l'], test_mode=True)
+        self.exec_func_with_sys_argv(enerpi_main_cli, ['test_cli', '--config'], test_mode=True)
+        argv = ['test_cli', '--demo', '-ts', '0', '-T', '.3', '--timeout', '3', '--temps']
+        self.exec_func_with_sys_argv(enerpi_main_cli, argv, test_mode=True)
+        self.exec_func_with_sys_argv(enerpi_main_cli, ['test_cli', '-f', '-ts', '0', '-T', '.01'], test_mode=True)
+        # self.exec_func_with_sys_argv(enerpi_main_cli, ['test_cli', '--timeout', '3'], test_mode=True)
 
 
 def test_pitemps():
@@ -113,3 +61,9 @@ def test_prettyprinting():
     pp.print_green(pp.ppdict(d, html=True))
     pp.print_green(pp.ppdict({}))
     pp.print_red(pp.ppdict(None))
+
+
+if __name__ == '__main__':
+    import unittest
+
+    unittest.main()

@@ -83,8 +83,12 @@ def receiver_msg_generator(verbose=True, n_msgs=None, port=None, codec=None):
     udp_ip = _UDP_IP
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((udp_ip, port))
-        log(_DESCRIPTION_IO.format(udp_ip, port), 'ok', verbose, False)
+        try:
+            sock.bind((udp_ip, port))
+        except OSError as e:
+            log('OSError --> {}. IP={}, PORT={}'.format(e, udp_ip, port), 'error', verbose)
+            raise KeyboardInterrupt
+        log(_DESCRIPTION_IO.format(udp_ip, port), 'ok', verbose)
         while (n_msgs is None) or (counter < n_msgs):
             tic = time()
             data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
@@ -139,7 +143,8 @@ def broadcast_msg(msg, counter_unreachable, sock_send=None, codec=None, port=Non
         sock_send.sendto(encrypted_msg_b, (_UDP_IP, port))
         counter_unreachable[0] = 0
     except OSError as e:  # [Errno 101] Network is unreachable
-        log('OSError: {}; C_UNREACHABLE: {}'.format(e, counter_unreachable), 'warn', verbose)
+        if counter_unreachable[0] % 3 == 0:
+            log('OSError: {}; C_UNREACHABLE: {}'.format(e, counter_unreachable), 'warn', verbose)
         counter_unreachable += 1
         sock_send = None
     # except Exception as e:

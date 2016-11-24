@@ -78,14 +78,14 @@ def ts_strftime(ts):
 
 
 @app.errorhandler(404)
-def page_not_found(e):
+def page_not_found(error):
     """
     Error 404
-    :param e: error
+    :param error: error
 
     """
-    log('page_not_found: {}, url={}'.format(e, request.url), 'error', False)
-    return render_template('error.html', error_e=e, code=404, traceback=None), 404
+    log('page_not_found: {}, url={}'.format(error, request.url), 'error', False)
+    return render_template('error.html', error_e=error, code=404, traceback=None), 404
 
 
 @app.errorhandler(500)

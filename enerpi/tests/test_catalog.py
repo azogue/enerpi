@@ -5,96 +5,42 @@ import pandas as pd
 import pytest
 import shutil
 from time import time
-from unittest import TestCase
-from enerpi.tests.conftest import get_temp_catalog_for_testing
+from enerpi.tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
 
 
-def _0_catalog_update_month():
-    """
-    TEST UPDATE MONTH (problemas de memoria en RPI?)
-
-    """
-    (tmp_dir, data_path, cat,
-     path_default, default_before) = get_temp_catalog_for_testing(subpath_test_files='test_update_month',
-                                                                  check_integrity=False)
-
-    print(os.listdir(data_path))
-    n_samples = cat.tree[cat.tree['is_raw']]['n_rows'].sum()
-    raw = pd.read_hdf(os.path.join(data_path, 'enerpi_data_test.h5'), 'rms')
-    new_n_samples = raw.shape[0]
-
-    pp.print_info(cat.tree)
-    pp.print_cyan(cat.tree.describe())
-    pp.print_red(raw.head())
-    pp.print_red(raw.tail())
-    pp.print_magenta(raw.describe())
-
-    assert cat.tree.shape[0] == 31, "Diferent # of rows on catalog index ¿?"
-    assert new_n_samples == 43620, "Diferent # of rows on RAW data ¿?"
-    assert raw.index.is_unique, "Raw DATA with non-unique index! Can't be!"
-    assert raw.index.is_monotonic_increasing, "Raw DATA with non-monotonic-increasing index! Can't be!"
-
-    new_data = cat.update_catalog(data=raw)
-    pp.print_ok(new_data)
-    updated_n_samples = cat.tree[cat.tree['is_raw']]['n_rows'].sum()
-
-    pp.print_info(cat.tree)
-    pp.print_cyan(cat.tree.describe())
-    lost_samples = 85070
-    print(n_samples, new_n_samples, updated_n_samples, updated_n_samples - n_samples - new_n_samples)
-
-    assert cat.tree.shape[0] == 4, "2 rows for DATA_2016_MONTH_10.h5 & 2 more for DATA_2016_11_DAY_01.h5"
-    assert updated_n_samples == n_samples + new_n_samples - lost_samples, "Updated data with old and new samples"
-
-    return tmp_dir, data_path, cat, path_default, default_before
-
-
 @pytest.mark.incremental
-class TestUpdateCatalog(TestCase):
-
-    @classmethod
-    def setup_class(cls):
-        """
-        Copy example ENERPI files & sets common data catalog for testing.
-
-        """
-        pd.set_option('display.width', 300)
-        # Prepara archivos:
-
-        tmp_dir, data_path, cat, path_default, default_before = _0_catalog_update_month()
-        cls.tmp_dir = tmp_dir
-        cls.DATA_PATH = data_path
-        cls.cat = cat
-        cls.path_default = path_default
-        cls.default_before = default_before
-
-    @classmethod
-    def teardown_class(cls):
-        """
-        Cleanup of temp data on testing.
-
-        """
-        # Restablece default_datapath
-        open(cls.path_default, 'w').write(cls.default_before)
-        print('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
-        cls.tmp_dir.cleanup()
+class TestEnerpiCatalogTasks(TestCaseEnerpi):
+    subpath_test_files = 'test_update_month'
+    raw_file = 'enerpi_data_test.h5'
+    cat_check_integrity = False
 
     def test_0_catalog_update(self):
         pp.print_magenta(self.cat.tree)
+        pp.print_cyan(self.cat)
 
-    def test_1_catalog_reprocess_all_data(self):
+    def test_1_config(self):
+        from enerpi.base import DATA_PATH, CONFIG, SENSORS_THEME, SENSORS
+        pp.print_yellowb(DATA_PATH)
+        pp.print_yellowb(CONFIG)
+        pp.print_yellowb(SENSORS_THEME)
+        pp.print_yellowb(SENSORS)
+
+    def test_2_catalog_reprocess_all_data(self):
         pp.print_magenta(self.cat.tree)
         pp.print_yellowb([os.path.basename(p) for p in os.listdir(self.DATA_PATH)])
         self.cat.reprocess_all_data()
-
-    def test_2_catalog_repr(self):
-        print(self.cat)
+        pp.print_yellowb(self.cat.tree)
+        pp.print_cyan(os.listdir(self.DATA_PATH))
+        pp.print_cyan(os.listdir(os.path.join(self.DATA_PATH, 'DATA_YEAR_2016')))
+        pp.print_cyan(os.listdir(os.path.join(self.DATA_PATH, 'CURRENT_MONTH')))
 
     def test_3_catalog_get_paths_stores(self):
+        pp.print_yellowb(self.cat.tree)
         if self.cat.tree is not None:
             for p in set(self.cat.tree['st']):
                 path = self.cat.get_path_hdf_store_binaries(rel_path=p)
+                pp.print_yellow('ST:{} --> PATH:{}, is_file={}'.format(p, path, os.path.isfile(path)))
                 assert path is not None, 'Non existent hdf store PATH'
                 assert os.path.isfile(path), 'hdf store is not a file ?'
         path_none = self.cat.get_path_hdf_store_binaries(rel_path='NO_EXISTE.h5')
@@ -122,20 +68,20 @@ class TestUpdateCatalog(TestCase):
 
     def test_6_catalog_data_resample(self):
         print(self.cat)
-        # tic = time()
+        tic = time()
         data = self.cat._load_store(self.cat.tree.st[0]).iloc[:100000]
-        # toc_load = time()
+        toc_load = time()
         rs1 = self.cat.resample_data(data, rs_data='40min', use_median=False, func_agg=np.mean)
-        # toc_rs40m = time()
+        toc_rs40m = time()
         pp.print_green(rs1)
         rs3 = self.cat.resample_data(data, rs_data='2min', use_median=True)
-        # toc_rs2m_median = time()
+        toc_rs2m_median = time()
         pp.print_blue(rs3)
-        # msg = 'RESAMPLE TIMES:\n'
-        # msg += '\t{} --> {:.3f} secs\n'.format('LOAD', toc_load - tic)
-        # msg += '\t{} --> {:.3f} secs\n'.format('rs40m', toc_rs40m - toc_load)
-        # msg += '\t{} --> {:.3f} secs\n'.format('rs2m_median', toc_rs2m_median - toc_rs40m)
-        # pp.print_ok(msg)
+        msg = 'RESAMPLE TIMES:\n'
+        msg += '\t{} --> {:.3f} secs\n'.format('LOAD', toc_load - tic)
+        msg += '\t{} --> {:.3f} secs\n'.format('rs40m', toc_rs40m - toc_load)
+        msg += '\t{} --> {:.3f} secs\n'.format('rs2m_median', toc_rs2m_median - toc_rs40m)
+        pp.print_ok(msg)
 
     def test_7_catalog_data_resample_11days(self):
         print(self.cat)
@@ -155,11 +101,9 @@ class TestUpdateCatalog(TestCase):
         data_empty = pd.DataFrame([])
         data_empty_p = self.cat.process_data(data_empty)
         assert data_empty_p.empty
-        data_empty_p2, data_empty_s,  = self.cat.process_data_summary(data_empty)
-        assert data_empty_p2.empty
+        data_empty_s = self.cat.process_data_summary(data_empty)
         assert data_empty_s is None
-        data_empty_p3, data_empty_s2, data_empty_s_ex = self.cat.process_data_summary_extra(data_empty)
-        assert data_empty_p3.empty
+        data_empty_s2, data_empty_s_ex = self.cat.process_data_summary_extra(data_empty)
         assert data_empty_s2 is None
         assert data_empty_s_ex is None
 
@@ -167,10 +111,11 @@ class TestUpdateCatalog(TestCase):
         assert d1_none is None
         assert d1_s_none is None
         d2_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=False)
+        print(d2_none)
+        assert (d2_none is None) or d2_none.empty
         d3_none, d3_s_none = self.cat.get(start=None, end=None, last_hours=10,
                                           column=SENSORS.main_column, with_summary=True)
         print(d3_none)
-        assert d2_none is None
         assert d3_none is None
         assert d3_s_none is None
         d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=SENSORS.main_column, with_summary=True)
@@ -188,6 +133,7 @@ class TestUpdateCatalog(TestCase):
         cat_file = os.path.join(self.DATA_PATH, self.cat.catalog_file)
         pp.print_secc('Regeneración de catalog_file: (se elimina "{}" y se crea con check_integrity=True)'
                       .format(cat_file))
+        pp.print_cyan(open(cat_file).read())
         os.remove(cat_file)
         new_cat = enerpi_data_catalog(base_path=self.cat.base_path,
                                       raw_file=self.cat.raw_store,
@@ -214,11 +160,13 @@ class TestUpdateCatalog(TestCase):
         print(raw_data.index)
 
         # Delete all hdf stores:
+        pp.print_cyan(os.listdir(self.DATA_PATH))
+        pp.print_cyan(os.listdir(os.path.join(self.DATA_PATH, 'DATA_YEAR_2016')))
+        pp.print_cyan(os.listdir(os.path.join(self.DATA_PATH, 'CURRENT_MONTH')))
         shutil.rmtree(os.path.join(self.cat.base_path, 'DATA_YEAR_2016'))
         shutil.rmtree(os.path.join(self.cat.base_path, 'CURRENT_MONTH'))
         shutil.rmtree(os.path.join(self.cat.base_path, 'OLD_STORES'))
-        os.remove(os.path.join(self.cat.base_path, self.cat.raw_store))
-        print(os.listdir(self.cat.base_path))
+        # os.remove(os.path.join(self.cat.base_path, self.cat.raw_store))
 
         # Populate new hdf stores:
         archived_data.to_hdf(os.path.join(self.cat.base_path, 'PROCESSED_DATA_TO_BE_ARCHIVED.h5'), self.cat.key_raw)
@@ -229,3 +177,14 @@ class TestUpdateCatalog(TestCase):
         new_cat_3 = enerpi_data_catalog(base_path=self.cat.base_path, check_integrity=True, verbose=True)
         pp.print_ok(new_cat_3)
         print(os.listdir(self.cat.base_path))
+
+    def test__10_export_data(self):
+        exported = self.cat.export(filename='enerpi_all_data_test_1.csv')
+        pp.print_cyan(exported)
+        self.assertIsNotNone(exported)
+
+
+if __name__ == '__main__':
+    import unittest
+
+    unittest.main()

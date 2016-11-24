@@ -30,7 +30,7 @@
     "tile_gradient_st": [244, 216, 63, 0.83],
     "tile_gradient_end": [219, 221, 13, 0.33],
     "icon": "lightbulb-o",
-    "description": "Ilumination"
+    "description": "Illumination"
   },
   {
     "name": "noise",

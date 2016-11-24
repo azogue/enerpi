@@ -24,12 +24,12 @@ def get_rgbled(verbose=True):
     return led
 
 
-def led_alarm(led, time_blinking=2.5, timeout=3):
-    """Blinks in RED (one time or multiple times, always with ∆T=.25 sec)"""
+def led_alarm(led, time_blinking=2.5, timeout=3, time_on=.25, color=(1, 0, 0)):
+    """Blinks for alarm code (one time or multiple times, with ∆T=.25 sec or 'time_on')"""
     if timeout == 0:
-        led.blink(.25, .25, on_color=(1, 0, 0))
+        led.blink(time_on, time_on, on_color=color)
     else:
-        led.blink(.25, .25, on_color=(1, 0, 0), n=int(time_blinking / .5))
+        led.blink(time_on, time_on, on_color=color, n=int(time_blinking / (2 * time_on)))
 
 
 def led_info(led, n=3):

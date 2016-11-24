@@ -10,8 +10,7 @@ from time import sleep, time
 from enerpi.base import SENSORS, log
 
 
-# TODO Change MEAN SENSORS FOR **MEDIAN** SENSORS!
-PREC_SAMPLING = dt.timedelta(microseconds=500)
+PREC_SAMPLING = .0005  # := dt.timedelta(microseconds=500)
 HOST = check_output('hostname').decode().splitlines()[0]
 EXAMPLE_POWER_EV = [(0, 300), (3, 1200), (6, 3250), (8, 700), (9, 100), (10, 0), (12, 300)]
 
@@ -44,11 +43,6 @@ class DummySensor(object):
         return time() - self._t0
 
     @property
-    def software_spi(self):
-        """True (like MCP/GPIOZERO using Software SPI)"""
-        return True
-
-    @property
     def is_active(self):
         """True, like GPIOZERO_MCP sensor.is_active"""
         return True
@@ -79,8 +73,8 @@ class AnalogSensorBuffer(object):
         self.size_max = length
         self._rms_sensor = rms_sensor
         self.size = 0
+        self._completed = False
         self._data = np.zeros(length, dtype='f')
-        self._last_out = 0.
         self._last_mean = 0.
 
     @property
@@ -99,19 +93,21 @@ class AnalogSensorBuffer(object):
         """True if it's a Root-Mean-Squared measuring GPIOZERO_MCP sensor"""
         return self._rms_sensor
 
-    def append(self, x):
-        """append an element to obtain future Root-Mean-Squared (RMS) value or future simple Mean value"""
+    def append_reading(self):
+        """Read MCP sensor values, and append with value_correction
+        to obtain future Root-Mean-Squared (RMS) value or future simple Mean value"""
+        x = self._probe.value + self._value_correction
         if self._rms_sensor:
             new = x**2
         else:
             new = x
-        if self.size < self.size_max:
-            self._last_out = self._data[self.size]
+        if not self._completed:
             self.size += 1
             self._last_mean += new / self.size_max
+            if self.size == self.size_max:
+                self._completed = True
         else:
-            self._last_out = self._data[-1]
-            self._last_mean += (new - self._last_out) / self.size_max
+            self._last_mean += (new - self._data[-1]) / self.size_max
         self._data = np.roll(self._data, 1)
         self._data[0] = new
 
@@ -143,6 +139,7 @@ def tuple_to_dict_json(data_tuple):
     d_data = dict(zip(SENSORS.columns_sampling, data_tuple))
     d_data['host'] = HOST
     d_data[SENSORS.ts_column] = d_data[SENSORS.ts_column].strftime(SENSORS.ts_fmt)
+    # d_data[SENSORS.ts_column] = dt.datetime.now().strftime(SENSORS.ts_fmt)
 
     cols_rms, cols_mean, cols_ref = SENSORS.included_columns_sampling(d_data)
     for c in cols_rms:
@@ -179,35 +176,39 @@ def msg_to_dict(msg):
 def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSORS.delta_sec_data,
              min_ts_ms=SENSORS.ts_data_ms, delta_secs_raw_capture=None,
              measure_ldr_divisor=SENSORS.measure_ldr_divisor,
-             use_dummy_sensors=False, verbose=False):
-    delta_sampling_calc = dt.timedelta(seconds=delta_sampling)
+             use_dummy_sensors=False, reset_bias=False, verbose=False):
+    delta_sampling_calc = delta_sampling
     con_pausa = min_ts_ms > 0
     buffers = []
     assert(len(SENSORS) > 0)
+    if reset_bias:
+        for s in SENSORS:
+            s.bias = 0
     n_samples_buffer_rms = n_samples_buffer
     n_samples_buffer_normal = n_samples_buffer // measure_ldr_divisor
-
     if use_dummy_sensors:
         sensor_probe, probe_type = DummySensor, 'DummySensor'
     else:
         sensor_probe, probe_type = MCP3008, 'MCP3008'
+
     try:
         buffers = [AnalogSensorBuffer(sensor_probe(channel=s.channel), s.bias,
                                       n_samples_buffer_rms if s.is_rms else n_samples_buffer_normal,
                                       rms_sensor=s.is_rms) for s in SENSORS]
 
-        software_spi_mode = buffers[0].software_spi
+        software_spi_mode = (probe_type is 'DummySensor') or buffers[0].software_spi
         log('ENERPI ANALOG SENSING WITH {} - (channel={}, raw_value={:.5f}); '
             'Active:{}, Software SPI:{}, #buffer_rms:{}, #buffer:{}'
             .format(probe_type, SENSORS[0].channel, buffers[0].read(), buffers[0].is_active, software_spi_mode,
                     n_samples_buffer_rms, n_samples_buffer_normal), 'debug', verbose)
-        if software_spi_mode:
+        if software_spi_mode and (probe_type is 'MCP3008'):
             log('SOFTWARE_SPI --> No hardware/driver present, so is going to be slower...', 'warn', verbose)
             # raise KeyboardInterrupt
-        counter_frames = counter_buffer_rms = counter_buffer_normal = 0
+        counter_buffer_rms = counter_buffer_normal = 0
 
         if delta_secs_raw_capture is not None:
             max_counter_frames = delta_secs_raw_capture * n_samples_buffer
+            counter_frames = 0
             buffer_values = np.zeros((n_samples_buffer, len(buffers)))
             buffer_dates = np.array([np.nan] * n_samples_buffer, dtype=dt.datetime)
             tic = time()
@@ -227,35 +228,37 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
             cumsum_sensors_rms = np.zeros(sum([b.is_rms for b in buffers]), dtype=float)
             cumsum_sensors_normal = other_values = np.zeros(sum([not b.is_rms for b in buffers]), dtype=float)
             assert (cumsum_sensors_rms.shape[0] + cumsum_sensors_normal.shape[0] == len(buffers))
-            stop = dt.datetime.now()
-            tic = time()
+            stop = tic = time()
             while True:
                 counter_buffer_rms += 1
-                counter_frames += 1
                 process_all_sensors = counter_buffer_rms % measure_ldr_divisor == 0
-
-                # Read instant values:
-                [b.append(b.read()) for b in buffers if process_all_sensors or b.is_rms]
-
-                # Acumulation:
-                cumsum_sensors_rms += [b.mean() for b in buffers if b.is_rms]
                 if process_all_sensors:
                     counter_buffer_normal += 1
+                    # Read instant values:
+                    [b.append_reading() for b in buffers]
+                    cumsum_sensors_rms += [b.mean() for b in buffers if b.is_rms]
                     cumsum_sensors_normal += [b.mean() for b in buffers if not b.is_rms]
+                else:
+                    # Read instant values:
+                    [b.append_reading() for b in buffers if b.is_rms]
+                    cumsum_sensors_rms += [b.mean() for b in buffers if b.is_rms]
 
                 # yield & reset every delta_sampling_calc:
-                ts = dt.datetime.now()
+                ts = time()
                 if ts - stop > delta_sampling_calc - PREC_SAMPLING:
                     stop = ts
                     power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * SENSORS.rms_multiplier
                     if counter_buffer_normal > 0:
                         other_values = cumsum_sensors_normal / counter_buffer_normal
-                    yield (ts, *power_rms_values, *other_values, counter_buffer_rms, counter_buffer_normal)
+                    yield (dt.datetime.now(), *power_rms_values, *other_values,
+                           counter_buffer_rms, counter_buffer_normal)
                     cumsum_sensors_rms[:] = 0
                     cumsum_sensors_normal[:] = 0
                     counter_buffer_rms = counter_buffer_normal = 0
                 if con_pausa:
-                    sleep(max(.00001, (min_ts_ms - .05) / 1000 - (time() - tic)))
+                    t_sleep = (min_ts_ms - .05) / 1000 - (ts - tic)
+                    if t_sleep > .00005:
+                        sleep(t_sleep)
                     tic = time()
     except KeyboardInterrupt:
         log('KeyboardInterrupt en PISAMPLER: Exiting...', 'warn', verbose)
@@ -309,4 +312,4 @@ def enerpi_raw_sampler(delta_secs=20, n_samples_buffer=SENSORS.n_samples_buffer_
     """
     return _sampler(delta_secs_raw_capture=delta_secs,
                     n_samples_buffer=n_samples_buffer, min_ts_ms=min_ts_ms,
-                    use_dummy_sensors=use_dummy_sensors, verbose=verbose)
+                    use_dummy_sensors=use_dummy_sensors, reset_bias=True, verbose=verbose)

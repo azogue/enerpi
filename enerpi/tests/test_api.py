@@ -2,47 +2,11 @@
 import os
 import pandas as pd
 import shutil
-from unittest import TestCase
-from enerpi.tests.conftest import get_temp_catalog_for_testing
+from enerpi.tests.conftest import TestCaseEnerpi
+import enerpi.prettyprinting as pp
 
 
-class TestAPI(TestCase):
-
-    path_default_datapath = ''
-    before_tests = ''
-    tmp_dir = None
-    DATA_PATH = None
-    cat = None
-
-    @classmethod
-    def setup_class(cls):
-        """
-        Copy example ENERPI files & sets common data catalog for testing.
-
-        """
-        pd.set_option('display.width', 300)
-        # Prepara archivos:
-
-        tmp_dir, data_path, cat, path_default_datapath, before_tests = get_temp_catalog_for_testing()
-        cls.tmp_dir = tmp_dir
-        cls.DATA_PATH = data_path
-        cls.cat = cat
-        cls.path_default_datapath = path_default_datapath
-        cls.before_tests = before_tests
-
-    @classmethod
-    def teardown_class(cls):
-        """
-        Cleanup of temp data on testing.
-
-        """
-        # Restablece default_datapath
-        open(cls.path_default_datapath, 'w').write(cls.before_tests)
-        print('En tearDown, DATA_PATH:{}, listdir:\n{}'.format(cls.DATA_PATH, os.listdir(cls.DATA_PATH)))
-        cls.tmp_dir.cleanup()
-        print(cls.path_default_datapath, cls.before_tests)
-        print(open(cls.path_default_datapath).read())
-        # assert 0
+class TestEnerpiAPI(TestCaseEnerpi):
 
     def test_config(self):
         """
@@ -52,9 +16,9 @@ class TestAPI(TestCase):
         from enerpi.database import CONFIG_CATALOG
         from enerpi.api import enerpi_default_config, CONFIG
         default_conf = enerpi_default_config()
-        print(default_conf)
-        print(CONFIG)
-        print(CONFIG_CATALOG)
+        pp.print_cyan(default_conf)
+        pp.print_info(CONFIG)
+        pp.print_yellowb(CONFIG_CATALOG)
 
     def test_get_last(self):
         """
@@ -123,3 +87,9 @@ class TestAPI(TestCase):
 
         path_raw = os.path.join(self.DATA_PATH, 'test_raw_data2.h5')
         enerpi_raw_data(path_raw, roll_time=1, sampling_ms=0, delta_secs=3, use_dummy_sensors=True, verbose=True)
+
+
+if __name__ == '__main__':
+    import unittest
+
+    unittest.main()

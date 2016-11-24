@@ -138,10 +138,15 @@
                         var hay_table = table.length > 0;
                         var tile = $('.tile-monitor-' + 'enerpi_data');
                         var text_values = tile.find('p.tile-monitor-value');
-{#                        console.log(data);#}
+                        var labeled_nsamples = false;
                         {% set ts_column = data_monitor['ts'] %}
                         {% for s in data_monitor['sensors'] %}
-                            $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}']);
+                            if (!labeled_nsamples) {
+                                $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}'] + ' (#ref=' + String(data['ref']) + ')');
+                                labeled_nsamples = true;
+                            } else {
+                                $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}']);
+                            }
                             {% if s['is_rms'] %}
                             $('.stream-' + '{{ s['name'] }}').html(data['{{ s['name'] }}']);
                             {% else %}

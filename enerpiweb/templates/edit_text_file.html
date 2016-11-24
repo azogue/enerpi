@@ -31,10 +31,12 @@
             {% endif %}
             {% if abspath %}<small style="word-wrap:break-word; overflow-wrap: break-word;">Path: {{ abspath|safe }}</small>{% endif %}
             {% if extra_links %}
-                <div>
-                {% for (text, href) in extra_links %}
-                    <a class="btn btn-warning btn-sm" href="{{ href|safe }}" role="button">{{ text|safe }}</a>
-                {% endfor %}
+                <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar for ENERPI Logger Control">
+                    <div class="btn-group" role="group" aria-label="Config links">
+                        {% for (text, href) in extra_links %}
+                        <a class="btn btn-warning btn-sm" href="{{ href|safe }}" role="button">{{ text|safe }}</a>
+                        {% endfor %}
+                    </div>
                 </div>
             {% endif %}
         </div>
@@ -143,7 +145,7 @@
                         <h4 class="modal-title">Confirm changes?</h4>
                       </div>
                       <div class="modal-body">
-                        <p>Click "Confirm over-write" to save changes in configuration file, over-writting the INI config file {% if abspath %}(Abspath: <strong style="word-wrap:break-word; overflow-wrap: break-word;">{{ abspath|safe }}</strong>){% endif %}
+                        <p>Click "Confirm over-write" to save changes in configuration file, over-writting the config file {% if abspath %}(Abspath: <strong style="word-wrap:break-word; overflow-wrap: break-word;">{{ abspath|safe }}</strong>){% endif %}
                         </p>
                       </div>
                       <div class="modal-footer">

@@ -10,7 +10,7 @@ import matplotlib.patches as mp
 import numpy as np
 import os
 import re
-from enerpi.base import CONFIG, SENSORS, DATA_PATH, CUSTOM_LOCALE, timeit, log
+from enerpi.base import CONFIG, SENSORS, DATA_PATH, CUSTOM_LOCALE, log
 
 
 IMG_BASEPATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
@@ -162,7 +162,6 @@ def _gen_image_path(data, filename):
         return img_name
 
 
-@timeit('plot_power_consumption_hourly')
 def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None, rm_potencia=None, savefig=None):
     f, ax_bar = plt.subplots(figsize=(16, 9))
     color_potencia = ch_color(tableau20[4], .85, alpha=.9)
@@ -239,7 +238,6 @@ def plot_power_consumption_hourly(potencia, consumo, ldr=None, rs_potencia=None,
         return f, [ax_bar, ax_ts]
 
 
-# @timeit('write_fig_to_svg', verbose=True)
 def write_fig_to_svg(fig, name_img, preserve_ratio=False):
     """
     Write matplotlib figure to disk in SVG format.
@@ -306,7 +304,6 @@ def _adjust_tile_limits(name, ylim, date_ini, date_fin, ax):
     return ax
 
 
-@timeit('plot_tile_last_24h')
 def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1), alpha=1, alpha_fill=.5):
     """Plot sensor evolution with 'tile' style (for webserver svg backgrounds)"""
     matplotlib.rcParams['axes.linewidth'] = 0
@@ -332,11 +329,11 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
             ax.xaxis.set_major_locator(mpd.HourLocator((0, 12)))
         else:
             if data_s.name in SENSORS.columns_sensors_rms:
-                div = 500
+                div = 250
                 ylim = (0, np.ceil((data_s.max() + div / 5) / div) * div)
             else:
                 assert data_s.name in SENSORS.columns_sensors_mean
-                div = 100
+                div = 25
                 ylim = (0, np.ceil((data_s.max() + div) // div) * div)
             data_s = data_s
             ax.plot(data_s.index, data_s, color=color, linewidth=lw, alpha=alpha)
@@ -352,7 +349,6 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
     return fig, ax
 
 
-# TODO Parametrize generated tiles
 def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
 
     def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name):
@@ -370,7 +366,6 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
         xlim = mpd.date2num(ahora - dt.timedelta(hours=last_hours[0])), mpd.date2num(ahora)
         delta = xlim[1] - xlim[0]
 
-        # fig, ax = plot_tile_last_24h(catalog.resample_data(last_data.power, rs_data='5min'), barplot=False)
         for c in SENSORS.columns_sensors_rms:
             fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='5min'), barplot=False)
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
@@ -381,10 +376,12 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
             fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='30s', use_median=True),
                                          barplot=False, ax=ax, fig=fig)
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
+            plt.cla()
+            fig.set_figwidth(_tile_figsize()[0])
 
         # TODO Revisión tiles kWh
         if len(last_data_c) > 1:
-            fig, ax = plot_tile_last_24h(last_data_c.kWh, barplot=True)
+            fig, ax = plot_tile_last_24h(last_data_c.kWh, barplot=True, ax=ax, fig=fig)
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data_c.kWh.name)
 
         if fig is not None:
