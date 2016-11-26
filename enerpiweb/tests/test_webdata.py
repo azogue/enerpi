@@ -7,7 +7,8 @@ import enerpi.prettyprinting as pp
 class TestEnerpiWebServerData(TestCaseEnerpiWebServer):
     # Enerpi test scenario:
     # --> DATA_YEAR_2016/DATA_2016_MONTH_10.h5
-    subpath_test_files = 'test_context_2probes_data'
+    subpath_test_files = 'test_context_2probes'
+    # subpath_test_files = 'test_context_2probes_data'
     cat_check_integrity = True
 
     def test_0_distribute_data(self):
@@ -16,13 +17,15 @@ class TestEnerpiWebServerData(TestCaseEnerpiWebServer):
         pp.print_yellowb(self.cat)
 
     def test_1_download_files(self):
+        print(self.cat.tree)
         self.endpoint_request("api/hdfstores/DATA_2016_MONTH_10.h5?as_attachment=true",
-                              status_check=200, mimetype_check='application/octet-stream')
+                              status_check=404, mimetype_check='text/html')
         r = self.endpoint_request("api/hdfstores/DATA_2016_MONTH_10.h5",
+                                  status_check=404, mimetype_check='text/html')
+        self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_23.h5?as_attachment=true",
+                              status_check=200, mimetype_check='application/octet-stream')
+        r = self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_23.h5",
                                   status_check=200, mimetype_check='application/octet-stream')
-        print('Content-Length --> {}'.format(r.headers['Content-Length']))
-        # print(39488131, 39487250, 39487245)
-        self.assertAlmostEqual(int(r.headers['Content-Length']), 39487250, 'Size of HDFSTORE in bytes', delta=2000)
 
     def test_2_context_info(self):
         self.show_context_info()
