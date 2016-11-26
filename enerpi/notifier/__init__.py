@@ -15,22 +15,30 @@ from enerpi.base import CONFIG, log, async_task, RECIPIENT
 # ENERPI Current Meter BOT
 # https://www.pushbullet.com/channel?tag=enerpi_notifications
 CHANNEL = 'enerpi_notifications'
-try:
-    PUSHBULLET_TOKEN = CONFIG.get('NOTIFY', 'PUSHBULLET_TOKEN')
-except (NoOptionError, NoSectionError) as e:
-    PUSHBULLET_TOKEN = None
-    log('NO Pushbullet config ({} [{}])'.format(e, e.__class__), 'error', False)
 PBOBJ = None
-if PUSHBULLET_TOKEN is not None:
-    PBOBJ = Pushbullet(PUSHBULLET_TOKEN)
+
+
+def _get_pb_obj():
+    # Lazy load
+    global PBOBJ
+
+    if PBOBJ is None:
+        try:
+            pushbullet_token = CONFIG.get('NOTIFY', 'PUSHBULLET_TOKEN')
+            PBOBJ = Pushbullet(pushbullet_token)
+        except (NoOptionError, NoSectionError) as e:
+            log('NO Pushbullet config ({} [{}])'.format(e, e.__class__), 'error', False)
+            PBOBJ = None
+    return PBOBJ
 
 
 def _send_direct_push_notification(title, content, email=RECIPIENT):
-    if PUSHBULLET_TOKEN is not None:
-        pb = PBOBJ
+    pb = _get_pb_obj()
+    if pb is not None:
         pb.push_note(title, content, email=email)
+        log('PUSHBULLET NOTIFICATION: {} - {}'.format(title, content), 'debug', False)
         return True
-    log('NO PUSHBULLET NOTIFICATION (token={}), title={}, email={}'.format(PUSHBULLET_TOKEN, title, email),
+    log('NO PUSHBULLET NOTIFICATION (title={}, email={})'.format(title, email),
         'error', True)
     return False
 
@@ -58,18 +66,18 @@ def push_enerpi_channel_msg(title, msg, channel_tag=CHANNEL):
 
     """
     content = '{}\n(time:{:%H:%M:%S})'.format(msg, dt.datetime.now())
-    if PUSHBULLET_TOKEN is not None:
-        # pb = Pushbullet(PUSHBULLET_TOKEN)
-        pb = PBOBJ
+    pb = _get_pb_obj()
+    if pb is not None:
         try:
             ch = list(filter(lambda x: x.channel_tag == channel_tag, pb.channels))[0]
         except IndexError:
             ch = None
         if ch:
             ch.push_note(title, content)
+            log('PUSHBULLET CHANNEL NOTIFICATION: {} - {}'.format(title, content), 'debug', False)
             return True
-    log('NO PUSHBULLET NOTIFICATION (token={}), title={}, channel={}'.format(PUSHBULLET_TOKEN, title, channel_tag),
-        'error', True)
+    log('NO PUSHBULLET CHANNEL NOTIFICATION (title={}, msg={}, channel={})'
+        .format(title, msg, channel_tag), 'error', True)
     return False
 
 
@@ -87,12 +95,13 @@ def push_enerpi_file(path_file, title=None, email=RECIPIENT, channel_tag=None,
     :param verbose:
 
     """
-    if not os.path.exists(path_file):
-        log('Trying to push a non existent file! ->'.format(path_file), 'error', verbose)
+    pb = _get_pb_obj()
+    if pb is None:
+        log('NO PUSHBULLET FILE PUSH (title={}, file={}, email={}, channel={})'
+            .format(title, path_file, email, channel_tag), 'error', True)
         return False
-    elif PUSHBULLET_TOKEN is None:
-        log('NO PUSHBULLET FILE PUSH (token={}), title={}, email={}, channel={}'
-            .format(PUSHBULLET_TOKEN, title, email, channel_tag), 'error', True)
+    elif not os.path.exists(path_file):
+        log('Trying to push a non existent file! ->'.format(path_file), 'error', verbose)
         return False
     tic = time()
     name_file = os.path.basename(path_file)
@@ -114,8 +123,6 @@ def push_enerpi_file(path_file, title=None, email=RECIPIENT, channel_tag=None,
         with open(path_file, 'rb') as f:
             b_content_file = f.read()
     tic_i = time()
-    # pb = Pushbullet(PUSHBULLET_TOKEN)
-    pb = PBOBJ
     file_data = pb.upload_file(b_content_file, name_file)
     toc = time()
     log('PushBullet file upload: {} (name_pic= {}). Took {:.3f} sec'

@@ -113,7 +113,7 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
         print(os.listdir(self.DATA_PATH))
         print(self.raw_file)
         self.endpoint_request("api/filedownload/{}?as_attachment=true".format('raw_store'),
-                              status_check=200, verbose=True)
+                              status_check=302, verbose=True)
         self.endpoint_request("api/hdfstores/TODAY.h5", status_check=200, verbose=True)
         self.endpoint_request("api/hdfstores/TODAY.h5?as_attachment=true", status_check=200)
 

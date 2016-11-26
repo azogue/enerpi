@@ -118,7 +118,7 @@ class TestCaseEnerpi(TestCase):
               .format(cls.tmp_dir, cls.DATA_PATH, os.listdir(cls.DATA_PATH), cls.default_before))
         with open(DEBUG_EXTRA_INFO, 'a') as f:
             f.write('Setup TEST [{}] in "{}"\n'.format(cls.__class__, cls.DATA_PATH))
-        pp.print_red('** CONTEXT HIST:\n{}'.format(open(DEBUG_EXTRA_INFO).read()))
+        # pp.print_red('** CONTEXT HIST:\n{}'.format(open(DEBUG_EXTRA_INFO).read()))
 
     @classmethod
     def teardown_class(cls):

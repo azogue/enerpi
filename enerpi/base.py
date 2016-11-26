@@ -327,12 +327,21 @@ def _makedirs(dest_path):
         if os.path.exists(dest_path):
             os.utime(dest_path, None)
     except PermissionError as e:
-        from time import sleep
         from enerpi.notifier import push_enerpi_error
+        from time import sleep
 
         msg_error = '_makedirs PermissionError (dest_path = {}). Exception: {}. Exit in 2 secs...'.format(dest_path, e)
         log(msg_error, 'error', True, False)
-        push_enerpi_error('ENERPI Fatal error', msg_error, channel_tag='raspberries')
+        push_enerpi_error('ENERPI Fatal error', msg_error)
+        sleep(2)
+        sys.exit(2)
+    except OSError as e:
+        from enerpi.notifier import push_enerpi_error
+        from time import sleep
+
+        msg_error = '_makedirs OSError (dest_path = {}). Exception: {}. Exit in 2 secs...'.format(dest_path, e)
+        log(msg_error, 'error', True, False)
+        push_enerpi_error('ENERPI Fatal error', msg_error)
         sleep(2)
         sys.exit(2)
 

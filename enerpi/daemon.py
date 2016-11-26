@@ -136,6 +136,8 @@ class Daemon:
                 os.kill(pid, SIGTERM)
                 time.sleep(0.2)
             os.kill(pid, SIGKILL)
+            time.sleep(0.5)
+            os.kill(pid, SIGKILL)
         except (ProcessLookupError, OSError) as err:
             # print('Exception en STOP pid={}: {} [{}]'.format(pid, err, err.__class__))
             err = str(err)

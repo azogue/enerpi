@@ -7,6 +7,7 @@ import pandas as pd
 import re
 import shutil
 from enerpi.base import timeit, log, INDEX_DATA_CATALOG
+from enerpi.notifier import push_enerpi_error
 
 
 ARCHIVE_AUTO = 0
@@ -320,11 +321,21 @@ class HDFTimeSeriesCatalog(object):
                 else:
                     data = func_store(st)
             return data
+
         except KeyError as e:
             log('load_hdf KEYERROR -> ST:"{}", KEY:{}; -> {}'.format(p, k, e), 'error', self.verbose)
-        except OSError as e:
-            log('load_hdf OSERROR -> ST:"{}", KEY:"{}"'
-                .format(p, k, e, e.__class__, os.path.exists(p)), 'debug', self.verbose)
+        except (OSError, AttributeError) as e:
+            if os.path.exists(p):
+                # HDF5ExtError error back trace (TODO SANITIZE BAD STORE)
+                path_bkp = os.path.splitext(p)[0] + '_bad_bkp_{:%Y_%m_%d_%H%M%S}'.format(pd.Timestamp.now())
+                msg_err = 'load_hdf HDF5ExtError => bad store! -> ST:"{}", KEY:{}; -> {}\nBACKUP TO {} & REMOVAL'
+                msg_err = msg_err.format(p, k, e, path_bkp)
+                log(msg_err, 'error', True)
+                push_enerpi_error('HDF5ExtError', msg_err)
+                shutil.copy(p, path_bkp)
+                os.remove(p)
+            else:
+                log('load_hdf OSERROR -> ST:"{}", KEY:"{}", ERROR={}'.format(p, k, e), 'debug', self.verbose)
         return None
 
     def _save_hdf(self, data, path, key, mode='a', **kwargs):
@@ -804,6 +815,28 @@ class HDFTimeSeriesCatalog(object):
         """
         path_export = os.path.join(self.base_path, filename)
         log('EXPORT ALL DATA TO CSV --> "{}"'.format(path_export), 'info', self.verbose)
+        all_data = self.get_all_data(False)
+        if (all_data is not None) and not all_data.empty:
+            all_data = pd.DataFrame(all_data)
+            all_data.to_csv(path_export)
+            log('EXPORT ALL DATA TO CSV DONE! ({} samples, from {:%d-%m-%y %H:%M} to {:%d-%m-%y %H:%M})'
+                .format(len(all_data), all_data.index[0], all_data.index[-1]), 'info', self.verbose)
+        else:
+            log('NO DATA TO EXPORT! (all_data={})'.format(all_data), 'error', self.verbose)
+        return all_data
+
+    # TODO EXPORT IN CHUNKS
+    def export_chunk(self, filename='enerpi_all_data.csv', chunksize=10000):
+        """
+        Get all samples & export to CSV file
+
+        :param filename: destination path of CSV file
+        :return: pandas DataFrame with all data
+
+        """
+        path_export = os.path.join(self.base_path, filename)
+        paths_idx = self._get_paths(self.min_ts, None)
+        log('EXPORT ALL DATA ({}) TO CSV --> "{}"'.format(paths_idx, path_export), 'info', self.verbose)
         all_data = self.get_all_data(False)
         if (all_data is not None) and not all_data.empty:
             all_data = pd.DataFrame(all_data)

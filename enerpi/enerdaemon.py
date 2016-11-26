@@ -41,18 +41,17 @@ def enerpi_daemon(test_mode=False):
             except PermissionError as e:
                 sys.stderr.write("PERMISSIONERROR: pidfile can't be registered ({}). Need sudo powers?".format(e))
         elif 'stop' == sys.argv[1]:
-            _ = daemon.stop()
-            ok = daemon.status()
             stopped = daemon.stop()
-            log('ENERPI Logger daemon stopped:{}, status after 1º stop:{}'.format(stopped, ok), 'warn', True, False)
+            log('ENERPI Logger daemon stopped:{}'
+                .format(stopped), 'warn', True, True)
         elif 'status' == sys.argv[1]:
-            log('ENERPI Logger daemon status?', 'debug', True, False)
+            log('ENERPI Logger daemon status?', 'debug', True, True)
             daemon.status()
         elif 'restart' == sys.argv[1]:
             daemon.restart()
-            log('ENERPI Logger daemon restarting', 'info', False)
+            log('ENERPI Logger daemon restarting', 'info', True, True)
         else:
-            log("Unknown command", 'warn', True, False)
+            log("Unknown command", 'warn', True, True)
             if not test_mode:
                 sys.exit(2)
         if not test_mode:

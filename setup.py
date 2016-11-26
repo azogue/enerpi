@@ -50,7 +50,7 @@ setup(
     },
     install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7',
                       'flask>=0.11.1', 'flask-autodoc>=0.1.2', 'wtforms>=2.1',  'cryptography>=1.5.2',
-                      'gpiozero>=1.3.1', 'RPi.GPIO>=0.6.3',
+                      'gpiozero>=1.3.1',  # 'RPi.GPIO>=0.6.3',
                       'matplotlib>=1.5.3', 'bokeh>=0.12.3', 'cairosvg>=1.0.22', 'termcolor>=1.1.0',
                       'python-crontab', 'jsondiff>=1.0.0'],
 
