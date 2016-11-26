@@ -24,6 +24,7 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
                 "{}/api/bokehplot".format(self.url_prefix),
                 "{}/api/showfile".format(self.url_prefix),
                 "{}/api/monitor".format(self.url_prefix),
+                "{}/api/email".format(self.url_prefix),
                 "{}/api/last".format(self.url_prefix),
                 "{}/api/help".format(self.url_prefix),
                 "{}/control".format(self.url_prefix),
@@ -40,7 +41,8 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
                 "{}/api/restart/<service>".format(self.url_prefix)
             ]
         }
-        result = self.endpoint_request('api/help')
+        self.endpoint_request('api/help')
+        result = self.endpoint_request('api/help?json=True')
         routes = json.loads(result.data.decode())
         print(routes)
         print(routes_defined)
@@ -111,9 +113,9 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
         print(os.listdir(self.DATA_PATH))
         print(self.raw_file)
         self.endpoint_request("api/filedownload/{}?as_attachment=true".format('raw_store'),
-                              status_check=302, verbose=True)
-        self.endpoint_request("api/hdfstores/TODAY.h5", status_check=404, verbose=True)
-        self.endpoint_request("api/hdfstores/TODAY.h5?as_attachment=true", status_check=404)
+                              status_check=200, verbose=True)
+        self.endpoint_request("api/hdfstores/TODAY.h5", status_check=200, verbose=True)
+        self.endpoint_request("api/hdfstores/TODAY.h5?as_attachment=true", status_check=200)
 
     def test_4_upload_files(self):
         print('test_upload_files:')

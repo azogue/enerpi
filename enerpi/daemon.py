@@ -126,7 +126,7 @@ class Daemon:
         if not pid:
             message = "pidfile %s does not exist. Daemon not running?\n"
             sys.stderr.write(message % self.pidfile)
-            return  # not an error in a restart
+            return True  # not an error in a restart
 
         # Try killing the daemon process
         try:
@@ -146,6 +146,7 @@ class Daemon:
                 if self.test_mode:
                     return False
                 sys.exit(1)
+        return True
 
     def status(self):
         """
@@ -157,13 +158,13 @@ class Daemon:
             message = "pidfile %s exist. Daemon is running with PID={}\n".format(pid)
             sys.stdout.write(message % self.pidfile)
             print('STATUS OK!')
-            return  # not an error in a restart
+            return True  # not an error in a restart
         else:
             message = "pidfile %s does not exist. Daemon not running?\n"
             sys.stderr.write(message % self.pidfile)
-            if self.test_mode:
-                return False
-            sys.exit(1)
+            # if self.test_mode:
+            return False
+            # sys.exit(1)
 
     def restart(self):
         """

@@ -10,7 +10,8 @@ from time import sleep, time
 from enerpi.base import SENSORS, log
 
 
-PREC_SAMPLING = .0005  # := dt.timedelta(microseconds=500)
+PREC_SAMPLING = .0002  # := dt.timedelta(microseconds=500)
+MIN_NUM_SAMPLES_RMS = 10
 HOST = check_output('hostname').decode().splitlines()[0]
 EXAMPLE_POWER_EV = [(0, 300), (3, 1200), (6, 3250), (8, 700), (9, 100), (10, 0), (12, 300)]
 
@@ -202,8 +203,8 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
             .format(probe_type, SENSORS[0].channel, buffers[0].read(), buffers[0].is_active, software_spi_mode,
                     n_samples_buffer_rms, n_samples_buffer_normal), 'debug', verbose)
         if software_spi_mode and (probe_type is 'MCP3008'):
-            log('SOFTWARE_SPI --> No hardware/driver present, so is going to be slower...', 'warn', verbose)
-            # raise KeyboardInterrupt
+            log('SOFTWARE_SPI --> No hardware/driver present, so bye bye...', 'error', verbose)
+            raise KeyboardInterrupt
         counter_buffer_rms = counter_buffer_normal = 0
 
         if delta_secs_raw_capture is not None:
@@ -245,7 +246,7 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
 
                 # yield & reset every delta_sampling_calc:
                 ts = time()
-                if ts - stop > delta_sampling_calc - PREC_SAMPLING:
+                if (ts - stop > delta_sampling_calc - PREC_SAMPLING) and counter_buffer_rms > MIN_NUM_SAMPLES_RMS:
                     stop = ts
                     power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * SENSORS.rms_multiplier
                     if counter_buffer_normal > 0:
@@ -255,7 +256,7 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                     cumsum_sensors_rms[:] = 0
                     cumsum_sensors_normal[:] = 0
                     counter_buffer_rms = counter_buffer_normal = 0
-                if con_pausa:
+                elif con_pausa:
                     t_sleep = (min_ts_ms - .05) / 1000 - (ts - tic)
                     if t_sleep > .00005:
                         sleep(t_sleep)

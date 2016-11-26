@@ -70,6 +70,23 @@ def ts_strftime(ts):
         return str(ts)
 
 
+@app.template_filter('docstrip')
+def docstrip(str_doc):
+    """
+    multi-line text stripper (jinja2 template filter)
+
+    :param str_doc:
+    :return: tunned str
+
+    """
+    # print('DEBUG en docstrip: ', str_doc)
+    str_doc = str_doc.rstrip().rstrip('\n')
+    str_doc = str_doc.lstrip().lstrip('\n')
+    str_doc = str_doc.replace('\n', '<br>')
+    # print('DEBUG docstrip RESULT: ', str_doc)
+    return str_doc
+
+
 # @app.errorhandler(InvalidAPIUsage)
 # def handle_invalid_usage(error):
 #     response = jsonify(error.to_dict())

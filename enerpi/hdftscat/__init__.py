@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import re
 import shutil
-from enerpi.base import timeit, log
+from enerpi.base import timeit, log, INDEX_DATA_CATALOG
 
 
 ARCHIVE_AUTO = 0
@@ -20,14 +20,13 @@ KWARGS_SAVE = dict(complevel=9, complib='blosc', fletcher32=True)
 DIR_CURRENT_MONTH = 'CURRENT_MONTH'
 DIR_BACKUP = 'OLD_STORES'
 ST_TODAY = os.path.join(DIR_CURRENT_MONTH, 'TODAY' + STORE_EXT)
-INDEX = 'data_catalog.csv'
 
-YEAR_MASK = '{}_YEAR_{:%Y}'
-RG_YEAR_MASK = re.compile('(?P<name>\.*)_YEAR_(?P<year>\d{4})')
-MONTH_MASK = '{}_{:%Y_MONTH_%m}' + STORE_EXT
-RG_MONTH_MASK = re.compile('(?P<name>\.*)_(?P<year>\d{4})_MONTH_(?P<month>\d{2})')
-DAY_MASK = '{}_{:%Y_%m_DAY_%d}' + STORE_EXT
-RG_DAY_MASK = re.compile('(?P<name>\.*)_(?P<year>\d{4})_(?P<month>\d{2})_DAY_(?P<day>\d{2})')
+YEAR_MASK = 'DATA_YEAR_{:%Y}'
+RG_YEAR_MASK = re.compile('DATA_YEAR_(?P<year>\d{4})')
+MONTH_MASK = 'DATA_{:%Y_MONTH_%m}' + STORE_EXT
+# RG_MONTH_MASK = re.compile('DATA_(?P<year>\d{4})_MONTH_(?P<month>\d{2})')
+DAY_MASK = 'DATA_{:%Y_%m_DAY_%d}' + STORE_EXT
+RG_DAY_MASK = re.compile('DATA_(?P<year>\d{4})_(?P<month>\d{2})_DAY_(?P<day>\d{2})')
 
 
 def _get_time_slice(start=None, end=None, last_hours=None, min_ts=None):
@@ -59,7 +58,46 @@ def _concat_loaded_data(dataframes, ini, fin=None, verbose=False):
     return None
 
 
-# TODO to_json / from_json para recoger info vía webapi y replicarla en un catálogo remoto
+def _make_index_path(ts, w_day=False):
+    if ts.date() == pd.Timestamp.today().date():
+        p = ST_TODAY
+    elif w_day:
+        p = os.path.join(DIR_CURRENT_MONTH, DAY_MASK.format(ts))
+    else:
+        p = os.path.join(YEAR_MASK.format(ts), MONTH_MASK.format(ts))
+    return p
+
+
+def get_catalog_paths(start=None, end=None, last_hours=None, min_ts=None):
+    """
+    Return list of relative paths to hdf stores for a time slice.
+
+    :param start: str or datetime like object for start
+    :param end: str or datetime like object for end
+    :param last_hours: str or int for slice time from now - 'last_hours' to now
+    :param min_ts: optional absolute datetime minimum (datetime like object)
+    :return: list of relpaths
+
+    """
+    t0, tf = _get_time_slice(start, end, last_hours, min_ts=min_ts)
+    ahora = pd.Timestamp.now()
+    try:
+        t0 = pd.Timestamp(t0)
+        tf = pd.Timestamp(tf) if tf else ahora
+    except ValueError as e:
+        log('ValueError "{}" in _get_paths with ts_ini={} & ts_fin={}'.format(e, t0, tf), 'error')
+        return []
+    periods = (tf.year * 12 + tf.month) - (t0.year * 12 + t0.month)
+    index = pd.DatetimeIndex(freq='M', start=t0.date(), periods=periods + 1)
+    paths = []
+    for i in index:
+        if (ahora.year == i.year) and (ahora.month == i.month):
+            init = ahora.replace(day=1).date() if len(paths) > 0 else t0.date()
+            index_d = pd.DatetimeIndex(freq='D', start=init, periods=tf.day - init.day + 1)
+            [paths.append(_make_index_path(i, w_day=True)) for i in index_d]
+        else:
+            paths.append(_make_index_path(i, w_day=False))
+    return paths
 
 
 class HDFTimeSeriesCatalog(object):
@@ -121,17 +159,15 @@ class HDFTimeSeriesCatalog(object):
 
     def __init__(self,
                  base_path=os.getcwd(),
-                 preffix='DATA',
                  raw_file='temp' + STORE_EXT,
                  key_raw_data='/raw_data',
                  key_summary_data='/hours',
                  key_summary_extra='/days',
-                 catalog_file=INDEX,
+                 catalog_file=INDEX_DATA_CATALOG,
                  check_integrity=True,
                  archive_existent=False,
                  verbose=True):
         self.base_path = os.path.abspath(base_path)
-        self.name = preffix
         self.verbose = verbose
 
         self.raw_store = raw_file + STORE_EXT if not raw_file.endswith(STORE_EXT) else raw_file
@@ -188,9 +224,9 @@ class HDFTimeSeriesCatalog(object):
     def __repr__(self):
         mints = '{:%B/%Y}'.format(self.min_ts) if self._exist() else '--'
         idxts = '{:%d/%m/%y %H:%M:%S}'.format(self.index_ts) if self._exist() else '--'
-        cad = '<HDFCatalog[{}] ->{}; From:{}; last_upd={}>\n\tINDEX [{}]:\n{}\n'
+        cad = '<HDFCatalog ->{}; From:{}; last_upd={}>\n\tINDEX [{}]:\n{}\n'
         catalog = self.tree.sort_values(by=['is_cat', 'key', 'ts_fin']) if self._exist() else '\t\t*NO INDEX*'
-        return cad.format(self.name, self.base_path, mints, idxts, self.catalog_file, catalog)
+        return cad.format(self.base_path, mints, idxts, self.catalog_file, catalog)
 
     def _ts_filepath(self, rel_path):
         if self.base_path not in rel_path:
@@ -308,39 +344,8 @@ class HDFTimeSeriesCatalog(object):
         log('STORE "{}", "{}"\t->\t{:.1f} KB'.format(path, key, os.path.getsize(p) / 1000), 'debug', self.verbose)
         return True
 
-    def _make_index_path(self, ts, w_day=False):
-        if ts.date() == pd.Timestamp.today().date():
-            p = ST_TODAY
-        elif w_day:
-            p = os.path.join(DIR_CURRENT_MONTH, DAY_MASK.format(self.name, ts))
-        else:
-            p = os.path.join(YEAR_MASK.format(self.name, ts), MONTH_MASK.format(self.name, ts))
-        return p
-
     def _get_paths(self, start=None, end=None, last_hours=None):
-
-        def _get_paths_interval(ts_ini, ts_fin=None):
-            ahora = pd.Timestamp.now()
-            try:
-                ts_ini = pd.Timestamp(ts_ini)
-                ts_fin = pd.Timestamp(ts_fin) if ts_fin else ahora
-            except ValueError as e:
-                log('ValueError "{}" in _get_paths with ts_ini={} & ts_fin={}'.format(e, ts_ini, ts_fin), 'error')
-                return []
-            periods = (ts_fin.year * 12 + ts_fin.month) - (ts_ini.year * 12 + ts_ini.month)
-            index = pd.DatetimeIndex(freq='M', start=ts_ini.date(), periods=periods + 1)
-            paths = []
-            for i in index:
-                if (ahora.year == i.year) and (ahora.month == i.month):
-                    init = ahora.replace(day=1).date() if len(paths) > 0 else ts_ini.date()
-                    index_d = pd.DatetimeIndex(freq='D', start=init, periods=ts_fin.day - init.day + 1)
-                    [paths.append(self._make_index_path(i, w_day=True)) for i in index_d]
-                else:
-                    paths.append(self._make_index_path(i, w_day=False))
-            return paths
-
-        t0, tf = _get_time_slice(start, end, last_hours, min_ts=self.min_ts)
-        return _get_paths_interval(ts_ini=t0, ts_fin=tf)
+        return get_catalog_paths(start, end, last_hours, min_ts=self.min_ts)
 
     def _load_today(self):
         return self._load_hdf(ST_TODAY, key=self.key_raw)
@@ -381,14 +386,14 @@ class HDFTimeSeriesCatalog(object):
                                         paths.append(ST_TODAY)
                                     else:
                                         # ARCHIVE DAY
-                                        p = self._make_index_path(ts_day, w_day=True)
+                                        p = _make_index_path(ts_day, w_day=True)
                                         log('# ARCHIVE DAY {:%Y-%m-%d} -> {}'.format(ts_day, p), 'debug', self.verbose)
                                         c_day = self.process_data_summary(d_day)
                                         func_save_data(p, d_day, c_day, None)
                                         paths.append(p)
                         else:
                             # ARCHIVE MONTH
-                            p = self._make_index_path(ts_month, w_day=False)
+                            p = _make_index_path(ts_month, w_day=False)
                             log('# ARCHIVE MONTH --> {}. GOING TO process_data_summary_extra'.format(p),
                                 'debug', self.verbose)
                             c_month, c_month_extra = self.process_data_summary_extra(d_month)
@@ -785,12 +790,8 @@ class HDFTimeSeriesCatalog(object):
                 return p
         return None
 
-    # def info_catalog(self):
-    #     # TODO Tabla de información del catálogo: ruta, archivo, n_rows, ts_ini, ts_fin, medidas de completitud
-    #     raise NotImplementedError
-    #
     # def backup(self, path_backup, compact_data=None):
-    #     # TODO backup a ruta alternativa, con compresión y opción de replicado de tree o compactado (x años, o total)
+    #     # TODO backup/sync a GDRIVE, para ejecutar periódicamente
     #     raise NotImplementedError
 
     def export(self, filename='enerpi_all_data.csv'):

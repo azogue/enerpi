@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from 'macros.html' import alert_dismiss with context %}
+{% from 'macros/macros.html' import alert_dismiss with context %}
 
 {% macro tag_file_download(p, t0, tf, ns, btn_type)%}
     <a href="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
@@ -21,53 +21,54 @@
                 </div>
                 <div class="col-xs-6 col-sm-8 col-md-9 col-lg-9">
                     <h1 class="display-5">EnerPI Control</h1>
-{#                    {% if is_sender_active %}#}
-{#                        <h6>Status: <strong class="tag tag-pill tag-success">ACTIVE</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>#}
-{#                    {% else %}#}
-{#                        <h6>Status: <strong class="tag tag-pill tag-danger">OFF</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>#}
-{#                    {% endif %}#}
                 </div>
                 <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">
                     <br class="hidden-sm hidden-xs">
                     <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with enerPI LOG's">
-                      <div class="btn-group" role="group" aria-label="FLASK LOG">
-                        <a class="btn btn-secondary btn-outline-primary" href="{{ url_for('showfile', file='flask', tail=200, reverse=True)}}" role="button">Flask LOG</a>
-                        <a class="btn btn-secondary btn-outline-primary" href="{{ url_for('showfile', file='rsc', tail=200, reverse=True)}}" role="button">RSC gen.</a>
-                      </div>
                       <div class="btn-group" role="group" aria-label="ENERPI LOG">
                         <a class="btn btn-outline-success btn-block" href="{{ url_for('showfile', file='enerpi', tail=200, reverse=True)}}" role="button"><i class="fa fa-bolt" aria-hidden="true"></i> EnerPi LOG</a>
                       </div>
+                      <div class="btn-group" role="group" aria-label="FLASK LOG">
+                        <a class="btn btn-outline-primary" href="{{ url_for('showfile', file='flask', tail=200, reverse=True)}}" role="button">Flask LOG</a>
+                        <a class="btn btn-outline-primary" href="{{ url_for('showfile', file='rsc', tail=200, reverse=True)}}" role="button">RSC gen.</a>
+                      </div>
+                      <br class="hidden-sm-up">
                       <div class="btn-group" role="group" aria-label="ENERPI CONFIG">
                         <a class="btn btn-outline-danger btn-block" href="{{ url_for('editfile', file='config')}}" role="button"><i class="fa fa-sliders" aria-hidden="true"></i> ENERPI Configuration</a>
                       </div>
-                      <br class="hidden-sm hidden-xs">
+                      <br class="hidden-sm-down">
+                      <br class="hidden-md-down">
                       <div class="btn-group" role="group" aria-label="UWSGI+NGINX LOGs">
-                        <a class="btn btn-sm btn-secondary btn-outline-warning" href="{{ url_for('showfile', file='uwsgi', tail=200, reverse=True)}}" role="button">UWSGI LOG</a>
+                        <a class="btn btn-sm btn-outline-warning" href="{{ url_for('showfile', file='uwsgi', tail=200, reverse=True)}}" role="button">UWSGI LOG</a>
                         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('showfile', file='nginx', tail=200, reverse=True)}}" role="button">NGINX Access</a>
                         <a class="btn btn-sm btn-outline-danger" href="{{ url_for('showfile', file='nginx_err', tail=200, reverse=True)}}" role="button">NGINX Errors</a>
                       </div>
+{#                    TODO pushbullet subscribe-widget#}
+                        <a class="pushbullet-subscribe-widget" data-channel="enerpi_notifications"
+                           data-widget="button" data-size="small"></a>
+                        <script type="text/javascript">
+                            (function(){
+                                var a=document.createElement('script');
+                                a.type='text/javascript';
+                                a.async=true;
+                                a.src='https://widget.pushbullet.com/embed.js';
+                                var b=document.getElementsByTagName('script')[0];
+                                b.parentNode.insertBefore(a,b);
+                            })();
+                        </script>
                     </div>
                 </div>
-{#                <div class="col-xs-12 col-sm-8 col-md-9 col-lg-6">#}
-{#                    <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with enerPI links to plots & tables">#}
-{#                      <div class="btn-group" role="group" aria-label="LINKS">#}
-{#                        <a class="btn btn-secondary btn-outline-success" href="{{ url_for('bokehplot')}}" role="button">#}
-{#                            <i class="fa fa-area-chart" aria-hidden="true"></i> Graph last</a>#}
-{#                      </div>#}
-{#                    </div>#}
-{#                </div>#}
             </div>
         </div>
     </div>
     {% if alerta %}
         {{ alert_dismiss(alerta) }}
     {% endif %}
-{#    <hr>#}
     <div class="container-fluid">
         <h3><strong><i class="fa fa-fire-extinguisher" aria-hidden="true"></i> enerPI logger administration</strong></h3>
         <hr>
         <div class="col-xs-12 col-sm-6 col-md-4 col-lg-4">
-        {% if is_sender_active %}
+        {% if is_sender_active and not after_sysop %}
             <h6>Status: <strong class="tag tag-pill tag-success">ACTIVE</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
         {% else %}
             <h6>Status: <strong class="tag tag-pill tag-danger">OFF</strong>; Host: <strong class="tag tag-pill tag-primary">{{ d_last_msg['host'] }}</strong> </h6>
@@ -76,8 +77,8 @@
         <div class="col-xs-12 col-sm-6 col-md-4 col-lg-4">
         <div class="btn-toolbar button-wrapper float-sm-right float-md-left" role="toolbar" aria-label="Toolbar for ENERPI Logger stderr/stdout">
             <div class="btn-group" role="group" aria-label="DEBUG">
-                <a class="btn btn-secondary btn-sm btn-outline-primary" href="{{ url_for('showfile', file='daemon_out', tail=500)}}" role="button">Daemon OUT</a>
-                <a class="btn btn-secondary btn-sm btn-outline-primary" href="{{ url_for('showfile', file='daemon_err', tail=500)}}" role="button">Daemon ERR</a>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('showfile', file='daemon_out', tail=500)}}" role="button">Daemon OUT</a>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('showfile', file='daemon_err', tail=500)}}" role="button">Daemon ERR</a>
             </div>
         </div>
         </div>
@@ -86,10 +87,13 @@
             <form method="POST">
                 {{ form_operate.hidden_tag() }}
                 <div class="btn-group" role="group" aria-label="Start-Stop">
-                    <input class="btn btn-secondary btn-sm btn-outline-{% if is_sender_active %}danger{% else %}success{% endif %}"
-                           type="submit" formaction="{{ url_for('startstop', service='enerpi')}}"
+{#                    TODO logic enerpi active in client -> jquery y api/active --> json: {active: True, **params}#}
+                    <input class="btn btn-sm btn-outline-{% if is_sender_active %}danger{% else %}success{% endif %}" type="submit"
+                           formaction="{% if is_sender_active %}{{ url_for('startstop', service='enerpi_stop')}}{% else %}{{ url_for('startstop', service='enerpi_start')}}{% endif %}"
+                           {% if after_sysop %}disabled{% endif %}
                            value="{% if is_sender_active %}Stop{% else %}Start{% endif %} logger">
-                    <input class="btn btn-secondary btn-sm btn-outline-danger"
+                    <input class="btn btn-sm btn-outline-danger"
+                           {% if after_sysop %}disabled{% endif %}
                            type="submit" formaction="{{ url_for('startstop', service='machine')}}"
                            value="Reboot system">
                 </div>
@@ -99,6 +103,12 @@
     </div>
     <hr>
     <div class="container-fluid">
+        <h3><strong><i class="fa fa-flag-checkered" aria-hidden="true"></i> Reports</strong></h3>
+        <hr>
+        <h6 style="line-height: 1.5em;">
+            <a class="btn btn btn-success" href="{{ url_for('send_email')}}" role="button"><i class="fa fa-envelope-o" aria-hidden="true"></i><strong> EMAIL Status last 24h</strong></a>
+        </h6>
+        <hr>
         <h3><strong><i class="fa fa-database" aria-hidden="true"></i> HDF data stores</strong> <small>(from {{ d_catalog['ts_init']|ts_strftime }})</small></h3>
         <hr>
         <h6 style="line-height: 1.5em;">

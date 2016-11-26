@@ -7,7 +7,7 @@ import sys
 from enerpi.base import log
 from enerpi.api import enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version
-from enerpiweb import app, WITH_ML_SUBSYSTEM
+from enerpiweb import app, auto, WITH_ML_SUBSYSTEM
 from enerpiweb.rt_stream import stream_is_alive
 from enerpiweb.forms import DummyForm
 
@@ -27,14 +27,15 @@ if WITH_ML_SUBSYSTEM:
 #############################
 # INDEX & ROUTES
 #############################
-# TODO Fix layout of control buttons
-@app.route('/control')
+@app.route('/control', methods=['GET'])
+@auto.doc()
 def control():
     """
     Admin Control Panel with links to LOG viewing/downloading, hdf_stores download, ENERPI config editor, etc.
 
     """
     is_sender_active, last = stream_is_alive()
+    after_sysop = request.args.get('after_sysop', '')
     alerta = request.args.get('alerta', '')
     if alerta:
         alerta = json.loads(alerta)
@@ -52,20 +53,27 @@ def control():
                                       'path_catalog': os.path.join(cat.base_path, cat.catalog_file),
                                       'ts_init': cat.min_ts, 'ts_catalog': cat.index_ts},
                            d_last_msg=last, is_sender_active=is_sender_active, list_stores=paths_rel,
-                           form_operate=form_operate,
+                           form_operate=form_operate, after_sysop=after_sysop,
                            alerta=alerta)
 
 
 @app.route('/api/help', methods=['GET'])
 def api_help():
-    """Return JSON with app routes"""
-    # TODO hacer tabla en html con url rules:
-    endpoints = [rule.rule for rule in app.url_map.iter_rules()
-                 if rule.endpoint != 'static']
-    return jsonify(dict(api_endpoints=endpoints))
+    """
+    Documentation page generated with 'Autodoc', with custom template;
+    or json response with server routes (with ?json=true)
+
+    """
+    w_json = request.args.get('json', False)
+    if w_json:
+        endpoints = [rule.rule for rule in app.url_map.iter_rules()
+                     if rule.endpoint != 'static']
+        return jsonify(dict(api_endpoints=endpoints))
+    return auto.html(template='doc/api_help.html', title='enerPI Help')
 
 
-@app.route('/api/bokehplot')
+@app.route('/api/bokehplot', methods=['GET'])
+@auto.doc()
 def bokehplot():
     """
     Base webpage for query & show bokeh plots of ENERPI data
@@ -74,43 +82,53 @@ def bokehplot():
     return render_template('bokeh_plot.html', url_stream_bokeh=url_for('bokeh_buffer'), b_version=BOKEH_VERSION)
 
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def base_index():
     """
-    Redirects to 'index', with real-time monitoring of ENERPI values
+    Redirects to 'index', with real-time monitoring tiles of ENERPI sensors
 
     """
     return redirect(url_for('index'))
 
 
-# TODO Gestión logger y webserver
-def _system_operation(cmd):
-    log('SYSTEM_OPERATION CMD: "{}"'.format(cmd), 'debug', False)
-    os.system(cmd)
-    log('Still alive?? (pid={})'.format(os.getpid()), 'debug', False)
-
-
+#############################
+# ENERPI SERVER COMMAND
+#############################
 @app.route('/api/restart/<service>', methods=['POST'])
-def startstop(service='enerpi'):
+@auto.doc()
+def startstop(service='enerpi_start'):
     """
     Endpoint for control ENERPI in RPI. Only for dev mode.
     It can restart the ENERPI daemon logger or even reboot the machine for a fresh start after a config change.
-    :param service: service id ('enerpi' for reloading the logger, or 'machine' for a reboot)
+
+    :param service: service id ('enerpi_start/stop' for operate with the logger, or 'machine' for a reboot)
 
     """
-    log('En {}!, con service="{}", request.form={}'.format(request.url_rule, service, request.form), 'debug', False)
-    form, cmd, msg = DummyForm(), None, None
+    def _system_operation(command):
+        log('SYSTEM_OPERATION CMD: "{}"'.format(command), 'debug', False)
+        os.system(command)
+
+    form = DummyForm()
+    cmd = msg = alert = None
     if form.validate_on_submit():
-        if service == 'enerpi':
+        if service == 'enerpi_start':
             python_pathbin = os.path.dirname(sys.executable)
-            cmd = '{}/enerpi-daemon restart'.format(python_pathbin)
-            msg = 'Restarting ENERPI logger... ({})'.format(cmd)
+            cmd = '{}/enerpi-daemon start'.format(python_pathbin)
+            msg = 'Starting ENERPI logger from webserver... ({})'.format(cmd)
+            alert = 'warning'
+        elif service == 'enerpi_stop':
+            python_pathbin = os.path.dirname(sys.executable)
+            cmd = '{}/enerpi-daemon stop'.format(python_pathbin)
+            msg = 'Stopping ENERPI logger from webserver... ({})'.format(cmd)
+            alert = 'danger'
         elif service == 'machine':
-            cmd = 'sudo reboot now'
+            cmd = 'reboot now'
             msg = 'Rebooting! MACHINE... see you soon... ({})'.format(cmd)
+            alert = 'danger'
         if cmd is not None:
             log(msg, 'debug', False)
-            t = Timer(3, _system_operation, args=(cmd,))
+            t = Timer(.5, _system_operation, args=(cmd,))
             t.start()
-            return redirect(url_for('control', alerta=json.dumps({'alert_type': 'warning', 'texto_alerta': msg})))
+            return redirect(url_for('control', after_sysop=True,
+                                    alerta=json.dumps({'alert_type': alert, 'texto_alerta': msg})))
     return abort(500)

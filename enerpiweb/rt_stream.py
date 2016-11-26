@@ -11,7 +11,7 @@ from time import sleep, time
 from enerpi.base import SENSORS, log
 from enerpi.api import enerpi_receiver_generator, enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version, html_plot_buffer_bokeh
-from enerpiweb import app
+from enerpiweb import app, auto
 
 
 BUFFER_MAX_SAMPLES = 1800
@@ -30,7 +30,7 @@ def stream_is_alive():
     global last_data
     last = last_data.copy()
     try:
-        is_sender_active = (pd.Timestamp.now(tz=SENSORS.TZ) - last[SENSORS.ts_column]) < pd.Timedelta('20s')
+        is_sender_active = (pd.Timestamp.now(tz=SENSORS.TZ) - last[SENSORS.ts_column]) < pd.Timedelta('5s')
     except KeyError:
         is_sender_active = False
         last = {'host': '?', SENSORS.main_column: -1, SENSORS.ts_column: pd.Timestamp.now(tz=SENSORS.TZ)}
@@ -121,7 +121,7 @@ class ReceiverThread(Thread):
                 buffer_last_data.append(last_data)
                 # print('DEBUG STREAM: last_data --> ', last_data)
             except StopIteration:
-                log('StopIteration on counter={}'.format(count), 'debug', True)
+                log('StopIteration on counter={}'.format(count), 'debug', False)
                 if count > 0:
                     sleep(2)
                     gen = enerpi_receiver_generator()
@@ -131,7 +131,7 @@ class ReceiverThread(Thread):
             count += 1
             sleep(.5)
         log('**BROADCAST_RECEIVER en PID={}, thread={}. CLOSED on counter={}'
-            .format(os.getpid(), current_thread(), count), 'warn', True)
+            .format(os.getpid(), current_thread(), count), 'warn', False)
 
 
 @app.before_first_request
@@ -147,7 +147,8 @@ def _init_receiver():
 ###############################
 # STREAM REAL-TIME SENSORS DATA
 ###############################
-@app.route('/api/last')
+@app.route('/api/last', methods=['GET'])
+@auto.doc()
 def last_value_json():
     """
     Return last received msg from ENERPI logger in JSON
@@ -162,6 +163,7 @@ def last_value_json():
 
 
 @app.route("/api/stream/realtime", methods=["GET"])
+@auto.doc()
 def stream_sensors():
     """
     Stream real-time data as it is received from ENERPI broadcast.
@@ -195,6 +197,7 @@ def stream_sensors():
 @app.route('/api/stream/bokeh/from/<start>', methods=['GET'])
 @app.route('/api/stream/bokeh/from/<start>/to/<end>', methods=['GET'])
 @app.route('/api/stream/bokeh/last/<last_hours>', methods=['GET'])
+@auto.doc()
 def bokeh_buffer(start=None, end=None, last_hours=None):
     """
     Stream the bokeh data to make a plot.
@@ -220,7 +223,8 @@ def bokeh_buffer(start=None, end=None, last_hours=None):
 ###############################
 # INDEX WITH REAL TIME MONITOR
 ###############################
-@app.route('/index')
+@app.route('/index', methods=['GET'])
+@auto.doc()
 def index():
     """
     Webserver index page with real time monitoring of ENERPI
@@ -234,7 +238,8 @@ def index():
                            with_last_samples=with_last_samples, last_samples=list(buffer_last_data))
 
 
-@app.route('/api/monitor')
+@app.route('/api/monitor', methods=['GET'])
+@auto.doc()
 def only_tiles():
     """
     Url route for showing only the real-time monitoring tiles

@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="jumbotron jumbotron-fluid text-white mb-0" style="background-color: rgba(140, 39, 211, 0.8)">
+  <div class="container">
+      <h1 class="display-3">{{ title|safe }}</h1>
+      <h6 class="lead">ENERPI API ROUTES:</h6>
+  </div>
+</div>
+<div class="container-fluid">
+<div class="row pt-0">
+    {% for doc in autodoc %}
+    <div class="col-xs-12 col-md-6">
+    <div class="card rounded my-1 mx-0 card-outline-primary" style="border-width: 2px;">
+        <div class="card-header bg-primary text-white my-0">
+            <p class="lead my-0 py-0">Endpoint: <strong>{{ doc['endpoint'] }}</strong></p>
+        </div>
+        <div class="card-block">
+            <h3 class="card-title mb-0 pb-0"><code style="word-wrap:break-word; overflow-wrap: break-word;">{{ doc['rule']|escape }}</code></h3>
+            <br class="hidden-sm-down">
+            <span class="hidden-sm-down">Methods:  </span>{% for method in doc['methods'] %}<a {% if method == 'GET' and doc.args == ['None'] %}href="{{doc.rule}}"{% endif %}class="card-link"><span class="tag tag-pill tag-primary">{{method}}</span></a>{% endfor %}
+        </div>
+        <ul class="list-group list-group-flush">
+        <li class="list-group-item text-primary">
+            <span class="card-link">Args: <code class="text-italic">{{ doc['args'] }}</code></span>
+            <br class="hidden-sm-up">
+            <span class="card-link">Defaults: <code class="text-italic">{{ doc['defaults'] }}</code></span>
+        </li>
+        </ul>
+        <div class="card-block">
+            <p class="lead font-italic">{{ doc['docstring']|docstrip|safe }}</p>
+        </div>
+        <p class="card-footer small text-muted font-italic text-xs-right mb-0" style="word-wrap:break-word; overflow-wrap: break-word;">
+            {{ doc['location']['filename'] }}, line: <strong>{{ doc['location']['line'] }}</strong>
+        </p>
+    </div>
+    </div>
+    {% endfor %}
+</div>
+</div>
+{% endblock %}

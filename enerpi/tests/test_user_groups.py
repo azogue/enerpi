@@ -40,11 +40,12 @@ def _check_user_groups(user='www-data', desired_groups=('gpio', 'spi'), fix=Fals
         return False
     if not_existent_groups:
         print('*** NOT EXISTENT GROUPS: "{}"'.format(not_existent_groups))
-        if fix:
-            pass
-            # TODO Append groups
-        else:
-            return False
+        return False
+        # if fix:
+        #     pass
+        #     # Append groups?
+        # else:
+        #     return False
     groups_needed_for_user = [g for g in desired_groups if g not in user_groups]
     if len(groups_needed_for_user) == 0:
         return True
@@ -130,32 +131,36 @@ def test_www_data_in_rpi():
         · The ENERPI flask webserver, running under NGINX + UWSGI-EMPEROR
 
     """
-    # TODO check CUSTOM user & webserver user (from user CONFIG)
+    from enerpi.base import CONFIG
+
     def _formatted_test(user_t, groups_t, fix=False):
         print('*' * 80 + '\nTEST (u="{}", g="{}", fix=False):'.format(user_t, groups_t))
         res = _check_user_groups(user=user_t, desired_groups=groups_t, fix=fix)
         print('********** TEST RESULT = {} **********'.format(res) + '\n' + '*' * 80)
         return res
 
-    if sys.platform == 'linux':
-        user = 'www-data'
+    if sys.platform == 'linux':  # RPI only test
+        user_logger = CONFIG.get('ENERPI_DATA', 'USER_LOGGER', fallback='www-data')
+        user_web = CONFIG.get('ENERPI_WEBSERVER', 'USER_SERVER', fallback='www-data')
+
         needed_groups = [('spi', ), ('gpio', 'kmem')]
-        print('\nCHECKING GROUPS MEMBERSHIP FOR USER "{}"'.format(user))
-        groups_exist = _checkoutput(['groups'])[1].split()
-        user_exists, user_groups = _get_user_groups(user)
-        print('EXISTENT GROUPS: "{}"'.format(groups_exist))
-        print('GROUPS WITH USER {} (exist={}): "{}"'.format(user, user_exists, user_groups))
-        assert user_exists
-        for need in needed_groups:
-            print('need: {}'.format(need))
-            for g in need:
-                print('analysis g={}'.format(g))
-                if g in groups_exist:
-                    print('{} in groups_exist'.format(g))
-                    result = _formatted_test(user, [g], fix=True)
-                    print('user: {} in group: {}? {}--> '.format(user, g, result))
-                    assert result
-                    break
+        for user in [user_logger, user_web]:
+            print('\nCHECKING GROUPS MEMBERSHIP FOR USER "{}"'.format(user))
+            groups_exist = _checkoutput(['groups'])[1].split()
+            user_exists, user_groups = _get_user_groups(user)
+            print('EXISTENT GROUPS: "{}"'.format(groups_exist))
+            print('GROUPS WITH USER {} (exist={}): "{}"'.format(user, user_exists, user_groups))
+            assert user_exists
+            for need in needed_groups:
+                print('need: {}'.format(need))
+                for g in need:
+                    print('analysis g={}'.format(g))
+                    if g in groups_exist:
+                        print('{} in groups_exist'.format(g))
+                        result = _formatted_test(user, [g], fix=True)
+                        print('user: {} in group: {}? {}--> '.format(user, g, result))
+                        assert result
+                        break
 
 
 if __name__ == '__main__':

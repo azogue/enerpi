@@ -15,8 +15,9 @@ def get_rgbled(verbose=True):
     if WITH_RGBLED:
         try:
             from gpiozero import RGBLED
+            from gpiozero.pins.rpigpio import RPiGPIOPin
 
-            led = RGBLED(PIN_R, PIN_G, PIN_B, active_high=True)
+            led = RGBLED(RPiGPIOPin(PIN_R), RPiGPIOPin(PIN_G), RPiGPIOPin(PIN_B), active_high=True)
             led.blink(.25, .25, on_color=(1, 1, 1), n=5)
         except (OSError, RuntimeError, ImportError) as e:
             log('** Not using RGBLED with GPIOZERO ({} [{}]). Check your "{}" file.'

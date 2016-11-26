@@ -1,0 +1,54 @@
+{% extends "email/email_layout.html" %}
+
+{% macro tile_email(title, unit, glyp, svg_tile, c1, c2) %}
+<div style="margin:0 !important; position: relative; max-width: 100%; background-image: radial-gradient(farthest-corner at 70% 70%, {{ c1|color }}, {{ c2|color }});">
+    <div style="position: absolute; margin-left: 15px; margin: 0px; width: 100%">
+        <span class="float-xs-left" style="margin-left: 15px; font-size: 50px"><strong><i class="fa fa-{{ glyp }}" aria-hidden="true"></i> {{ title }}</strong></span>
+        <span class="float-xs-right" style="margin-right: 15px; font-size: 50px;">{{ unit }}</span>
+    </div>
+    <div style="position: relative; max-width: 100%; max-height: 100%; padding: 0; !important;">{{ svg_tile|safe }}</div>
+</div>
+{% endmacro %}
+
+{% macro section_sep(title) %}
+<div style="background-color: #8C27D3; color: white; padding-top: 30px; padding-bottom: 15px; padding-left: 30px; width: 100%;">
+    <h2 class="display-3"><strong>{{ title }}</strong></h2>
+</div>
+{% endmacro %}
+
+{% block content %}
+    <div class="jumbotron jumbotron-fluid" style="background-color: #0CBB43; color: white; padding-bottom: 0; margin-bottom: 0;">
+        <div class="container mx-1 py-1">
+            <h1 class="display-3">enerPI status:</h1>
+            <h5 class="lead">{{ msg|safe }}</h5>
+        </div>
+    </div>
+    {{ section_sep('Power sensors') }}
+    {% for s in data_monitor['sensors'] %}
+        {% if s['is_rms'] %}
+            {{ tile_email(s['description'].upper(), s['unit'], s['icon'], s['tile'], s['tile_gradient_st'], s['tile_gradient_end']) }}
+        {% endif %}
+    {% endfor %}
+    {{ section_sep('Other sensors') }}
+    {% for s in data_monitor['sensors'] %}
+        {% if not s['is_rms'] %}
+            {{ tile_email(s['description'].upper(), s['unit'], s['icon'], s['tile'], s['tile_gradient_st'], s['tile_gradient_end']) }}
+        {% endif %}
+    {% endfor %}
+    {{ section_sep('Consumption') }}
+    {{ tile_email('CONSUMPTION', 'kWh', 'bar-chart', data_monitor['consumption']['tile'], (140, 39, 211, 0.83), (191, 160, 245, 0.27)) }}
+    {{ section_sep('# of samples') }}
+    {{ tile_email('Samples/sec', '#', 'tachometer', data_monitor['ref']['tile'], (0.5922, 0.149, 0.1451, 0.83), (0.5922, 0.149, 0.1451, 0.27)) }}
+{% endblock %}
+
+{# TODO Sysmail template: #}
+{#{% from 'macros/macros.html' import item_sysmail with context %}#}
+{##}
+{#{% block content %}#}
+{#    <div class="container-fluid">#}
+{#        <h3>Mensaje del sistema:</h3>#}
+{#    </div>#}
+{#    <div class="container-fluid">#}
+{#        {{ item_sysmail(mensaje, False) }}#}
+{#    </div>#}
+{#{% endblock %}#}

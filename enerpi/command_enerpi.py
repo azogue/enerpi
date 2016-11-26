@@ -60,7 +60,6 @@ def _enerpi_arguments():
     g_st.add_argument('--store', action='store', metavar='ST', default=HDF_STORE,
                       help='✏️  Set the .h5 file where save the HDF store.\n     Default: "{}"'.format(HDF_STORE))
     g_st.add_argument('--backup', action='store', metavar='BKP', help='☔ Backup ALL data in CSV format')
-    g_st.add_argument('--clear', action='store_true', help='☠ \033[31mDelete the HDF Store database\033[39m')
     g_st.add_argument('--clearlog', action='store_true', help='⚠ Delete the LOG FILE at: "{}"'.format(FILE_LOGGING))
     g_st.add_argument('-i', '--info', action='store_true', help='︎ℹ Show data info')
     g_st.add_argument('--last', action='store_true', help='︎ℹ Show last saved data')
@@ -99,14 +98,17 @@ def make_cron_command_task_daemon():
     return cmd_logger.format(**local_params)
 
 
-def _clean_store_path(path_st):
+def _check_store_relpath(path_st):
     if os.path.pathsep not in path_st:
         path_st = os.path.join(DATA_PATH, path_st)
     else:
         path_st = os.path.abspath(path_st)
     if not os.path.splitext(path_st)[1]:
         path_st += '.h5'
-    return path_st
+    existe_st = os.path.exists(path_st)
+    if not existe_st:
+        log('HDF Store not found at "{}"'.format(path_st), 'warn', True)
+    return existe_st, path_st
 
 
 def enerpi_main_cli(test_mode=False):
@@ -151,7 +153,7 @@ def enerpi_main_cli(test_mode=False):
         else:
             log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
             clear_cron_commands([cmd_logger], verbose=verbose)
-    elif (args.enerpi or args.info or args.backup or args.clear or args.config or args.raw or
+    elif (args.enerpi or args.info or args.backup or args.config or args.raw or
             args.last or args.clearlog or args.filter or args.plot or args.plot_tiles):
         # Logging configuration
         set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, True)
@@ -172,12 +174,7 @@ def enerpi_main_cli(test_mode=False):
 
             delete_log_file(FILE_LOGGING, verbose=verbose)
         # Data Store Config
-        # TODO Eliminar operate_hdf_database
-        path_st = _clean_store_path(args.store)
-        existe_st = os.path.exists(path_st)
-        if not existe_st:
-            log('HDF Store not found at "{}"'.format(path_st), 'warn', True)
-        # path_st = operate_hdf_database(args.store, path_backup=None, clear_database=False)
+        _existe_st, path_st = _check_store_relpath(args.store)
 
         # Starts ENERPI Logger
         if args.enerpi:

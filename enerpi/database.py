@@ -4,7 +4,6 @@ import os
 import pandas as pd
 from time import time
 import re
-from shutil import copy as copy_file
 from enerpi.base import CONFIG, DATA_PATH, log, timeit, SENSORS
 from enerpi.catalog import EnerpiCatalog
 
@@ -15,12 +14,10 @@ HDF_STORE = CONFIG.get('ENERPI_DATA', 'HDF_STORE')
 HDF_STORE_PATH = os.path.join(DATA_PATH, HDF_STORE)
 
 KEY = CONFIG.get('ENERPI_DATA', 'KEY', fallback='/rms')
-CONFIG_CATALOG = dict(preffix='DATA',
-                      raw_file=HDF_STORE,
+CONFIG_CATALOG = dict(raw_file=HDF_STORE,
                       key_raw_data=KEY,
                       key_summary_data='/hours',
                       key_summary_extra='/days',
-                      # catalog_file=INDEX,
                       check_integrity=True,
                       archive_existent=False,
                       verbose=False)
@@ -71,26 +68,13 @@ def show_info_data(df, df_consumo=None):
         log('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias), 'ok', True, False)
 
 
-# TODO Rehacer backups y clears en catalog vía CLI
-def operate_hdf_database(raw_path_st, path_backup=None, clear_database=False):
-    # HDF Store Config
-    path_st = _clean_store_path(raw_path_st)
-    existe_st = os.path.exists(path_st)
-    if not existe_st:
-        log('HDF Store not found at "{}"'.format(path_st), 'warn', True)
+def _notify_error_in_save_raw_data(msg_error):
+    from time import sleep
+    from enerpi.notifier import push_enerpi_error
 
-    # Backup de HDF Store
-    if existe_st and path_backup is not None:
-        path_bkp = _clean_store_path(path_backup)
-        log('Backing up HDF Store:\n "{}" --> "{}"'.format(path_st, path_bkp), 'ok')
-        copy_file(path_st, path_bkp)
-
-    # Borrado de HDF Store
-    if existe_st and clear_database:
-        log('Deleting HDF Store in "{}"'.format(path_st), 'warn')
-        os.remove(path_st)
-
-    return path_st
+    t = push_enerpi_error('SAVE RAW DATA', msg_error)
+    sleep(1)
+    return t
 
 
 def save_raw_data(data=None, path_st=HDF_STORE_PATH, catalog=None, verb=True):
@@ -117,17 +101,17 @@ def save_raw_data(data=None, path_st=HDF_STORE_PATH, catalog=None, verb=True):
                         log('Size Store: {:.1f} KB, {} rows'.format(os.path.getsize(path_st) / 1000, len(df_tot)),
                             'debug', verb)
             except OSError as e:
-                log('OSError "{}" trying to open "{}" in "{}" mode (save_in_store)'
-                    .format(e, path_st, mode), 'error', True)
-                # TODO NOTIFY Error
+                msg_error = 'OSError "{}" trying to open "{}" in "{}" mode (save_in_store)'.format(e, path_st, mode)
+                log(msg_error, 'error', True)
+                _notify_error_in_save_raw_data(msg_error)
                 return -1
             if catalog is not None:
                 try:
                     catalog.update_catalog(data=df_tot)
                 except Exception as e:
-                    log('Exception "{}" [{}] en update_catalog (save_in_store)'
-                        .format(e, e.__class__), 'error', True)
-                    # TODO NOTIFY Error
+                    msg_error = 'Exception "{}" [{}] en update_catalog (save_in_store)'.format(e, e.__class__)
+                    log(msg_error, 'error', True)
+                    _notify_error_in_save_raw_data(msg_error)
                     return -1
         return True
     except ValueError as e:

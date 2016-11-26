@@ -79,46 +79,40 @@ def _web_edit_enerpi_config_ini(lines_ini_file):
     config_entries = OrderedDict()
     section, comment = None, None
     init = False
-    try:
-        for l in lines_ini_file:
-            l = l.replace('\n', '').lstrip().rstrip()
-            if l.startswith('['):
-                section = l.replace('[', '').replace(']', '')
-                init = True
-                comment = None
-                config_entries[section] = OrderedDict()
-            elif l.startswith('#') or l.startswith(';'):
-                if init:
-                    if comment is None:
-                        comment = l[1:].lstrip()
-                    else:
-                        comment += ' {}'.format(l[1:].lstrip())
-            elif init and (len(l) > 0):
-                # Read variable and append (/w comments)
-                variable_name, variable_value = l.split('=')
-                variable_name = variable_name.lstrip().rstrip()
-                variable_value = variable_value.lstrip().rstrip()
-                is_bool, bool_value = _is_bool_variable(variable_value)
-                if not is_bool:
-                    try:
-                        variable_value = int(variable_value)
-                        var_type = 'int'
-                    except ValueError:
-                        try:
-                            variable_value = float(variable_value)
-                            var_type = 'float'
-                        except ValueError:
-                            var_type = 'str'
+    for l in lines_ini_file:
+        l = l.replace('\n', '').lstrip().rstrip()
+        if l.startswith('['):
+            section = l.replace('[', '').replace(']', '')
+            init = True
+            comment = None
+            config_entries[section] = OrderedDict()
+        elif l.startswith('#') or l.startswith(';'):
+            if init:
+                if comment is None:
+                    comment = l[1:].lstrip()
                 else:
-                    var_type = 'bool'
-                    variable_value = bool_value
-                config_entries[section][variable_name] = variable_value, var_type, comment
-                comment = None
-    except Exception as e:
-        # TODO Mejorar general exception reading INI lines
-        msg = 'ERROR PROCESSING INI FILE: {} [class {}]'.format(e, e.__class__)
-        log(msg, 'error')
-        return False, {'error': msg}
+                    comment += ' {}'.format(l[1:].lstrip())
+        elif init and (len(l) > 0):
+            # Read variable and append (/w comments)
+            variable_name, variable_value = l.split('=')
+            variable_name = variable_name.lstrip().rstrip()
+            variable_value = variable_value.lstrip().rstrip()
+            is_bool, bool_value = _is_bool_variable(variable_value)
+            if not is_bool:
+                try:
+                    variable_value = int(variable_value)
+                    var_type = 'int'
+                except ValueError:
+                    try:
+                        variable_value = float(variable_value)
+                        var_type = 'float'
+                    except ValueError:
+                        var_type = 'str'
+            else:
+                var_type = 'bool'
+                variable_value = bool_value
+            config_entries[section][variable_name] = variable_value, var_type, comment
+            comment = None
     return True, config_entries
 
 
@@ -150,8 +144,7 @@ def _web_edit_enerpi_sensors_json(lines_json):
         d_conf = OrderedDict([(t, OrderedDict([(sub, (json.dumps(sensors_json, indent=1), 'text', None))]))])
         return True, d_conf
     except json.decoder.JSONDecodeError as e:
-        # TODO gestión errores edición
-        msg = 'ERROR JSON!!: {} --> {}'.format(e, lines_json)
+        msg = 'JSONDecodeError reading new SENSORS JSON: {} --> {}'.format(e, lines_json)
         log(msg, 'error')
         return False, {'error': msg}
 
@@ -328,6 +321,7 @@ def _web_post_changes_enerpi_sensors_json(dict_web_form, lines_config, dict_conf
                 ok, dict_config = _web_edit_enerpi_sensors_json(lines_config)
                 if not ok:
                     alerta['alert_type'] = 'error'
+                    alerta['texto_alerta'] += dict_config['error']
                     alerta['texto_alerta'] += '\nNEW JSON SENSORS FILE NOT VALID!! FIX IT, PLEASE'
     except json.decoder.JSONDecodeError:
         msg_err = ('JSONDecodeError in web_post_changes_enerpi_sensors_json: {}'.format(dict_config[t][sub]))

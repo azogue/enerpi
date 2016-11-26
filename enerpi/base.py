@@ -8,7 +8,7 @@ import pytz
 import shutil
 import subprocess
 import sys
-from threading import Timer
+from threading import Thread, Timer
 from time import time, sleep
 from enerpi import BASE_PATH, PRETTY_NAME
 from enerpi.prettyprinting import print_err, print_red, print_info, print_ok, print_warn, print_yellowb, print_magenta
@@ -327,9 +327,13 @@ def _makedirs(dest_path):
         if os.path.exists(dest_path):
             os.utime(dest_path, None)
     except PermissionError as e:
-        log('PermissionError: {}'.format(e), 'error', True, False)
-        # sudo chmod 777 ~/ENERPIDATA/enerpi.log
-        # TODO Notify error
+        from time import sleep
+        from enerpi.notifier import push_enerpi_error
+
+        msg_error = '_makedirs PermissionError (dest_path = {}). Exception: {}. Exit in 2 secs...'.format(dest_path, e)
+        log(msg_error, 'error', True, False)
+        push_enerpi_error('ENERPI Fatal error', msg_error, channel_tag='raspberries')
+        sleep(2)
         sys.exit(2)
 
 
@@ -410,6 +414,18 @@ def show_pi_temperature(log_rpi_temps, ts=3):
         timer_temps.start()
         return timer_temps
     return None
+
+
+def async_task(f):
+    """
+    Decorator (wrapper) for execute an async action (threaded)
+    :param f:
+
+    """
+    def _wrapper(*args, **kwargs):
+        thr = Thread(target=f, args=args, kwargs=kwargs)
+        thr.start()
+    return _wrapper
 
 
 def timeit(cadena_log, verbose=False, *args_dec):
@@ -572,6 +588,13 @@ def reload_config():
 # Loads configuration
 DATA_PATH, CONFIG, SENSORS_THEME = get_config_enerpi()
 
+# Appends ENERPI gmail account: (Hardcoded)
+GMAIL_ACCOUNT = 'enerpi.bot@gmail.com'
+GMAIL_APP_PASSWORD = 'qkdspbhmxouzrkvv'
+
+# Admin email for reports & nofifications:
+RECIPIENT = CONFIG.get('NOTIFY', 'RECIPIENT', fallback='eugenio.panadero@gmail.com')
+
 # Set Locale
 CUSTOM_LOCALE = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))
 locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
@@ -583,8 +606,12 @@ SENSORS = EnerpiSamplerConf(CONFIG, SENSORS_THEME)
 FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
 LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 
-STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH'))
+STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH', fallback='WWW'))
 SERVER_FILE_LOGGING_RSCGEN = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
 NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
 UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'
 IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
+DAEMON_STDOUT = '/tmp/enerpi_out.txt'
+DAEMON_STDERR = '/tmp/enerpi_err.txt'
+DAEMON_PIDFILE = '/tmp/enerpilogger.pid'
+INDEX_DATA_CATALOG = 'data_catalog.csv'

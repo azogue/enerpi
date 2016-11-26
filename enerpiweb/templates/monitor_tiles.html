@@ -1,4 +1,4 @@
-{% from 'macros.html' import style_class_greyscale %}
+{% from 'macros/macros.html' import style_class_greyscale %}
 
 {#.tile-enerpi_data-power {#}
 {#    background-image: radial-gradient(farthest-corner at 70% 70%, rgba(12, 187, 67, 0.83), rgba(55, 245, 119, 0.27));}#}
@@ -19,7 +19,7 @@
      <img id="tile-{{ type_data + '-' + mag }}-img" class="tile-img-bg" alt="last 24h ev."
           src="{{ url_for('static', filename='img/generated/tile_{}_{}_last_72h.svg'.format(type_data, mag)) }}">
     <div class="tile-monitor-innerContent">
-        <span class="tile-monitor-label pull-left">
+        <span class="tile-monitor-label float-left">
             {% if glyp %}
                 <strong><i class="fa fa-{{ glyp }}" aria-hidden="true"></i> {{ title }}</strong>
             {% else %}
@@ -27,7 +27,7 @@
             {% endif %}
             <br><span class="tile-monitor-label-sub stream-ts-{{ mag }}"></span>
         </span>
-        <span id="tile-{{ type_data + '-' + mag }}-text" class="pull-right tile-{{ type_data + '-' + mag }}-text">
+        <span id="tile-{{ type_data + '-' + mag }}-text" class="float-right">
             <p class="tile-monitor-unit">{{ unit }}</p>
             <p class="tile-monitor-value stream-{{ mag }}">??</p>
         </span>
@@ -134,9 +134,8 @@
                         sse.close();
                     } else {
                         var data = JSON.parse(message.data);
-                        var table = $('#table_body_stream');
-                        var hay_table = table.length > 0;
-                        var tile = $('.tile-monitor-' + 'enerpi_data');
+{#                        var table = $('#table_body_stream');#}
+{#                        var hay_table = table.length > 0;#}
                         var text_values = tile.find('p.tile-monitor-value');
                         var labeled_nsamples = false;
                         {% set ts_column = data_monitor['ts'] %}

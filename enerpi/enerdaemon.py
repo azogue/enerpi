@@ -1,8 +1,7 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
-import os
 import sys
-from enerpi.base import log, FILE_LOGGING, LOGGING_LEVEL, set_logging_conf
+from enerpi.base import log, FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, DAEMON_PIDFILE, DAEMON_STDOUT, DAEMON_STDERR
 from enerpi.daemon import Daemon
 
 
@@ -33,11 +32,7 @@ def enerpi_daemon(test_mode=False):
         - restart
     """
     set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, with_initial_log=False)
-    # TODO Eliminar stdout y stderr! (o diferenciar su uso según LOGGING_LEVEL)
-    daemon = EnerPiDaemon('/tmp/enerpilogger.pid',
-                          test_mode=test_mode,
-                          stdout=os.path.expanduser('/tmp/enerpi_out.txt'),
-                          stderr=os.path.expanduser('/tmp/enerpi_err.txt'))
+    daemon = EnerPiDaemon(DAEMON_PIDFILE, test_mode=test_mode, stdout=DAEMON_STDOUT, stderr=DAEMON_STDERR)
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
             try:
@@ -46,8 +41,10 @@ def enerpi_daemon(test_mode=False):
             except PermissionError as e:
                 sys.stderr.write("PERMISSIONERROR: pidfile can't be registered ({}). Need sudo powers?".format(e))
         elif 'stop' == sys.argv[1]:
-            daemon.stop()
-            log('ENERPI Logger daemon stopped', 'warn', True, False)
+            _ = daemon.stop()
+            ok = daemon.status()
+            stopped = daemon.stop()
+            log('ENERPI Logger daemon stopped:{}, status after 1º stop:{}'.format(stopped, ok), 'warn', True, False)
         elif 'status' == sys.argv[1]:
             log('ENERPI Logger daemon status?', 'debug', True, False)
             daemon.status()

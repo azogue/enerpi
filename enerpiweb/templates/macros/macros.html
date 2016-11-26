@@ -29,3 +29,33 @@
     <script type="text/javascript" src="http://cdn.pydata.org/bokeh/release/bokeh-{{ version }}.min.js"></script>
     <script type="text/javascript" src="http://cdn.pydata.org/bokeh/release/bokeh-widgets-{{ version }}.min.js"></script>
 {% endmacro %}
+
+{# TODO Terminar Vista sysmail #}
+{% macro item_sysmail(m, with_send_b) %}
+<ul class="list-group">
+    <li class="list-group-item active">
+      <h4 class="list-group-item-heading">
+         {{ m.subject }}
+        {% if with_send_b %}
+{#            <a role="button" style="vertical-align: baseline" class="btn btn-success btn-sm float-right" href="{{ url_for('sysmail', send_mail=True, index_mail=m.index) }}">#}
+            <a role="button" style="vertical-align: baseline" class="btn btn-success btn-sm float-right" href="">
+                <span style="vertical-align: baseline" class="glyphicon glyphicon-envelope"></span>
+            </a>
+        {% endif %}
+      </h4>
+    </li>
+    <li class="list-group-item list-group-item-info">
+        <p>
+        {% for h in m.header %}
+            {{ h }}<br>
+        {% endfor %}
+        </p>
+    </li>
+    <li class="list-group-item list-group-item-warning">
+        <p>{{ m.msg|safe }}</p>
+    </li>
+    <li class="list-group-item list-group-item-danger">
+        MSG ID: {{ m.index }}, generado en fecha: <strong>{{ m.ts }}</strong>
+    </li>
+</ul>
+{% endmacro %}

@@ -300,7 +300,7 @@ def _adjust_tile_limits(name, ylim, date_ini, date_fin, ax):
         ax.tick_params(pad=-40)
     else:
         ax.tick_params(pad=-30)
-        ax.set_yticklabels([str(round(y, 4)) for y in yticks_l])
+        ax.set_yticklabels(['{:.3g}'.format(y) for y in yticks_l])
     return ax
 
 
@@ -332,7 +332,7 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
                 div = 250
                 ylim = (0, np.ceil((data_s.max() + div / 5) / div) * div)
             else:
-                assert data_s.name in SENSORS.columns_sensors_mean
+                # assert data_s.name in SENSORS.columns_sensors_mean
                 div = 25
                 ylim = (0, np.ceil((data_s.max() + div) // div) * div)
             data_s = data_s
@@ -350,13 +350,21 @@ def plot_tile_last_24h(data_s, barplot=False, ax=None, fig=None, color=(1, 1, 1)
 
 
 def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
+    """
+    Generate tiles (svg evolution plots of sensor variables) for enerpiweb
 
-    def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name):
+    :param path_dest: IMG_TILES_BASEPATH = os.path.join(BASE_PATH, '..', 'enerpiweb', 'static', 'img', 'generated')
+    :param catalog: enerpi data catalog
+    :param last_hours: :tuple: with hour intervals to plot. Default 72, 48, 24 h
+    :return: :bool: ok
+
+    """
+    def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name, preserve_ratio=False):
         for lh in last_hours:
             file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_name, lh))
             axes.set_xlim((x_lim[0] + delta_total * (1 - lh / total_hours), x_lim[1]))
             figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
-            write_fig_to_svg(figure, name_img=file)
+            write_fig_to_svg(figure, name_img=file, preserve_ratio=preserve_ratio)
 
     fig = ax = None
     total_hours = last_hours[0]
@@ -367,7 +375,8 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
         delta = xlim[1] - xlim[0]
 
         for c in SENSORS.columns_sensors_rms:
-            fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='5min'), barplot=False)
+            fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='5min'),
+                                         barplot=False, ax=ax, fig=fig)
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
             plt.cla()
             fig.set_figwidth(_tile_figsize()[0])
@@ -378,6 +387,14 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24)):
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
             plt.cla()
             fig.set_figwidth(_tile_figsize()[0])
+
+        # TODO (DEBUG Control decay) Eliminar svg de 'ref'
+        c = SENSORS.ref_rms
+        fig, ax = plot_tile_last_24h(catalog.resample_data(last_data[c], rs_data='30s'),
+                                     barplot=False, ax=ax, fig=fig, color=(0.5922, 0.149, 0.1451))
+        _cut_axes_and_save_svgs(fig, ax, xlim, delta, c, preserve_ratio=True)
+        plt.cla()
+        fig.set_figwidth(_tile_figsize()[0])
 
         # TODO Revisión tiles kWh
         if len(last_data_c) > 1:

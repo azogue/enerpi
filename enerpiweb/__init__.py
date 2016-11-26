@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 from flask import Flask
+from flask_autodoc import Autodoc
+from flask_mail import Mail
 from werkzeug.contrib.fixers import ProxyFix
 from werkzeug.routing import Rule
 import jinja2
 import os
-from enerpi.base import CONFIG, DATA_PATH, check_resource_files
+from enerpi.base import CONFIG, DATA_PATH, check_resource_files, GMAIL_ACCOUNT, GMAIL_APP_PASSWORD
+from enerpi.api import get_encryption_key
 
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -25,16 +28,35 @@ app.url_rule_class = lambda path, **options: Rule(PREFIX_WEB + path, **options)
 app.jinja_env.trim_blocks = True
 app.jinja_env.lstrip_blocks = True
 app.jinja_env.cache = {}
+app.jinja_loader = jinja2.FileSystemLoader(os.path.join(basedir, 'templates'))
+
+# Manual activation of test-mode
 # app.config['TESTING'] = True
 # app.config['PROPAGATE_EXCEPTIONS'] = True
+
+# Forms protection
+app.config['CSRF_ENABLED'] = True
 app.config['WTF_CSRF_ENABLED'] = True
-# TODO regen new key for each run!
-app.config['SECRET_KEY'] = 'lalalalala'
-# app.config['PREFIX_WEB'] = PREFIX_WEB
+app.config['SECRET_KEY'] = get_encryption_key()
+
 app.config['STREAM_MAX_TIME'] = 1800
 app.config['BASECOLOR'] = BASECOLOR
 app.config['WITH_ML_SUBSYSTEM'] = WITH_ML_SUBSYSTEM
-app.jinja_loader = jinja2.FileSystemLoader(os.path.join(basedir, 'templates'))
+
+# Plug-ins
+# email server
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587  # 465
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_USERNAME'] = GMAIL_ACCOUNT
+app.config['MAIL_DEFAULT_SENDER'] = GMAIL_ACCOUNT
+app.config['MAIL_PASSWORD'] = GMAIL_APP_PASSWORD
+
+# API Auto-doc:
+auto = Autodoc(app)
+mail = Mail(app)
 
 # Views
 # noinspection PyUnresolvedReferences,PyPep8
