@@ -179,9 +179,9 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
         print(os.listdir(self.cat.base_path))
 
     def test__10_export_data(self):
-        exported = self.cat.export(filename='enerpi_all_data_test_1.csv')
-        pp.print_cyan(exported)
-        self.assertIsNotNone(exported)
+        exported_ok = self.cat.export_chunk(filename='enerpi_all_data_test_1.csv')
+        pp.print_cyan(exported_ok)
+        self.assertIs(exported_ok, True)
 
 
 if __name__ == '__main__':

@@ -4,8 +4,8 @@ import os
 import re
 import sys
 from enerpi import PRETTY_NAME, DESCRIPTION
-from enerpi.base import (BASE_PATH, CONFIG, SENSORS, DATA_PATH, CONFIG_FILENAME, show_pi_temperature,
-                         FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log)
+from enerpi.base import (BASE_PATH, CONFIG, SENSORS, DATA_PATH, CONFIG_FILENAME, SENSORS_CONFIG_JSON_FILENAME,
+                         FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, log, show_pi_temperature)
 
 
 # Config:
@@ -60,6 +60,7 @@ def _enerpi_arguments():
     g_st.add_argument('--store', action='store', metavar='ST', default=HDF_STORE,
                       help='✏️  Set the .h5 file where save the HDF store.\n     Default: "{}"'.format(HDF_STORE))
     g_st.add_argument('--backup', action='store', metavar='BKP', help='☔ Backup ALL data in CSV format')
+    g_st.add_argument('--reprocess', action='store_true', help='☔ RE-Process all data in ENERPI Catalog')
     g_st.add_argument('--clearlog', action='store_true', help='⚠ Delete the LOG FILE at: "{}"'.format(FILE_LOGGING))
     g_st.add_argument('-i', '--info', action='store_true', help='︎ℹ Show data info')
     g_st.add_argument('--last', action='store_true', help='︎ℹ Show last saved data')
@@ -153,13 +154,15 @@ def enerpi_main_cli(test_mode=False):
         else:
             log('** Deleting CRON task for start logger at reboot:\n"{}"'.format(cmd_logger), 'warn', True, False)
             clear_cron_commands([cmd_logger], verbose=verbose)
-    elif (args.enerpi or args.info or args.backup or args.config or args.raw or
+    elif (args.enerpi or args.info or args.backup or args.reprocess or args.config or args.raw or
             args.last or args.clearlog or args.filter or args.plot or args.plot_tiles):
         # Logging configuration
         set_logging_conf(FILE_LOGGING, LOGGING_LEVEL, True)
 
-        # Shows INI config
+        # Shows INI config & SENSORS
         if args.config:
+            import json
+
             log('ENERPI Configuration (from INI file in "{}"):'
                 .format(os.path.join(DATA_PATH, CONFIG_FILENAME)), 'ok', True, False)
             for s in CONFIG.sections():
@@ -167,7 +170,11 @@ def enerpi_main_cli(test_mode=False):
                 for opt in CONFIG.options(s):
                     log('{:27} -->\t{}'.format(opt.upper(), CONFIG.get(s, opt)), 'debug', True, False)
             log('*' * 80 + '\n', 'ok', True, False)
-
+            log('\nENERPI SENSORS Config (from JSON file in "{}"):'
+                .format(os.path.join(DATA_PATH, SENSORS_CONFIG_JSON_FILENAME)), 'ok', True, False)
+            json_content = json.loads(open(os.path.join(DATA_PATH, SENSORS_CONFIG_JSON_FILENAME), 'r').read())
+            log('\n'.join(['{}'.format(s) for s in json_content]), 'magenta', True, False)
+            log('--> {}\n\n'.format(SENSORS), 'ok', True, False)
         # Delete LOG File
         if args.clearlog:
             from enerpi.database import delete_log_file
@@ -185,9 +192,15 @@ def enerpi_main_cli(test_mode=False):
         elif args.backup:
             from enerpi.database import init_catalog
             # Export data to CSV:
-            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False)
-            all_data = catalog.export(args.backup)
-            log('ALL DATA:\n{}'.format(all_data), 'ok', True, False)
+            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False, verbose=verbose)
+            export_ok = catalog.export_chunk(args.backup)
+            log('EXPORT OK? {}'.format(export_ok), 'ok' if export_ok else 'error', True, False)
+        elif args.reprocess:
+            from enerpi.database import init_catalog
+            # Re-process all data in catalog
+            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False, verbose=verbose)
+            repro_ok = catalog.reprocess_all_data()
+            log('REPROCESS OK? {}'.format(repro_ok), 'ok' if repro_ok else 'error', verbose, verbose)
         elif args.raw:
             from enerpi.enerpimeter import enerpi_raw_data
 
@@ -206,7 +219,7 @@ def enerpi_main_cli(test_mode=False):
         elif args.info or args.filter or args.plot or args.plot_tiles:
             from enerpi.database import init_catalog, show_info_data
 
-            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False)
+            catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=False, verbose=verbose)
             if args.plot_tiles:
                 from enerpiplot.enerplot import gen_svg_tiles
 
@@ -231,7 +244,7 @@ def enerpi_main_cli(test_mode=False):
                             data, consumption = catalog.get(start=loc_data[0], with_summary=True)
                 else:
                     data, consumption = catalog.get(start=catalog.min_ts, with_summary=True)
-                if args.info and data is not None and not data.empty:
+                if (args.info or args.filter) and data is not None and not data.empty:
                     show_info_data(data, consumption)
                 if (args.plot and data is not None and not data.empty and consumption is not None and
                         not consumption.empty):

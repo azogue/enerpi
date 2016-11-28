@@ -91,9 +91,9 @@ class TestEnerpiProcessEmptyData(TestCaseEnerpi):
         self.assertIsNone(d5)
 
     def test_7_export_data(self):
-        exported_1 = self.cat.export(filename='enerpi_all_data_test_1.csv')
+        exported_1 = self.cat.export_chunk(filename='enerpi_all_data_test_1.csv')
         pp.print_cyan(exported_1)
-        self.assertEqual(exported_1, None)
+        self.assertEqual(exported_1, False)
 
 
 if __name__ == '__main__':

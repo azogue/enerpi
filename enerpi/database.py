@@ -63,7 +63,9 @@ def show_info_data(df, df_consumo=None):
                           axis=1)), 'info', True, False)
     if df_consumo is not None and not df_consumo.empty:
         log('\n** HOURLY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(df_consumo), 'magenta', True, False)
-        dias = df_consumo.resample('1D').sum()
+        dias = df_consumo.drop(['p_min', 'p_mean', 'p_max'], axis=1).resample('1D').sum()
+        p_rs = df_consumo[['p_min', 'p_max']].resample('1D')
+        dias = dias.join(p_rs.p_min.min()).join(p_rs.p_max.max())
         dias['t_ref'] /= 24
         log('\n*** DAILY ELECTRICITY CONSUMPTION (kWh):\n{}'.format(dias), 'ok', True, False)
 

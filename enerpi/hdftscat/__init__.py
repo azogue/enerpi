@@ -772,6 +772,7 @@ class HDFTimeSeriesCatalog(object):
         Load & reprocess all data in catalog.
         Useful when changing summary data construction (for version changes)
         :return: ok operation
+        :rtype: bool
         """
         if self.tree is not None:
             paths_w_summary = self.tree[(self.tree.key == self.key_summary) & self.tree.is_cat]
@@ -790,8 +791,9 @@ class HDFTimeSeriesCatalog(object):
         """
         Return abspath to hdf_store file
 
-        :param rel_path: :str: relative path to hdf_store
-        :return: :str: abspath
+        :param str rel_path: relative path to hdf_store
+        :return: abspath
+        :rtype: str
 
         """
         if self.tree is not None:
@@ -805,44 +807,39 @@ class HDFTimeSeriesCatalog(object):
     #     # TODO backup/sync a GDRIVE, para ejecutar periódicamente
     #     raise NotImplementedError
 
-    def export(self, filename='enerpi_all_data.csv'):
-        """
-        Get all samples & export to CSV file
-
-        :param filename: destination path of CSV file
-        :return: pandas DataFrame with all data
-
-        """
-        path_export = os.path.join(self.base_path, filename)
-        log('EXPORT ALL DATA TO CSV --> "{}"'.format(path_export), 'info', self.verbose)
-        all_data = self.get_all_data(False)
-        if (all_data is not None) and not all_data.empty:
-            all_data = pd.DataFrame(all_data)
-            all_data.to_csv(path_export)
-            log('EXPORT ALL DATA TO CSV DONE! ({} samples, from {:%d-%m-%y %H:%M} to {:%d-%m-%y %H:%M})'
-                .format(len(all_data), all_data.index[0], all_data.index[-1]), 'info', self.verbose)
-        else:
-            log('NO DATA TO EXPORT! (all_data={})'.format(all_data), 'error', self.verbose)
-        return all_data
-
-    # TODO EXPORT IN CHUNKS
+    @timeit('export_all_data_chunks', verbose=True)
     def export_chunk(self, filename='enerpi_all_data.csv', chunksize=10000):
         """
-        Get all samples & export to CSV file
+        Get all samples from ENERPI catalog & export them to CSV
+        Perform the task in chunks, in order to avoid too much memory usage (in RPI)
 
-        :param filename: destination path of CSV file
-        :return: pandas DataFrame with all data
+        :param str filename: destination path of CSV file
+        :param int chunksize: Chunk size reading pandas HDFStores to export
+        :return: ok
+        :rtype: bool
 
         """
         path_export = os.path.join(self.base_path, filename)
-        paths_idx = self._get_paths(self.min_ts, None)
-        log('EXPORT ALL DATA ({}) TO CSV --> "{}"'.format(paths_idx, path_export), 'info', self.verbose)
-        all_data = self.get_all_data(False)
-        if (all_data is not None) and not all_data.empty:
-            all_data = pd.DataFrame(all_data)
-            all_data.to_csv(path_export)
-            log('EXPORT ALL DATA TO CSV DONE! ({} samples, from {:%d-%m-%y %H:%M} to {:%d-%m-%y %H:%M})'
-                .format(len(all_data), all_data.index[0], all_data.index[-1]), 'info', self.verbose)
+        stores_export = self.tree[self.tree.is_raw][['st', 'n_rows']]
+        log('EXPORT DATA FROM:\n{}'.format(stores_export), 'magenta', self.verbose, False)
+        init = False
+        if stores_export.n_rows.sum() > 0:
+            for _, (p, n_rows) in stores_export.iterrows():
+                p_st = os.path.join(self.base_path, p)
+                log('EXPORT {} ROWS FROM STORE: {}'.format(n_rows, p_st), 'info', self.verbose, False)
+                start = 0
+                with pd.HDFStore(p_st, 'r') as st:
+                    while start < n_rows:
+                        log('READING & EXPORTING ROWS FROM {} TO {} IN {}'.format(start, start + chunksize, p),
+                            'info', self.verbose, False)
+                        chunk_data = st.select(self.key_raw, start=start, stop=start + chunksize)
+                        if not init:
+                            chunk_data.to_csv(path_export, header=True, mode='w')
+                            init = True
+                        else:
+                            chunk_data.to_csv(path_export, header=False, mode='a')
+                        start += chunksize
+            return True
         else:
-            log('NO DATA TO EXPORT! (all_data={})'.format(all_data), 'error', self.verbose)
-        return all_data
+            log('NO DATA TO EXPORT! CATALOG:\n{}'.format(self.tree), 'error', self.verbose)
+            return False
