@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import datetime as dt
 import glob
 import json
 import numpy as np
@@ -34,13 +35,13 @@ def _get_time_slice(start=None, end=None, last_hours=None, min_ts=None):
     if last_hours is not None:
         if type(last_hours) is str:
             last_hours = int(last_hours)
-        start = pd.Timestamp.now().replace(minute=0, second=0, microsecond=0) - pd.Timedelta(hours=last_hours)
+        start = dt.datetime.now().replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=last_hours)
         return start, None
     else:
         if (start is None) and (min_ts is not None):
             start = min_ts
         if start is np.nan:
-            start = pd.Timestamp.now() - pd.Timedelta(hours=1)
+            start = dt.datetime.now() - dt.timedelta(hours=1)
         return start, end
 
 
@@ -60,7 +61,7 @@ def _concat_loaded_data(dataframes, ini, fin=None, verbose=False):
 
 
 def _make_index_path(ts, w_day=False):
-    if ts.date() == pd.Timestamp.today().date():
+    if ts.date() == dt.datetime.now().date():
         p = ST_TODAY
     elif w_day:
         p = os.path.join(DIR_CURRENT_MONTH, DAY_MASK.format(ts))
@@ -81,10 +82,10 @@ def get_catalog_paths(start=None, end=None, last_hours=None, min_ts=None):
 
     """
     t0, tf = _get_time_slice(start, end, last_hours, min_ts=min_ts)
-    ahora = pd.Timestamp.now()
+    ahora = dt.datetime.now()
     try:
-        t0 = pd.Timestamp(t0)
-        tf = pd.Timestamp(tf) if tf else ahora
+        t0 = pd.Timestamp(t0).to_pydatetime()
+        tf = pd.Timestamp(tf).to_pydatetime() if tf else ahora
     except ValueError as e:
         log('ValueError "{}" in _get_paths with ts_ini={} & ts_fin={}'.format(e, t0, tf), 'error')
         return []
@@ -167,7 +168,10 @@ class HDFTimeSeriesCatalog(object):
                  catalog_file=INDEX_DATA_CATALOG,
                  check_integrity=True,
                  archive_existent=False,
-                 verbose=True):
+                 verbose=True,
+                 test_mode=False):
+        self.test_mode = test_mode
+
         self.base_path = os.path.abspath(base_path)
         self.verbose = verbose
 
@@ -326,8 +330,8 @@ class HDFTimeSeriesCatalog(object):
             log('load_hdf KEYERROR -> ST:"{}", KEY:{}; -> {}'.format(p, k, e), 'error', self.verbose)
         except (OSError, AttributeError) as e:
             if os.path.exists(p):
-                # HDF5ExtError error back trace (TODO SANITIZE BAD STORE)
-                path_bkp = os.path.splitext(p)[0] + '_bad_bkp_{:%Y_%m_%d_%H%M%S}'.format(pd.Timestamp.now())
+                # HDF5ExtError error back trace (BAD STORE)
+                path_bkp = os.path.splitext(p)[0] + '_bad_bkp_{:%Y_%m_%d_%H%M%S}'.format(dt.datetime.now())
                 msg_err = 'load_hdf HDF5ExtError => bad store! -> ST:"{}", KEY:{}; -> {}\nBACKUP TO {} & REMOVAL'
                 msg_err = msg_err.format(p, k, e, path_bkp)
                 log(msg_err, 'error', True)
@@ -379,7 +383,7 @@ class HDFTimeSeriesCatalog(object):
 
     def _classify_data(self, df, func_save_data):
         paths = []
-        ahora = pd.Timestamp.now()
+        ahora = dt.datetime.now()
         gb_años = df.groupby(pd.TimeGrouper(freq='A'))
         for ts_year, d_year in gb_años:
             if not d_year.empty:
@@ -456,16 +460,16 @@ class HDFTimeSeriesCatalog(object):
         if distribute_existent and not df.empty:
             if not df[df.is_raw & ~df.is_cat].empty:
                 raw_to_distr = df[df.is_raw & ~df.is_cat]
-                # log('Distribuyendo datos desde:\n{}'.format(raw_to_distr), 'debug', self.verbose)
                 data = pd.DataFrame(pd.concat([self._load_hdf(p, key=self.key_raw)
                                                for p in raw_to_distr['st']])).sort_index()
                 if self.is_raw_data(data):
                     data = self.process_data(data)
                 mod_paths = self._distribute_data(data, mode='a')
                 for p in raw_to_distr['st']:
-                    p_bkp = os.path.join(self.base_path, DIR_BACKUP, p)
-                    os.makedirs(os.path.dirname(p_bkp), exist_ok=True)
-                    shutil.copyfile(os.path.join(self.base_path, p), p_bkp)
+                    if not self.test_mode:  # Backup only in normal run
+                        p_bkp = os.path.join(self.base_path, DIR_BACKUP, p)
+                        os.makedirs(os.path.dirname(p_bkp), exist_ok=True)
+                        shutil.copyfile(os.path.join(self.base_path, p), p_bkp)
                     os.remove(os.path.join(self.base_path, p))
                 df = df.set_index('st').drop(mod_paths, errors='ignore').reset_index()
                 df_2 = self._gen_index_entries(paths=mod_paths)
@@ -548,7 +552,7 @@ class HDFTimeSeriesCatalog(object):
         if reload_index:
             self.tree = self._get_index(check_index=False)
         new_stores = []
-        ahora = pd.Timestamp.now()
+        ahora = dt.datetime.now()
         month_now = ahora.year * 12 + ahora.month
         monthly_archive = False
         new_data_append = False
@@ -658,16 +662,15 @@ class HDFTimeSeriesCatalog(object):
         paths = self._classify_data(data, _save_distributed_data)
         return paths
 
-    # @timeit('get')
     def get(self, start=None, end=None, last_hours=None, column=None, with_summary=False):
         """
         Loads catalog data from disk.
 
-        :param start: :str: or :pd.Timestamp: start datetime of data query
-        :param end: :str: or :pd.Timestamp: end datetime of data query
-        :param last_hours: :str: or :pd.Timestamp: query from 'last hours' until now
-        :param column: desired key in pd.DataFrame
-        :param with_summary: bool
+        :param str or pd.Timestamp or dt.datetime start: start datetime of data query
+        :param str or pd.Timestamp or dt.datetime end: end datetime of data query
+        :param str or int last_hours: query from 'last hours' until now
+        :param str column: desired column in pd.DataFrame
+        :param bool with_summary:
         :return: data (opc: , data_summary)
 
         """
@@ -715,10 +718,11 @@ class HDFTimeSeriesCatalog(object):
         """
         Loads catalog summary data from disk.
 
-        :param start: :str: or :pd.Timestamp: start datetime of data query
-        :param end: :str: or :pd.Timestamp: end datetime of data query
-        :param last_hours: :str: or :pd.Timestamp: query from 'last hours' until now
+        :param str or pd.Timestamp or dt.datetime start: start datetime of data query
+        :param str or pd.Timestamp or dt.datetime end: end datetime of data query
+        :param str or int last_hours: query from 'last hours' until now
         :return: data_summary
+        :rtype: pd.DataFrame
 
         """
         paths_idx = self._get_paths(start, end, last_hours)
@@ -781,6 +785,12 @@ class HDFTimeSeriesCatalog(object):
                 df_s = self.process_data_summary(df)
                 if (df is not None) and not df.empty:
                     self._save_hdf([df, df_s], path, [self.key_raw, self.key_summary], mode='w', **KWARGS_SAVE)
+            path_today = self.tree[self.tree.st.str.contains(ST_TODAY) & self.tree.is_cat]
+            if not path_today.empty:
+                path = path_today.st.iloc[0]
+                df = self.process_data(self._load_store(path))
+                if (df is not None) and not df.empty:
+                    self._save_hdf(df, path, self.key_raw, mode='w', **KWARGS_SAVE)
             self.tree = self._get_index(check_index=True)
             return True
         else:
@@ -820,26 +830,26 @@ class HDFTimeSeriesCatalog(object):
 
         """
         path_export = os.path.join(self.base_path, filename)
-        stores_export = self.tree[self.tree.is_raw][['st', 'n_rows']]
-        log('EXPORT DATA FROM:\n{}'.format(stores_export), 'magenta', self.verbose, False)
-        init = False
-        if stores_export.n_rows.sum() > 0:
-            for _, (p, n_rows) in stores_export.iterrows():
-                p_st = os.path.join(self.base_path, p)
-                log('EXPORT {} ROWS FROM STORE: {}'.format(n_rows, p_st), 'info', self.verbose, False)
-                start = 0
-                with pd.HDFStore(p_st, 'r') as st:
-                    while start < n_rows:
-                        log('READING & EXPORTING ROWS FROM {} TO {} IN {}'.format(start, start + chunksize, p),
-                            'info', self.verbose, False)
-                        chunk_data = st.select(self.key_raw, start=start, stop=start + chunksize)
-                        if not init:
-                            chunk_data.to_csv(path_export, header=True, mode='w')
-                            init = True
-                        else:
-                            chunk_data.to_csv(path_export, header=False, mode='a')
-                        start += chunksize
-            return True
-        else:
-            log('NO DATA TO EXPORT! CATALOG:\n{}'.format(self.tree), 'error', self.verbose)
-            return False
+        if self.tree is not None:
+            stores_export = self.tree[self.tree.is_raw][['st', 'n_rows']]
+            log('EXPORT DATA FROM:\n{}'.format(stores_export), 'magenta', self.verbose, False)
+            init = False
+            if stores_export.n_rows.sum() > 0:
+                for _, (p, n_rows) in stores_export.iterrows():
+                    p_st = os.path.join(self.base_path, p)
+                    log('EXPORT {} ROWS FROM STORE: {}'.format(n_rows, p_st), 'info', self.verbose, False)
+                    start = 0
+                    with pd.HDFStore(p_st, 'r') as st:
+                        while start < n_rows:
+                            log('READING & EXPORTING ROWS FROM {} TO {} IN {}'.format(start, start + chunksize, p),
+                                'info', self.verbose, False)
+                            chunk_data = st.select(self.key_raw, start=start, stop=start + chunksize)
+                            if not init:
+                                chunk_data.to_csv(path_export, header=True, mode='w')
+                                init = True
+                            else:
+                                chunk_data.to_csv(path_export, header=False, mode='a')
+                            start += chunksize
+                return True
+        log('NO DATA TO EXPORT! CATALOG:\n{}'.format(self.tree), 'error', self.verbose)
+        return False

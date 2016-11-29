@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+Test RGBLED
+
+"""
 from time import sleep
-from enerpi.tests.conftest import TestCaseEnerpi
+from tests.conftest import TestCaseEnerpi
 
 
 class TestEnerpiLEDRGB(TestCaseEnerpi):

@@ -176,7 +176,7 @@ def editfile(file='config'):
 @auto.doc()
 def uploadfile(file):
     """
-    POST method for VIP files upload & replacement
+    POST method for interesting config files upload & replacement
 
     :param file: uploaded file_id
     """

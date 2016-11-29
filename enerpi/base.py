@@ -20,6 +20,27 @@ CONFIG_FILENAME = 'config_enerpi.ini'
 SENSORS_CONFIG_JSON_FILENAME = 'sensors_enerpi.json'
 
 
+class TimerExiter(object):
+    """
+    Simple timer, without threading (and without any precission!),
+    for limiting time in infinite loops (receiver & emitter)
+
+    It has overloaded the __nonzero__ method, for asking it in while loops like:
+        t = TimerExiter(7)
+        while t:
+            do cool things...
+    """
+
+    def __init__(self, timeout):
+        self.timeout = timeout
+        self.tic = time()
+
+    def __bool__(self):
+        return time() - self.tic < self.timeout
+
+    __nonzero__ = __bool__
+
+
 class EnerpiAnalogSensor(object):
     """
     Object for centralize access to sensor properties, as description, color, units, etc.
@@ -327,22 +348,12 @@ def _makedirs(dest_path):
         if os.path.exists(dest_path):
             os.utime(dest_path, None)
     except PermissionError as e:
-        from enerpi.notifier import push_enerpi_error
-        from time import sleep
-
         msg_error = '_makedirs PermissionError (dest_path = {}). Exception: {}. Exit in 2 secs...'.format(dest_path, e)
         log(msg_error, 'error', True, False)
-        push_enerpi_error('ENERPI Fatal error', msg_error)
-        sleep(2)
         sys.exit(2)
     except OSError as e:
-        from enerpi.notifier import push_enerpi_error
-        from time import sleep
-
         msg_error = '_makedirs OSError (dest_path = {}). Exception: {}. Exit in 2 secs...'.format(dest_path, e)
         log(msg_error, 'error', True, False)
-        push_enerpi_error('ENERPI Fatal error', msg_error)
-        sleep(2)
         sys.exit(2)
 
 
@@ -400,15 +411,18 @@ def set_logging_conf(filename, level='DEBUG', verbose=True, with_initial_log=Tru
         log(PRETTY_NAME, 'ok', verbose)
 
 
-def show_pi_temperature(log_rpi_temps, ts=3):
+def show_pi_temperature(log_rpi_temps, ts=3, timeout=None):
     """
-    Sensor Raspberry PI temperatures, infinite-loop of logging / printing values
+    Sensor Raspberry PI temperatures, infinite-loop (or timeout) of logging / printing values
 
-    :param log_rpi_temps: :bool: activate RPI temp logging
-    :param ts: :int: ∆T between samples
+    :param bool log_rpi_temps: activate RPI temp logging
+    :param int ts: ∆T between samples
+    :param int timeout: :int: ∆T between samples
+
     """
     def _loop_log_temps():
-        while True:
+        cond_while = True if timeout is None else TimerExiter(timeout)
+        while cond_while:
             t_cpu = get_cpu_temp()
             t_gpu = get_gpu_temp()
             if (t_cpu is None) and (t_gpu is None):
@@ -586,16 +600,20 @@ almacenando la ruta absoluta a la instalación de ENERPI
     return data_path, configp, config_s
 
 
-# TODO Revisión reload_config
 def reload_config():
-    global SENSORS, DATA_PATH, CONFIG, SENSORS_THEME
+    """
+    Method used in tests and in situations when ENERPI configuration changes.
+    Read & load global config variables: SENSORS, DATA_PATH, CONFIG
 
-    DATA_PATH, CONFIG, SENSORS_THEME = get_config_enerpi()
-    SENSORS = EnerpiSamplerConf(CONFIG, SENSORS_THEME)
+    """
+    global SENSORS, DATA_PATH, CONFIG
+
+    DATA_PATH, CONFIG, new_sensors_theme = get_config_enerpi()
+    SENSORS = EnerpiSamplerConf(CONFIG, new_sensors_theme)
 
 
 # Loads configuration
-DATA_PATH, CONFIG, SENSORS_THEME = get_config_enerpi()
+DATA_PATH, CONFIG, sensors_theme = get_config_enerpi()
 
 # Appends ENERPI gmail account: (Hardcoded)
 GMAIL_ACCOUNT = 'enerpi.bot@gmail.com'
@@ -605,11 +623,11 @@ GMAIL_APP_PASSWORD = 'qkdspbhmxouzrkvv'
 RECIPIENT = CONFIG.get('NOTIFY', 'RECIPIENT', fallback='eugenio.panadero@gmail.com')
 
 # Set Locale
-CUSTOM_LOCALE = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))
-locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
+custom_locale = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))
+locale.setlocale(locale.LC_ALL, custom_locale)
 
 # ANALOG SENSORS WITH MCP3008 (Rasp.io Analog Zero)
-SENSORS = EnerpiSamplerConf(CONFIG, SENSORS_THEME)
+SENSORS = EnerpiSamplerConf(CONFIG, sensors_theme)
 
 # Logging files & other common paths:
 FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
@@ -619,7 +637,12 @@ STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PAT
 SERVER_FILE_LOGGING_RSCGEN = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
 NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
 UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'
+
 IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
+IMG_BASEPATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
+DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK', fallback='enerpi_plot_{:%Y%m%d_%H%M}.png')
+COLOR_TILES = (1, 1, 1)
+
 DAEMON_STDOUT = '/tmp/enerpi_out.txt'
 DAEMON_STDERR = '/tmp/enerpi_err.txt'
 DAEMON_PIDFILE = '/tmp/enerpilogger.pid'

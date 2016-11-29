@@ -1,13 +1,20 @@
 # -*- coding: utf-8 -*-
+import json
 import math
 import os
-from time import time
-from enerpi.tests.conftest import TestCaseEnerpiWebStreamer
+from time import time, sleep
+from tests.conftest import TestCaseEnerpiWebStreamer
 
 
 class TestEnerpiWebServerStream(TestCaseEnerpiWebStreamer):
 
-    def test_streaming(self):
+    def test_0_last_msg(self):
+        self.endpoint_request('index', status_check=200)
+        sleep(2)
+        r = self.endpoint_request('api/last', mimetype_check='application/json', status_check=200)
+        assert json.loads(r.data.decode())
+
+    def test_1_streaming(self):
 
         def _print_next_msg(counter, iterator):
             msg = next(iterator)

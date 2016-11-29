@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
+"""
+Tests catalog 'update_month' operation
+
+"""
+from freezegun import freeze_time
 import os
 import pandas as pd
-from enerpi.tests.conftest import TestCaseEnerpi
+from tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
 
 
+@freeze_time("2016-11-03 18:00")
 class TestEnerpiUpdateMonthCatalog(TestCaseEnerpi):
 
     subpath_test_files = 'test_update_month'

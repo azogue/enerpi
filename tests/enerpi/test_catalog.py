@@ -5,8 +5,8 @@ import pandas as pd
 import pytest
 import shutil
 from time import time
-from enerpi.tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
+from tests.conftest import TestCaseEnerpi
 
 
 @pytest.mark.incremental
@@ -20,10 +20,10 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
         pp.print_cyan(self.cat)
 
     def test_1_config(self):
-        from enerpi.base import DATA_PATH, CONFIG, SENSORS_THEME, SENSORS
+        from enerpi.base import DATA_PATH, CONFIG, SENSORS
         pp.print_yellowb(DATA_PATH)
         pp.print_yellowb(CONFIG)
-        pp.print_yellowb(SENSORS_THEME)
+        # pp.print_yellowb(SENSORS_THEME)
         pp.print_yellowb(SENSORS)
 
     def test_2_catalog_reprocess_all_data(self):
@@ -98,6 +98,7 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
 
     def test_8_catalog_operations(self):
         from enerpi.base import SENSORS
+
         data_empty = pd.DataFrame([])
         data_empty_p = self.cat.process_data(data_empty)
         assert data_empty_p.empty
@@ -113,11 +114,16 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
         d2_none = self.cat.get(start=None, end=None, last_hours=10, column=SENSORS.main_column, with_summary=False)
         print(d2_none)
         assert (d2_none is None) or d2_none.empty
+
+        print(self.cat)
+        print(os.listdir(self.DATA_PATH))
+        print(os.listdir(os.path.join(self.DATA_PATH, 'CURRENT_MONTH')))
         d3_none, d3_s_none = self.cat.get(start=None, end=None, last_hours=10,
                                           column=SENSORS.main_column, with_summary=True)
         print(d3_none)
         assert d3_none is None
         assert d3_s_none is None
+
         d4, d4_s = self.cat.get(start='2016-10-01', end='2016-10-02', column=SENSORS.main_column, with_summary=True)
         assert not d4.empty
         assert d4_s.shape[0] == 48
@@ -137,7 +143,7 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
         os.remove(cat_file)
         new_cat = enerpi_data_catalog(base_path=self.cat.base_path,
                                       raw_file=self.cat.raw_store,
-                                      check_integrity=True, verbose=True)
+                                      check_integrity=True, verbose=True, test_mode=True)
         pp.print_ok(new_cat)
 
         # Now with corrupted cat_file & non-existent raw_file
@@ -145,11 +151,11 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
             f.write('corrupting data catalog; -1\n')
         new_cat_2 = enerpi_data_catalog(base_path=self.cat.base_path,
                                         raw_file=os.path.join(self.DATA_PATH, 'enerpi_data_non_existent.h5'),
-                                        check_integrity=True, verbose=True)
+                                        check_integrity=True, verbose=True, test_mode=True)
         pp.print_ok(new_cat_2)
 
         # Now with distributing data:
-        raw_data = self.cat._load_store(os.path.join(BASE_PATH, 'tests', 'rsc',
+        raw_data = self.cat._load_store(os.path.join(BASE_PATH, '..', 'tests', 'rsc',
                                                      'test_update_month', 'enerpi_data_test.h5'))
         archived_data = self.cat._load_store('DATA_YEAR_2016/DATA_2016_MONTH_10.h5')
         assert self.cat.is_raw_data(raw_data)
@@ -165,7 +171,7 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
         pp.print_cyan(os.listdir(os.path.join(self.DATA_PATH, 'CURRENT_MONTH')))
         shutil.rmtree(os.path.join(self.cat.base_path, 'DATA_YEAR_2016'))
         shutil.rmtree(os.path.join(self.cat.base_path, 'CURRENT_MONTH'))
-        shutil.rmtree(os.path.join(self.cat.base_path, 'OLD_STORES'))
+        # shutil.rmtree(os.path.join(self.cat.base_path, 'OLD_STORES'))
         # os.remove(os.path.join(self.cat.base_path, self.cat.raw_store))
 
         # Populate new hdf stores:
@@ -174,14 +180,27 @@ class TestEnerpiCatalogTasks(TestCaseEnerpi):
         print(os.listdir(self.cat.base_path))
 
         # New catalog:
-        new_cat_3 = enerpi_data_catalog(base_path=self.cat.base_path, check_integrity=True, verbose=True)
+        new_cat_3 = enerpi_data_catalog(base_path=self.cat.base_path, check_integrity=True,
+                                        verbose=True, test_mode=True)
         pp.print_ok(new_cat_3)
         print(os.listdir(self.cat.base_path))
+        print(os.listdir(os.path.join(self.cat.base_path, 'CURRENT_MONTH')))
 
     def test__10_export_data(self):
-        exported_ok = self.cat.export_chunk(filename='enerpi_all_data_test_1.csv')
+        from enerpi.api import enerpi_data_catalog
+
+        print(os.listdir(self.cat.base_path))
+        print(os.listdir(os.path.join(self.cat.base_path, 'CURRENT_MONTH')))
+        pp.print_red(self.cat.tree)
+        self.cat = enerpi_data_catalog(base_path=self.cat.base_path, check_integrity=True, verbose=True, test_mode=True)
+        pp.print_ok(self.cat.tree)
+
+        pp.print_magenta(self.cat.tree)
+        export_file = 'enerpi_all_data_test_1.csv'
+        exported_ok = self.cat.export_chunk(filename=export_file)
         pp.print_cyan(exported_ok)
         self.assertIs(exported_ok, True)
+        os.remove(os.path.join(self.DATA_PATH, export_file))
 
 
 if __name__ == '__main__':

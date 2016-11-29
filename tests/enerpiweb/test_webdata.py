@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
-from enerpi.tests.conftest import TestCaseEnerpiWebServer
 import enerpi.prettyprinting as pp
+from tests.conftest import TestCaseEnerpiWebServer
 
 
 class TestEnerpiWebServerData(TestCaseEnerpiWebServer):
@@ -20,12 +20,11 @@ class TestEnerpiWebServerData(TestCaseEnerpiWebServer):
         print(self.cat.tree)
         self.endpoint_request("api/hdfstores/DATA_2016_MONTH_10.h5?as_attachment=true",
                               status_check=404, mimetype_check='text/html')
-        r = self.endpoint_request("api/hdfstores/DATA_2016_MONTH_10.h5",
-                                  status_check=404, mimetype_check='text/html')
+        self.endpoint_request("api/hdfstores/DATA_2016_MONTH_10.h5", status_check=404, mimetype_check='text/html')
         self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_23.h5?as_attachment=true",
                               status_check=200, mimetype_check='application/octet-stream')
-        r = self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_23.h5",
-                                  status_check=200, mimetype_check='application/octet-stream')
+        self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_23.h5",
+                              status_check=200, mimetype_check='application/octet-stream')
 
     def test_2_context_info(self):
         self.show_context_info()

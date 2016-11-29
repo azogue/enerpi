@@ -52,7 +52,11 @@ class DummySensor(object):
     def value(self):
         """Mimics reading of MCP sensor"""
         ts = self.elapsed % self._period_ev
-        value = self._power_ev_values[np.where(self._power_ev_time < ts)[0][-1]]
+        valid_values = np.where(self._power_ev_time < ts)[0]
+        if len(valid_values) > 0:
+            value = self._power_ev_values[valid_values[-1]]
+        else:
+            value = -1
         self._true_value = value / self._power_divisor
         noise_v = 2 * (random.random() - .5) * self._noise
         v = self._true_value + noise_v
@@ -262,7 +266,7 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                         sleep(t_sleep)
                     tic = time()
     except KeyboardInterrupt:
-        log('KeyboardInterrupt en PISAMPLER: Exiting...', 'warn', verbose)
+        log('KeyboardInterrupt en PISAMPLER: Exiting at {}...'.format(dt.datetime.now()), 'warn', verbose)
     except OSError as e:
         log('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e), 'error', verbose)
     except (RuntimeError, AttributeError) as e:

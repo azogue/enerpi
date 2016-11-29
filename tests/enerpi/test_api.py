@@ -2,8 +2,8 @@
 import os
 import pandas as pd
 import shutil
-from enerpi.tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
+from tests.conftest import TestCaseEnerpi
 
 
 class TestEnerpiAPI(TestCaseEnerpi):
@@ -64,7 +64,7 @@ class TestEnerpiAPI(TestCaseEnerpi):
         df_log_empty = extract_log_file('NOT_EXISTENT.log', extract_temps=True, verbose=True)
         assert df_log_empty.empty
 
-        file_logging = os.path.join(BASE_PATH, 'tests', 'rsc', 'test_update_month', 'enerpi.log')
+        file_logging = os.path.join(BASE_PATH, '..', 'tests', 'rsc', 'test_update_month', 'enerpi.log')
         print('file_logging: {}'.format(file_logging))
         assert os.path.exists(file_logging)
         shutil.copy(file_logging, str(self.DATA_PATH))

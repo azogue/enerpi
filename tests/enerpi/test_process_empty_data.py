@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
+"""
+Test catalog operations with empty catalog (no data)
+
+"""
 import os
 import pandas as pd
 import pytest
-from enerpi.tests.conftest import TestCaseEnerpi
+from tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
 
 
@@ -94,6 +98,13 @@ class TestEnerpiProcessEmptyData(TestCaseEnerpi):
         exported_1 = self.cat.export_chunk(filename='enerpi_all_data_test_1.csv')
         pp.print_cyan(exported_1)
         self.assertEqual(exported_1, False)
+
+    def test_8_empty_tiles(self):
+        from enerpi.base import IMG_TILES_BASEPATH
+        from enerpiplot.enerplot import gen_svg_tiles
+
+        ok = gen_svg_tiles(IMG_TILES_BASEPATH, self.cat, color=(1, 0, 0))
+        self.assertEqual(ok, False)
 
 
 if __name__ == '__main__':

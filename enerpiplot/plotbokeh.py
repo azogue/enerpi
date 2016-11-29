@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import locale
 import numpy as np
 import pandas as pd
 import bokeh
@@ -7,11 +6,10 @@ from bokeh.plotting import figure
 from bokeh.embed import components
 from bokeh.models import HoverTool, ColumnDataSource, LinearAxis, Range1d
 from bokeh.io import reset_output
-from enerpi.base import SENSORS, CUSTOM_LOCALE
+from enerpi.base import SENSORS
+from enerpiplot import (ROUND_W, ROUND_KWH, COLS_DATA_KWH, COLORS_DATA_KWH, COLOR_REF_RMS,
+                        UNITS_DATA_KWH, LABELS_DATA_KWH, FMT_TOOLTIP_DATA_KWH)
 
-
-ROUND_W = 500
-ROUND_KWH = .5
 
 COLS_SENSORS_RMS = SENSORS.columns_sensors_rms
 COLS_SENSORS_MEAN = SENSORS.columns_sensors_mean
@@ -21,24 +19,13 @@ COL_MAIN_MEAN = COLS_SENSORS_MEAN[0]
 COL_TS = SENSORS.ts_column
 COLS_DATA = COLS_SENSORS_RMS + COLS_SENSORS_MEAN + [SENSORS.ref_rms]
 B_SENSORS_RMS = [True] * len(COLS_SENSORS_RMS) + [False] * len(COLS_SENSORS_MEAN) + [True]
-# assert len(B_SENSORS_RMS) == len(COLS_DATA) - 1
-COLORS_DATA = [SENSORS[s].color for s in COLS_DATA[:-1]] + ['#FF0077']
+COLORS_DATA = [SENSORS[s].color for s in COLS_DATA[:-1]] + [COLOR_REF_RMS]
 UNITS_DATA = [SENSORS[s].unit for s in COLS_DATA[:-1]] + ['']
 FMT_TOOLTIP_DATA = ['{0}'] * len(COLS_SENSORS_RMS) + ['{0.0}'] * len(COLS_SENSORS_MEAN) + ['{0}']
 LABELS_DATA = SENSORS.descriptions(COLS_DATA)
 
-# TODO Adaptar summary plots
-COLS_DATA_KWH = ['kWh', 'p_max', 'p_min', 't_ref']
-COLORS_DATA_KWH = ['#8C27D3', '#972625', '#f4af38', '#8C27D3']
-UNITS_DATA_KWH = ['kWh', 'W', 'W', '']
-LABELS_DATA_KWH = ['Consumption', 'Max Power', 'Min Power', 'Sampled']
-FMT_TOOLTIP_DATA_KWH = ['{0.000}', '{0}', '{0}', '{0.000}']
-
-locale.setlocale(locale.LC_ALL, CUSTOM_LOCALE)
-# locale.setlocale(locale.LC_ALL, locale.getlocale())
-# locale.setlocale(locale.LC_ALL, CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale())))
-
-TOOLS = "pan,xwheel_zoom,ywheel_zoom,box_zoom,reset,save,crosshair"
+# TOOLS = "pan,xwheel_zoom,ywheel_zoom,box_zoom,reset,save,crosshair"
+TOOLS = "pan,xwheel_zoom,box_zoom,reset,save,crosshair"
 P_WIDTH = 900
 P_HEIGHT = 500
 

@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Tests ENERPI pushbullet notifications
+
+"""
 import os
 from unittest import TestCase
 

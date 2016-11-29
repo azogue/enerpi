@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Test linux user & groups needed to work
+
+"""
 from subprocess import check_output, STDOUT, CalledProcessError
 import sys
 

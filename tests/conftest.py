@@ -11,7 +11,7 @@ from glob import glob
 import os
 import pytest
 import shutil
-from subprocess import check_output, TimeoutExpired, Popen
+from subprocess import Popen
 import sys
 import tempfile
 from time import sleep
@@ -21,8 +21,8 @@ from enerpi import BASE_PATH
 import enerpi.prettyprinting as pp
 
 
-TIME_STREAM = 5
-DEBUG_EXTRA_INFO = os.path.join(BASE_PATH, '..', 'debug_tests_info.txt')
+TIME_STREAM = 10
+DEBUG_EXTRA_INFO = os.path.join(BASE_PATH, '..', 'tests', 'debug_tests_info.txt')
 
 
 # from http://doc.pytest.org/en/latest/example/simple.html - incremental testing - test steps
@@ -60,7 +60,7 @@ def _get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi',
     before_tests = open(path_default_datapath).read()
 
     # Prepara archivos:
-    path_files_test = os.path.join(BASE_PATH, 'tests', 'rsc', subpath_test_files)
+    path_files_test = os.path.abspath(os.path.join(BASE_PATH, '..', 'tests', 'rsc', subpath_test_files))
     tmp_dir = tempfile.TemporaryDirectory(prefix='ENERPIDATA_test')
     data_path = tmp_dir.name
     open(path_default_datapath, 'w').write(data_path)
@@ -78,7 +78,8 @@ def _get_temp_catalog_for_testing(subpath_test_files='test_context_enerpi',
     from enerpi.base import reload_config
     reload_config()
     from enerpi.api import enerpi_data_catalog
-    cat = enerpi_data_catalog(base_path=data_path, raw_file=raw_file, check_integrity=check_integrity, verbose=True)
+    cat = enerpi_data_catalog(base_path=data_path, raw_file=raw_file, check_integrity=check_integrity,
+                              verbose=True, test_mode=True)
 
     return tmp_dir, data_path, cat, path_default_datapath, before_tests
 
@@ -166,23 +167,6 @@ class TestCaseEnerpi(TestCase):
             print('TESTING CLI with sys.argv: {}'.format(sys.argv))
             func_exec(*args_func_exec, **kwargs_func_exec)
 
-    @staticmethod
-    def exec_subprocess(cmd, timeout=None):
-        """
-        Check output of CLI command
-        :param cmd: list with splitted command
-        :param timeout: optional # of seconds
-        :return: output of CLI command
-
-        """
-        try:
-            out = check_output(cmd, timeout=timeout).decode()
-            pp.print_ok(out)
-            return out
-        except TimeoutExpired as e:
-            pp.print_warn(e)
-            return None
-
 
 class TestCaseEnerpiCRON(TestCaseEnerpi):
 
@@ -241,6 +225,24 @@ class TestCaseEnerpiCRON(TestCaseEnerpi):
         print(post_test_cron.crons)
         assert all([c1.command == c2.command for c1, c2 in zip(cls.cron_orig.crons, post_test_cron.crons)])
         info_crontable()
+
+
+class TestCaseEnerpiDemoStreamer(TestCaseEnerpi):
+
+    stream_max_time = 10
+
+    @classmethod
+    def setup_class(cls):
+        """
+        Same as TestCaseEnerpi, and starts a demo emitter for stream testing
+
+        """
+        super(TestCaseEnerpiDemoStreamer, cls).setup_class()
+
+        # Starting demo emitter:
+        cmd = ['enerpi', '--demo', '-ts', '3', '-T', '1', '--timeout', str(cls.stream_max_time)]
+        print('Popen cmd "{}"'.format(cmd))
+        Popen(cmd)
 
 
 class TestCaseEnerpiWeb(TestCaseEnerpi):
@@ -321,9 +323,10 @@ class TestCaseEnerpiWebStreamer(TestCaseEnerpiWeb):
         cls.endpoint_request('index', mimetype_check='text/html', verbose=True)
 
         # Starting demo emitter:
-        cmd = ['enerpi', '--demo', '-ts', '3', '-T', '1', '--timeout', str(cls.stream_max_time)]
+        cmd = ['enerpi', '--demo', '-ts', '3', '-T', '1', '--timeout', str(2 * cls.stream_max_time)]
         print('Popen cmd "{}"'.format(cmd))
         Popen(cmd)
+        sleep(3)
 
 
 class TestCaseEnerpiWebServer(TestCaseEnerpiWeb):

@@ -38,17 +38,17 @@ def _rsc_generator(catalog, verbose=False):
     return ok, toc - tic
 
 
-def _loop_rsc_generator(catalog, sleep_time, verbose=False):
+def _loop_rsc_generator(catalog, sleep_time, num_times, verbose=False):
     log('**RESOURCE_GENERATOR LOOP desde MULE con PID={}!!!'.format(os.getpid()), 'debug', False)
     counter = 0
-    while True:
+    while (counter < num_times) or (num_times == 0):
         gen_ok, took = _rsc_generator(catalog, verbose=verbose)
         counter += 1
-        sleep(max(sleep_time - took, 20))
+        sleep(max(sleep_time - took, 5))
         # uwsgi.async_sleep(max(sleep_time - took, 20))
 
 
-def main():
+def main(test_mode=False):
     """
     CLI Manager for generate svg plots as resources for the web app
     """
@@ -56,19 +56,20 @@ def main():
     p.add_argument('-o', '--one', action='store_true', help='Run only one time.')
     p.add_argument('-t', '--timer', action='store', type=int, metavar='∆T', default=TILES_GENERATION_INTERVAL_LOOP,
                    help='Set periodic timer, in seconds. Default={}.'.format(TILES_GENERATION_INTERVAL_LOOP))
+    p.add_argument('-n', '--num-times', action='store', type=int, metavar='∆T', default=0,
+                   help='Set # of tiles generations. Default=0 (no limit).')
     p.add_argument('-v', '--verbose', action='store_true', help='Verbose mode (logging to stdout)')
     args = p.parse_args()
     # logging.debug('(MULE)-> main con args={}'.format(args))
 
     # Cargamos catálogo para consulta:
-    cat = init_catalog(check_integrity=False)
+    cat = init_catalog(check_integrity=False, test_mode=test_mode)
 
     if args.one:
         _rsc_generator(cat, verbose=args.verbose)
     else:
-        log('(MULE)-> Init loop with timer={} seconds'.format(args.timer), 'debug', False)
-        # print('(MULE)-> Init loop with timer={} seconds'.format(args.timer))
-        _loop_rsc_generator(cat, args.timer, VERBOSE)
+        log('(MULE)-> Init loop with timer={} seconds'.format(args.timer), 'debug', args.verbose)
+        _loop_rsc_generator(cat, args.timer, args.num_times, args.verbose)
 
 
 if __name__ == '__main__':

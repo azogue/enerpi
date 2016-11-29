@@ -46,7 +46,8 @@ setup(
     # have to be included in MANIFEST.in as well.
     package_data={
         'enerpi': ['config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
-        'enerpiweb': ['templates/*', 'static/css/*', 'static/img/icons/*', 'static/js/*'],
+        'enerpiweb': ['templates/*', 'templates/email/*', 'templates/doc/*', 'templates/macros/*',
+                      'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
     install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7',
                       'flask>=0.11.1', 'flask-autodoc>=0.1.2', 'wtforms>=2.1',  'cryptography>=1.5.2',
@@ -79,6 +80,6 @@ setup(
     },
     # Test configuration:
     # setup_requires=['pytest-runner'],
-    tests_require=['pytest>=3.0.0'],
+    tests_require=['pytest>=3.0.0', 'freezegun>=0.3.8'],
     # test_suite='nose.collector',
 )

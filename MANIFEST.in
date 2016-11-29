@@ -3,8 +3,16 @@ include LICENSE
 include README.rst
 
 # Include the data files
+recursive-include enerpiweb/templates *
 recursive-include enerpiweb/static/img/icons *
 recursive-include enerpiweb/static/css *
 recursive-include enerpiweb/static/js *
 
+# Excluded
+recursive-exclude enerpi/gdrivesync *
+exclude enerpi/calibrate.py
+exclude enerpiweb/templates/learning_index.html
+exclude enerpiweb/templates/manual_labeling.html
+exclude enerpiweb/templates/manual_confirmation.html
+exclude enerpiweb/templates/table_buffer.html
 global-exclude .DS_Store

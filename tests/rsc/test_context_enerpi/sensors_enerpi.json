@@ -4,6 +4,7 @@
     "analog_channel": 4,
     "is_rms": true,
     "unit": "W",
+    "bias": 0.4999,
     "color": "#0CBB43",
     "tile_gradient_st": [12, 187, 67, 0.83],
     "tile_gradient_end": [55, 245, 119, 0.27],

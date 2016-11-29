@@ -22,7 +22,6 @@ from enerpi.base import log
 '''
 
 DELTA_MAX_SUMMARY_BFILL = 120  # pd.Timedelta('2min')
-# TODO Terminar Doc
 
 
 def _compress_data(data, sensors):
@@ -89,6 +88,11 @@ def _process_data(data, sensors):
 
 
 class EnerpiCatalog(HDFTimeSeriesCatalog):
+    """
+    ENERPI Catalog class for handling ENERPI Logger sampled data
+    Based on HDFTimeSeriesCatalog
+
+    """
 
     def __init__(self, sensors=None, **kwargs):
         if sensors is None:
@@ -101,17 +105,50 @@ class EnerpiCatalog(HDFTimeSeriesCatalog):
 
     @staticmethod
     def is_raw_data(data):
+        """
+        Test dataframe if its data is not compressed (if it's using default float64 dtypes)
+
+        :param pd.DataFrame data: dataframe
+        :return: is raw data
+        :rtype: bool
+
+        """
         for dt in data.dtypes:
             if dt == 'float64':
                 return True
         return False
 
     def process_data(self, data):
+        """
+        Compress raw sampled data down-casting its dtypes before archive it in disk
+
+        :param pd.DataFrame data: input data
+        :return: compressed_data
+        :rtype: pd.DataFrame
+
+        """
         return _compress_data(data, self.sensors)
 
     def process_data_summary(self, data):
+        """
+        Process summary of data (calculate consumption data)
+
+        :param pd.DataFrame data: input data to summarize
+        :return: summary_data
+        :rtype: pd.DataFrame
+
+        """
         return _process_data(data, self.sensors)
 
     def process_data_summary_extra(self, data):
+        """
+        Process extra summary of data (calculate consumption data & report data -> Not implemented)
+
+        :param pd.DataFrame data: input data
+        :return: summary_data, extra_summary_data
+        :rtype: tuple
+
+        """
+        # TODO Report data
         consumo = _process_data(data, self.sensors)
         return consumo, None

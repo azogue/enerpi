@@ -6,13 +6,13 @@ import os
 import pandas as pd
 from threading import Timer
 from time import sleep, time
-from enerpi.base import (CONFIG, SENSORS, DATA_PATH, show_pi_temperature,
+from enerpi.base import (CONFIG, SENSORS, DATA_PATH, TimerExiter, show_pi_temperature,
                          set_logging_conf, log, FILE_LOGGING, LOGGING_LEVEL)
 from enerpi.database import init_catalog, save_raw_data, HDF_STORE_PATH
 from enerpi.pisampler import enerpi_sampler_rms, enerpi_raw_sampler, msg_to_dict, tuple_to_dict_json
 from enerpi.iobroadcast import get_codec, broadcast_msg, receiver_msg_generator
 from enerpi.ledrgb import get_rgbled, led_info, led_alarm, blink_color
-from enerpi.notifier import push_enerpi_error, push_enerpi_file
+from enerpi.notifier import push_enerpi_error
 
 
 # Disk data store
@@ -35,27 +35,6 @@ MIN_N_SAMPLES_MAX_CONSIDERED = 900
 MIN_N_SAMPLES_ABS = 60
 STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH'))
 IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
-
-
-class TimerExiter(object):
-    """
-    Simple timer, without threading (and without any precission!),
-    for limiting time in infinite loops (receiver & emitter)
-
-    It has overloaded the __nonzero__ method, for asking it in while loops like:
-        t = TimerExiter(7)
-        while t:
-            do cool things...
-    """
-
-    def __init__(self, timeout):
-        self.timeout = timeout
-        self.tic = time()
-
-    def __bool__(self):
-        return time() - self.tic < self.timeout
-
-    __nonzero__ = __bool__
 
 
 def _get_color(value, paleta=PALETA):
@@ -330,15 +309,13 @@ def enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
         min_n_raw_samples = max(MIN_N_SAMPLES_ABS,
                                 int(MIN_N_SAMPLES_DELTA_FRACTION * min(MIN_N_SAMPLES_MAX_CONSIDERED, n_samples_buffer)))
 
-    error_decay = {'counter_act': 0, 'subject': 'SAMPLING DECAY -> {}',
+    error_decay = {'counter_act': 0,
+                   'subject': 'SAMPLING DECAY -> {}',
                    'mask': 'Sampling freq decay until {}. # act: {}. # Unreach. Net: {}',
-                   'file_notify': os.path.join(IMG_TILES_BASEPATH, 'tile_enerpi_data_ref_last_24h.svg'),
-                   'file_title': 'ENERPI REF (last24h)',
                    'last_error_decay': None}
     # Loop
     try:
         while cond_while:
-            # tic = time()
             # Recibe sample del generador de datos
             data = next(data_generator)
 
@@ -361,7 +338,6 @@ def enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
                     error_decay['last_error_decay'] = time()
                     msg = error_decay['mask'].format(data[-2], error_decay['counter_act'], counter_unreachable)
                     _ = push_enerpi_error(error_decay['subject'].format(data[-2]), msg)
-                    _ = push_enerpi_file(error_decay['file_notify'], error_decay['file_title'])
                     error_decay['counter_act'] = 0
             elif (counter_unreachable[0] > 1) and (LED_STATE == 0):
                 # Unreachable network (wifi issues) -->   2x yellow blink (ERROR NETWORK)
@@ -387,10 +363,6 @@ def enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
                 _set_led_state_info(led, n_blinks=2)
                 buffer_disk[:, 1] = np.nan
                 counter = 0
-            # toc = time()
-            # Sleep cycle
-            # TODO Quitar - sleep:
-            # sleep(max(0.001, delta_sampling - (toc - tic)))
     except StopIteration:
         log('Exiting SENDER because StopIteration', 'warn', verbose)
     except KeyboardInterrupt:

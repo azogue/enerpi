@@ -14,11 +14,7 @@ def filter_color(color):
 
     """
     if (type(color) is list) or (type(color) is tuple):
-        try:
-            rgb = [str(int(x)) for x in color[:3]]
-        except ValueError as e:
-            print(e)
-            rgb = [str(max(0, min(255, int(round(255 * x))))) for x in color[:3]]
+        rgb = [str(int(x)) for x in color[:3]]
         if len(color) == 3:
             return 'rgb({})'.format(', '.join(rgb))
         else:

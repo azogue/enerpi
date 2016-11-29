@@ -1,5 +1,32 @@
 # # -*- coding: utf-8 -*-
-from enerpi.tests.conftest import TestCaseEnerpiCRON, TestCaseEnerpiWeb
+from tests.conftest import TestCaseEnerpiCRON, TestCaseEnerpiWeb
+
+
+def test_colors():
+    """
+    Quick test to cover ch_color method, in enerpiplot.enerplot
+
+    """
+    from enerpiplot.enerplot import ch_color
+
+    c1 = ch_color('aabbcc', .1)
+    print(c1)
+    c2 = ch_color('#aabbcc', alpha=.4)
+    print(c2)
+    try:
+        ch_color('aabbc', alpha=.4)
+        assert 0
+    except ValueError:
+        pass
+    c3 = ch_color([.1, .5, .6], alpha=.4)
+    print(c3)
+    assert c3 == (0.1, 0.5, 0.6, 0.4)
+    c4 = ch_color((.1, .5, .6, .8), alpha=.4)
+    print(c4)
+    assert c4 == (0.1, 0.5, 0.6, 0.4)
+    c5 = ch_color((.1, .5, .6, .8), .5)
+    print(c5)
+    assert c5 == (0.05, 0.25, 0.3, 0.4)
 
 
 class TestEnerpiWebCronUtils(TestCaseEnerpiCRON):
@@ -26,7 +53,8 @@ class TestEnerpiWebCronUtils(TestCaseEnerpiCRON):
 
         print('Installing CRON command: "{}"'.format(self.cmd_rscgen))
         set_command_periodic(self.cmd_rscgen, verbose=True, comment='testing crontasks 3h', hour=3)
-        set_command_periodic(self.cmd_rscgen, verbose=True, comment='testing crontasks 30min', minute=30)
+        set_command_periodic(self.cmd_rscgen, verbose=True, minute=30)
+        set_command_periodic(self.cmd_rscgen, verbose=True, frecuency_days=7)
 
     def test_uninstall_daemon_rsc_gen(self):
         """

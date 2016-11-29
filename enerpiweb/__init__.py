@@ -6,6 +6,8 @@ from werkzeug.contrib.fixers import ProxyFix
 from werkzeug.routing import Rule
 import jinja2
 import os
+# noinspection PyUnresolvedReferences
+from enerpi import __version__
 from enerpi.base import CONFIG, DATA_PATH, check_resource_files, GMAIL_ACCOUNT, GMAIL_APP_PASSWORD
 from enerpi.api import get_encryption_key
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from enerpi.tests.conftest import TestCaseEnerpiCRON
+from tests.conftest import TestCaseEnerpiCRON
 
 
 class TestEnerpiCRONSetup(TestCaseEnerpiCRON):

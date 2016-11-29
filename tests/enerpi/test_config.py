@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from enerpi.tests.conftest import TestCaseEnerpi
 import enerpi.prettyprinting as pp
+from tests.conftest import TestCaseEnerpi
 
 
 class TestEnerpiCONFIG(TestCaseEnerpi):

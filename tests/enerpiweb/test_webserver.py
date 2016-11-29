@@ -4,7 +4,7 @@ import json
 import jsondiff
 import os
 import re
-from enerpi.tests.conftest import TestCaseEnerpiWebServer
+from tests.conftest import TestCaseEnerpiWebServer
 
 
 class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
@@ -76,6 +76,8 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
         self.endpoint_request("api/editconfig/nginx", status_check=404)
         self.endpoint_request("api/editconfig/enerpi", status_check=404)
         self.endpoint_request("api/editconfig/uwsgi", status_check=404)
+        self.endpoint_request("api/editconfig/daemon_out", status_check=404)
+        self.endpoint_request("api/editconfig/daemon_err", status_check=404)
         self.endpoint_request("api/editconfig/raw_store", status_check=404)
         self.endpoint_request("api/editconfig/catalog", status_check=404)
         self.endpoint_request("api/editconfig/notexistent", status_check=404)
@@ -99,6 +101,14 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
             for c in checks:
                 self.assertIn(c, lookin[0], 'No se encuentra "{}" en "{}"'.format(c, lookin))
                 self.assertIn(c, lookin_2[0], 'No se encuentra "{}" en "{}"'.format(c, lookin))
+
+        alerta_js = json.dumps({'alert_type': 'success', 'texto_alerta': 'testing enerpi...'})
+
+        self.endpoint_request("api/editconfig/config?alerta={}".format(alerta_js))
+        self.endpoint_request("api/showfile/enerpi?alerta={}".format(alerta_js))
+
+        self.endpoint_request("api/showfile/enerpi?delete=true", status_check=302)
+
         self.endpoint_request("api/showfile/notexistent", status_check=404)
         # TODO tests edit configuration files + POST changes
 
@@ -114,8 +124,9 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
         print(self.raw_file)
         self.endpoint_request("api/filedownload/{}?as_attachment=true".format('raw_store'),
                               status_check=302, verbose=True)
-        self.endpoint_request("api/hdfstores/TODAY.h5", status_check=200, verbose=True)
-        self.endpoint_request("api/hdfstores/TODAY.h5?as_attachment=true", status_check=200)
+        self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_25.h5", status_check=200, verbose=True)
+        self.endpoint_request("api/hdfstores/TODAY.h5", status_check=404, verbose=True)
+        self.endpoint_request("api/hdfstores/TODAY.h5?as_attachment=true", status_check=404)
 
     def test_4_upload_files(self):
         print('test_upload_files:')
@@ -142,6 +153,10 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
 
         file_bytes = BytesIO(open(os.path.join(self.DATA_PATH, 'secret_key_for_test'), 'rb').read())
         self.post_file('api/uploadfile/secret_key', file_bytes, filename, status_check=500, verbose=True)
+
+        file_bytes = BytesIO(open(os.path.join(self.DATA_PATH, 'secret_key_for_test'), 'rb').read())
+        self.post_file('api/uploadfile/flask', file_bytes, filename, status_check=404, verbose=True)
+
         self.endpoint_request("api/uploadfile/lala", status_check=405)
 
     def test_5_last_broadcast(self):
