@@ -1,13 +1,11 @@
 {% extends "layout.html" %}
 {% from 'macros/macros.html' import alert_dismiss with context %}
 
-{% macro tag_file_download(p, t0, tf, ns, btn_type)%}
+{% macro tag_file_download(p, label, btn_type)%}
     <a href="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
        download="{{ url_for('download_hdfstore_file', relpath_store=p, as_attachment=True) }}"
        style="margin-left: 10px; margin-right: 10px;">
-        <span class="tag tag-pill tag-{{ btn_type }}">
-            <i class="fa fa-file-archive-o" aria-hidden="true"></i><strong> {{ p }}</strong> <small>({{ t0 }}->{{ tf }}, N={{ ns }})</small>
-        </span>
+        <span class="tag tag-pill tag-{{ btn_type }}">{{ label|safe }}</span>
     </a>
 {% endmacro %}
 
@@ -43,7 +41,6 @@
                         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('showfile', file='nginx', tail=200, reverse=True)}}" role="button">NGINX Access</a>
                         <a class="btn btn-sm btn-outline-danger" href="{{ url_for('showfile', file='nginx_err', tail=200, reverse=True)}}" role="button">NGINX Errors</a>
                       </div>
-{#                    TODO pushbullet subscribe-widget#}
                         <a class="pushbullet-subscribe-widget btn btn-sm" data-channel="enerpi_notifications"
                            data-widget="button" data-size="small"></a>
                         <script type="text/javascript">
@@ -127,13 +124,13 @@
         </h6>
         <hr>
         <h4 style="line-height: 1.7em;">
-            {% for (p, t0, tf, ns) in list_stores %}
+            {% for (p, label) in list_stores %}
                 {% if 'MONTH' in p %}
-                    {{ tag_file_download(p, t0, tf, ns, 'success') }}
+                    {{ tag_file_download(p, label, 'success') }}
                 {% elif 'TODAY' in p %}
-                    {{ tag_file_download(p, t0, tf, ns, 'warning') }}
+                    {{ tag_file_download(p, label, 'warning') }}
                 {% else %}
-                    {{ tag_file_download(p, t0, tf, ns, 'primary') }}
+                    {{ tag_file_download(p, label, 'primary') }}
                 {% endif %}
             {% endfor %}
         </h4>

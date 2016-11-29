@@ -34,6 +34,17 @@ def control():
     Admin Control Panel with links to LOG viewing/downloading, hdf_stores download, ENERPI config editor, etc.
 
     """
+    def _text_button_hdfstore(rel_path, ini, fin, nrows):
+        name = os.path.basename(os.path.splitext(rel_path)[0])
+        ini, fin = ini.strftime('%d/%m/%y'), fin.strftime('%d/%m/%y')
+        if ini == fin:
+            t_date = ini
+        else:
+            t_date = '{}->{}'.format(ini, fin)
+        text = '''<i class="fa fa-file-archive-o" aria-hidden="true"></i><strong> {}</strong><br>   '''.format(name)
+        text += '''<small>({}, N={})</small>'''.format(t_date, nrows)
+        return text
+
     is_sender_active, last = stream_is_alive()
     after_sysop = request.args.get('after_sysop', '')
     alerta = request.args.get('alerta', '')
@@ -43,7 +54,7 @@ def control():
     df = cat.tree
     if df is not None:
         df = df[df.is_cat & df.is_raw].sort_values(by='ts_ini', ascending=False)
-        paths_rel = [(os.path.basename(p), t0.strftime('%d/%m/%y'), tf.strftime('%d/%m/%y'), n)
+        paths_rel = [(os.path.basename(p), _text_button_hdfstore(p, t0, tf, n))
                      for p, t0, tf, n in zip(df['st'], df['ts_ini'], df['ts_fin'], df['n_rows'])]
     else:
         paths_rel = []
