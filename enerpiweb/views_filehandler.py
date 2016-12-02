@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
+"""
+Flask routes for handle with log & config ENERPI files
+
+"""
 from flask import request, redirect, url_for, render_template, send_file, abort
-from flask_mail import Message
 import json
 import os
 from enerpi.base import (get_lines_file, log, DATA_PATH, FILE_LOGGING, SERVER_FILE_LOGGING_RSCGEN,
-                         RECIPIENT, SENSORS, INDEX_DATA_CATALOG,
                          UWSGI_CONFIG_FILE, DAEMON_STDOUT, DAEMON_STDERR)
 from enerpi.editconf import web_config_edition_data, check_uploaded_config_file, ENERPI_CONFIG_FILES
 from enerpi.api import enerpi_data_catalog
-from enerpiweb import app, auto, mail, STATIC_PATH, GMAIL_ACCOUNT, SERVER_FILE_LOGGING
-from enerpiweb.forms import FileForm
+from enerpiweb import app, auto, SERVER_FILE_LOGGING
 
 
 def _get_filepath_from_file_id(file_id):
@@ -52,9 +53,10 @@ def _get_filepath_from_file_id(file_id):
 @auto.doc()
 def download_hdfstore_file(relpath_store=None):
     """
-    Devuelve el fichero HDFStore del catálogo de ENERPI pasado como ruta relativa (nombre de fichero .h5).
-    * File Download *
-    :param relpath_store:
+    Download HDFStore file from ENERPI (*.h5 file)
+
+    :param str relpath_store: HDF store filename
+
     """
     cat = enerpi_data_catalog(check_integrity=False)
     path_file = cat.get_path_hdf_store_binaries(relpath_store)
@@ -70,8 +72,10 @@ def download_hdfstore_file(relpath_store=None):
 @auto.doc()
 def download_file(file_id):
     """
-    * File Download *
-    :param file_id:
+    File Download for identified log or config files
+
+    :param str file_id:
+
     """
     ok, _, filename = _get_filepath_from_file_id(file_id)
     if ok:
@@ -86,25 +90,6 @@ def download_file(file_id):
     return abort(404)
 
 
-@app.route('/api/filedownload/debug/', methods=['POST'])
-@auto.doc()
-def download_file_debug():
-    """
-    * File Download *
-    Post request with relative file path under DATA_PATH (debugging purposes)
-
-    """
-    form = FileForm()
-    if form.validate_on_submit():
-        # relpath = relpath.split(':')
-        relpath = form.pathfile
-        # abspath = os.path.join(DATA_PATH, *relpath)
-        abspath = os.path.join(DATA_PATH, relpath)
-        if os.path.exists(abspath):
-            return send_file(abspath, as_attachment=True, attachment_filename=os.path.basename(abspath))
-    return abort(404)
-
-
 @app.route('/api/showfile', methods=['GET'])
 @app.route('/api/showfile/<file>', methods=['GET'])
 @auto.doc()
@@ -112,7 +97,7 @@ def showfile(file='flask'):
     """
     Página de vista de fichero de texto, con orden ascendente / descendente y/o nº de últimas líneas ('tail' de archivo)
 
-    :param file: file_id to show
+    :param str file: file_id to show
 
     """
     ok, is_logfile, filename = _get_filepath_from_file_id(file)
@@ -144,7 +129,8 @@ def editfile(file='config'):
     """
     Configuration editor, for INI file, JSON sensors file & encripting key
 
-    :param file: file_id to edit
+    :param str file: file_id to edit
+
     """
     ok, is_logfile, filename = _get_filepath_from_file_id(file)
     if ok and (file in ENERPI_CONFIG_FILES):
@@ -178,7 +164,8 @@ def uploadfile(file):
     """
     POST method for interesting config files upload & replacement
 
-    :param file: uploaded file_id
+    :param str file: uploaded file_id
+
     """
     ok_fileid, is_logfile, filename = _get_filepath_from_file_id(file)
     if ok_fileid:
@@ -191,47 +178,3 @@ def uploadfile(file):
             alert = json.dumps(alert)
         return redirect(url_for('editfile', file=file, alerta=alert))
     return abort(500)
-
-
-#############################
-# ENERPI MAILING
-#############################
-@app.route('/api/email', methods=['GET'])
-def send_email():
-    text_msg = 'enerPI STATUS from last 24h... '
-    alert = 'success'
-    mask = os.path.join(STATIC_PATH, "img/generated/tile_enerpi_data_{}_last_24h.svg")
-    data_monitor = SENSORS.to_dict()
-    for i, k in enumerate(data_monitor['sensors']):
-        try:
-            data_monitor['sensors'][i]['tile'] = open(mask.format(data_monitor['sensors'][i]['name']), 'r').read()
-        except OSError:
-            data_monitor['sensors'][i]['tile'] = 'NO TILE'
-    try:
-        data_monitor['consumption'] = {'tile': open(mask.format('kWh'), 'r').read()}
-    except OSError:
-        data_monitor['consumption'] = {'tile': 'NO kWh TILE'}
-    try:
-        data_monitor['ref'] = {'tile': open(mask.format('ref'), 'r').read()}
-    except OSError:
-        data_monitor['ref'] = {'tile': 'NO REF TILE'}
-    html_msg = render_template('email/status_email.html', data_monitor=data_monitor, msg=text_msg)
-
-    msg = Message("Status Info",
-                  recipients=[RECIPIENT],
-                  sender='"enerPI" <{}>'.format(GMAIL_ACCOUNT),
-                  # cc=None,
-                  # bcc=GMAIL_ACCOUNT,
-                  # attachments=None,
-                  reply_to='"enerPI" <{}>'.format(GMAIL_ACCOUNT),
-                  # date=None,
-                  body=text_msg, html=html_msg)
-    # with app.open_resource("static/img/generated/tile_enerpi_data_power_1_last_48h.svg") as fp:
-    #     msg.attach("last_48h.svg", "image/svg+xml", fp.read())
-    with open(os.path.join(DATA_PATH, INDEX_DATA_CATALOG), 'rb') as fp:
-        msg.attach(INDEX_DATA_CATALOG, "text /csv", fp.read())
-    log('SENDING STATUS EMAIL', 'debug', True)
-    mail.send(msg)
-    log('EMAIL SENDED', 'debug', True)
-    return redirect(url_for('control', alerta=json.dumps({'alert_type': alert,
-                                                          'texto_alerta': 'email content: "{}"'.format(text_msg)})))

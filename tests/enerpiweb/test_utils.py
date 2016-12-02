@@ -1,4 +1,12 @@
-# # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+"""
+ENERPIWEB tests:
+- jinja2 filters
+- CSS color operations
+- CRON task for resource generation
+...
+
+"""
 from tests.conftest import TestCaseEnerpiCRON, TestCaseEnerpiWeb
 
 

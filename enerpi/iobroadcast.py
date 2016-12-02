@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - Broadcast receiver & emitter
+
+"""
 from cryptography.fernet import Fernet, InvalidToken
 from binascii import Error
 import os

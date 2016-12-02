@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI tests - data catalog operations
+
+"""
 import numpy as np
 import os
 import pandas as pd

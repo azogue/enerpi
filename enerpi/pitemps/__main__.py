@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+PITEMPS - __main__ module for CL use
+
+"""
 from enerpi.pitemps import get_cpu_temp, get_gpu_temp
 
 

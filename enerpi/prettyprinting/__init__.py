@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - Handy methods for color print, based on `termcolor` python library
+
+"""
 from collections import OrderedDict
 from termcolor import cprint
 

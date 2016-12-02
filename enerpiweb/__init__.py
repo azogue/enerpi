@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIWEB - Flask web application
+
+"""
 from flask import Flask
 from flask_autodoc import Autodoc
 from flask_mail import Mail
@@ -62,7 +66,7 @@ mail = Mail(app)
 
 # Views
 # noinspection PyUnresolvedReferences,PyPep8
-from enerpiweb import views, views_filehandler, utils, rt_stream
+from enerpiweb import views, views_filehandler, utils, rt_stream, emailing
 
 # wsgi
 app.wsgi_app = ProxyFix(app.wsgi_app)

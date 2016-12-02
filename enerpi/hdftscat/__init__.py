@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - HDFTimeSeriesCatalog class for handling sensor data
+
+"""
 import datetime as dt
 import glob
 import json

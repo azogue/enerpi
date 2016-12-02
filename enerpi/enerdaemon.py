@@ -1,5 +1,9 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
+"""
+ENERPI - Custom class (inherit from Daemon class) for daemonize the ENERPI logger
+
+"""
 import sys
 from enerpi.base import log, FILE_LOGGING, LOGGING_LEVEL, set_logging_conf, DAEMON_PIDFILE, DAEMON_STDOUT, DAEMON_STDERR
 from enerpi.daemon import Daemon

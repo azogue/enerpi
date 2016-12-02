@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIWEB - CLI methods:
+
+- Install configuration & CRON task for web resources generation
+- Uninstall CRON task
+- Run Flask server
+
+"""
 import argparse
 import os
 import sys
@@ -120,7 +128,7 @@ def main():
                               'sudo rm /etc/uwsgi-emperor/vassals/{}'.format(UWSGI_CONFIG_FILE),
                               'sudo rm /etc/nginx/sites-enabled/{}'.format(NGINX_CONFIG_FILE)))
     else:
-        log('EJECUTANDO FLASK WSGI A MANO en P:{}!'.format(FLASK_WEBSERVER_PORT), 'ok', True, False)
+        log('EJECUTANDO FLASK WSGI A MANO en P:{}!'.format(args.port), 'ok', True, False)
         application.run(host="0.0.0.0", port=args.port, processes=1, threaded=True, debug=args.debug)
 
 

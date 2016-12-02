@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIWEB tests - real-time streaming
+
+"""
 import json
 import math
 import os

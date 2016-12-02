@@ -1,4 +1,13 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - Database methods:
+
+- Get/Init/Update ENERPI data catalog
+- Process or clear log files
+- Method for appending raw data to ENERPI catalog from the ENERPI Logger
+...
+
+"""
 import datetime as dt
 import os
 import pandas as pd

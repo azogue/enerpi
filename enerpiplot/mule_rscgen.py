@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIPLOT - Resource Generator for ENERPIWEB
+
+- CLI for SVG tiles generation with last hours sensor data
+- It can be used in a CRON task or like a UWSGI mule module
+
+"""
 import argparse
 import os
 from time import time, sleep

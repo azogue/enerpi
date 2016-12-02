@@ -1,19 +1,27 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI PushBullet Notifier
+
+- Push text message (ENERPI errors) or file.
+- Push to email recipient (with a pushbullet acount!) or to a pushbullet channel ('enerpi_notifications')
+
+Pushbullet API config:
+    * Name:                 ENERPI Current Meter BOT
+    * Pushbullet channel:   enerpi_notifications
+    * Channel URL:          https://www.pushbullet.com/channel?tag=enerpi_notifications
+    * PUSHBULLET_TOKEN:     Token from pushbullet account, it needs to be defined in 'enerpi_config.ini'
+
+"""
 import cairosvg
 from configparser import NoOptionError, NoSectionError
 import datetime as dt
 import os
 from pushbullet import Pushbullet
+from pushbullet.errors import InvalidKeyError
 from time import time
 from enerpi.base import CONFIG, log, async_task, RECIPIENT
 
 
-# Pushbullet API config:
-# Pushbullet channel:
-# enerpi_notifications
-# ENERPI
-# ENERPI Current Meter BOT
-# https://www.pushbullet.com/channel?tag=enerpi_notifications
 CHANNEL = 'enerpi_notifications'
 PBOBJ = None
 
@@ -25,8 +33,10 @@ def _get_pb_obj():
     if PBOBJ is None:
         try:
             pushbullet_token = CONFIG.get('NOTIFY', 'PUSHBULLET_TOKEN')
+            if not pushbullet_token:
+                raise InvalidKeyError
             PBOBJ = Pushbullet(pushbullet_token)
-        except (NoOptionError, NoSectionError) as e:
+        except (NoOptionError, NoSectionError, InvalidKeyError) as e:
             log('NO Pushbullet config ({} [{}])'.format(e, e.__class__), 'error', False)
             PBOBJ = None
     return PBOBJ
@@ -34,7 +44,7 @@ def _get_pb_obj():
 
 def _send_direct_push_notification(title, content, email=RECIPIENT):
     pb = _get_pb_obj()
-    if pb is not None:
+    if (pb is not None) and email:
         pb.push_note(title, content, email=email)
         log('PUSHBULLET NOTIFICATION: {} - {}'.format(title, content), 'debug', False)
         return True
@@ -96,7 +106,7 @@ def push_enerpi_file(path_file, title=None, email=RECIPIENT, channel_tag=None,
 
     """
     pb = _get_pb_obj()
-    if pb is None:
+    if (pb is None) or ((channel_tag is None) and not email):
         log('NO PUSHBULLET FILE PUSH (title={}, file={}, email={}, channel={})'
             .format(title, path_file, email, channel_tag), 'error', True)
         return False

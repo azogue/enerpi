@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+PITEMPS - Methods for reading RPI temperatures
+
+"""
 import subprocess
 
 

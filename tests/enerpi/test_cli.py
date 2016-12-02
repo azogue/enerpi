@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI tests:
+- Command Line Interface options
+- RPI CPU temperature
+- prettyprinting (colored output)
+
+"""
 from freezegun import freeze_time
 import os
 # noinspection PyUnresolvedReferences

@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - RGB LED control methods
+
+"""
 from enerpi.base import CONFIG, log, CONFIG_FILENAME
 
 

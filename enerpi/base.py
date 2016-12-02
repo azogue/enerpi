@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - Common base objects:
+- Base classes, methods and decorators
+- Configuration loaders
+- Constant definitions
+...
+
+"""
 import configparser
 import json
 import locale
@@ -577,7 +585,7 @@ almacenando la ruta absoluta a la instalación de ENERPI
         check_resource_files(path_file_config)
         log('** Instalando fichero de configuración en: "{}"'.format(path_file_config), 'info', True, True)
         shutil.copy(os.path.join(dir_config, 'default_config_enerpi.ini'), path_file_config)
-    configp = configparser.RawConfigParser()
+    configp = configparser.RawConfigParser(allow_no_value=True)
     try:
         configp.read(path_file_config, encoding=ENCODING)
     except Exception as e:

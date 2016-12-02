@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Flask main routes for ENERPIWEB
+
+"""
 from flask import request, redirect, url_for, render_template, jsonify, abort
 import json
 from threading import Timer
@@ -69,6 +73,7 @@ def control():
 
 
 @app.route('/api/help', methods=['GET'])
+@auto.doc()
 def api_help():
     """
     Documentation page generated with 'Autodoc', with custom template;
@@ -80,7 +85,7 @@ def api_help():
         endpoints = [rule.rule for rule in app.url_map.iter_rules()
                      if rule.endpoint != 'static']
         return jsonify(dict(api_endpoints=endpoints))
-    return auto.html(template='doc/api_help.html', title='enerPI Help')
+    return auto.html(template='doc/api_help.html')
 
 
 @app.route('/api/bokehplot', methods=['GET'])
@@ -94,6 +99,7 @@ def bokehplot():
 
 
 @app.route('/', methods=['GET'])
+@auto.doc()
 def base_index():
     """
     Redirects to 'index', with real-time monitoring tiles of ENERPI sensors

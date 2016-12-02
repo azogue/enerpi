@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Flask filters for jinja2 rendering and flask error handlers
+
+"""
 import datetime as dt
 from flask import request, render_template
 from enerpi.base import log

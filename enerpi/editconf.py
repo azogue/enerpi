@@ -42,8 +42,9 @@ SUBTITLE_EDIT_CRYPTOKEY = 'KEY_FILE'
 TITLE_EDIT_JS_SENSORS = 'SENSORS'
 SUBTITLE_EDIT_JS_SENSORS = 'SENSORS'
 
+OPTIONAL_PARAMS = ['PUSHBULLET_TOKEN', 'EMAIL_RECIPIENT']
 
-# TODO readonly/disabled attr in protected fields of INI file
+
 def _web_edit_enerpi_config_ini(lines_ini_file):
     """
     * Divide configuration INI file with this structure:
@@ -233,7 +234,7 @@ def _web_post_changes_enerpi_config_ini(dict_web_form, lines_config, dict_config
 
     """
     def _is_changed(value, params, name):
-        if (value is None) or (len(value) == 0):
+        if (value is None) or ((len(value) == 0) and (name not in OPTIONAL_PARAMS)):
             msg = 'INI Value ERROR: key={}, value="{}", (type={})'.format(name, value, params[1])
             return False, value, msg
         try:

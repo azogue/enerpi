@@ -33,27 +33,24 @@ setup(
         'Topic :: Home Automation',
         'Topic :: Scientific/Engineering :: Information Analysis',
         'Natural Language :: Spanish',
-        # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: MIT License',
-        # Specify the Python versions you support here. In particular, ensure
-        # that you indicate whether you support Python 2, Python 3 or both.
         # 'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Operating System :: Unix'],
     packages=packages,
-    # If there are data files included in your packages that need to be
-    # installed, specify them here.  If using Python 2.6 or less, then these
-    # have to be included in MANIFEST.in as well.
     package_data={
-        'enerpi': ['config/default_config_enerpi.ini', 'config/.enerpi_data_path'],
+        'enerpi': ['config/default_config_enerpi.ini', 'config/default_sensors_enerpi.json',
+                   'config/.enerpi_data_path'],
         'enerpiweb': ['templates/*', 'templates/email/*', 'templates/doc/*', 'templates/macros/*',
                       'static/css/*', 'static/img/icons/*', 'static/js/*'],
     },
     install_requires=['numpy>=1.11.2', 'pandas>=0.19.0', 'pytz>=2016.7',
-                      'flask>=0.11.1', 'flask-autodoc>=0.1.2', 'wtforms>=2.1',  'cryptography>=1.5.2',
+                      'flask>=0.11.1', 'werkzeug>=0.11.11', 'Flask-Mail>=0.9.1', 'flask-autodoc>=0.1.2',
+                      'Flask-WTF>=0.13.1', 'wtforms>=2.1',
+                      'cryptography>=1.5.2',
                       'gpiozero>=1.3.1',  # 'RPi.GPIO>=0.6.3',
                       'matplotlib>=1.5.3', 'bokeh>=0.12.3', 'cairosvg>=1.0.22', 'termcolor>=1.1.0',
-                      'python-crontab', 'jsondiff>=1.0.0'],
+                      'python-crontab', 'pushbullet.py>=0.10.0', 'jsondiff>=1.0.0'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
@@ -63,12 +60,6 @@ setup(
     #     'dev': ['check-manifest'],
     #     'test': ['coverage'],
     # },
-    # Although 'package_data' is the preferred approach, in some case you may
-    # need to place data files outside of your packages. See:
-    # http://docs.python.org/3.4/distutils/setupscript.html#installing-additional-files # noqa
-    # In this case, 'data_file' will be installed into '<sys.prefix>/my_data'
-    # data_files=[('my_data', ['data/data_file'])],
-
     entry_points={
         'console_scripts': [
             'enerpi = enerpi.__main__:enerpi_main_cli',

@@ -1,5 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+"""
+ENERPI - Base class for daemonize the ENERPI logger
+
+"""
 import atexit
 import os
 import sys

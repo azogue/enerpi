@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIWEB __main__
+    - Install configuration & CRON task for web resources generation
+    - Uninstall CRON task
+    - Run Flask server
+
+"""
 import os
 # noinspection PyUnresolvedReferences
 from enerpiweb import app as application, SERVER_FILE_LOGGING, LOGGING_LEVEL_SERVER
@@ -13,7 +20,6 @@ from enerpi.base import set_logging_conf
 # Establecemos logging
 check_resource_files(os.path.dirname(SERVER_FILE_LOGGING), verbose=True)
 set_logging_conf(SERVER_FILE_LOGGING, level=LOGGING_LEVEL_SERVER, verbose=True, with_initial_log=True)
-# logging.debug('->LOG Estableciendo LOGFILE en {}'.format(SERVER_FILE_LOGGING))
 
 
 if __name__ == '__main__':

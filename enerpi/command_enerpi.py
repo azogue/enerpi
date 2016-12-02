@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI - CLI methods & argument parser
+
+"""
 import datetime as dt
 import os
 import re

@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIPLOT - Common constants & color palettes
 
+"""
 ROUND_W = 500
 ROUND_KWH = .5
 

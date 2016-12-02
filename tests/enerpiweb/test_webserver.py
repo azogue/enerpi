@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPIWEB tests - Routes
+
+"""
 from io import BytesIO
 import json
 import jsondiff
@@ -17,14 +21,13 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
 
         routes_defined = {
             "api_endpoints": [
-                "{}/api/filedownload/debug/".format(self.url_prefix),
                 "{}/api/stream/realtime".format(self.url_prefix),
                 "{}/api/stream/bokeh".format(self.url_prefix),
+                "{}/api/email/status".format(self.url_prefix),
                 "{}/api/editconfig/".format(self.url_prefix),
                 "{}/api/bokehplot".format(self.url_prefix),
                 "{}/api/showfile".format(self.url_prefix),
                 "{}/api/monitor".format(self.url_prefix),
-                "{}/api/email".format(self.url_prefix),
                 "{}/api/last".format(self.url_prefix),
                 "{}/api/help".format(self.url_prefix),
                 "{}/control".format(self.url_prefix),
@@ -33,6 +36,7 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
                 "{}/api/stream/bokeh/from/<start>/to/<end>".format(self.url_prefix),
                 "{}/api/stream/bokeh/last/<last_hours>".format(self.url_prefix),
                 "{}/api/stream/bokeh/from/<start>".format(self.url_prefix),
+                "{}/api/email/status/<recipients>".format(self.url_prefix),
                 "{}/api/filedownload/<file_id>".format(self.url_prefix),
                 "{}/api/editconfig/<file>".format(self.url_prefix),
                 "{}/api/uploadfile/<file>".format(self.url_prefix),
@@ -41,6 +45,7 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
                 "{}/api/restart/<service>".format(self.url_prefix)
             ]
         }
+
         self.endpoint_request('api/help')
         result = self.endpoint_request('api/help?json=True')
         routes = json.loads(result.data.decode())

@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI tests - CRON tasks
+
+"""
 from tests.conftest import TestCaseEnerpiCRON
 
 

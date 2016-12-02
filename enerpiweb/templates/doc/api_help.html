@@ -1,17 +1,25 @@
 {% extends "layout.html" %}
 {% block content %}
 
-<div class="jumbotron jumbotron-fluid text-white mb-0" style="background-color: rgba(140, 39, 211, 0.8)">
+<div class="jumbotron jumbotron-fluid text-white mb-0" style="background-color: rgb(140, 39, 211)">
   <div class="container">
-      <h1 class="display-3">{{ title|safe }}</h1>
+      <div class="row">
+        <div class="col-sm-4 col-md-3 col-lg-3 hidden-xs-down">
+            <img class="img-fluid rounded-circle pull-xs-left" style="max-width: 100%; height: auto; width: 100% \9;"
+                 src="{{ url_for('static', filename='img/icons/base.svg')}}">
+        </div>
+        <div class="col-xs-12 col-sm-8 col-md-9 col-lg-9">
+            <h1 class="display-3"><strong>enerPI</strong> Help</h1>
+        </div>
+      </div>
       <h6 class="lead">ENERPI API ROUTES:</h6>
   </div>
 </div>
 <div class="container-fluid">
 <div class="row pt-0">
     {% for doc in autodoc %}
-    <div class="col-xs-12 col-md-6">
-    <div class="card rounded my-1 mx-0 card-outline-primary" style="border-width: 2px;">
+    <div class="col-xs-12 col-md-6 col-lg-4">
+    <div class="card rounded my-1 mx-0 card-outline-primary" style="border-width: 2px; border-radius: 6px;">
         <div class="card-header bg-primary text-white my-0">
             <p class="lead my-0 py-0">Endpoint: <strong>{{ doc['endpoint'] }}</strong></p>
         </div>

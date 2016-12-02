@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI tests - SENSORS configuration
+
+"""
 import enerpi.prettyprinting as pp
 from tests.conftest import TestCaseEnerpi
 

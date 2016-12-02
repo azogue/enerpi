@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+ENERPI tests for enerpi.api methods
+
+"""
 import os
 import pandas as pd
 import shutil

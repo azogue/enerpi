@@ -6,9 +6,7 @@ from tests.conftest import TestCaseEnerpiWebServer
 
 class TestEnerpiWebServerData(TestCaseEnerpiWebServer):
     # Enerpi test scenario:
-    # --> DATA_YEAR_2016/DATA_2016_MONTH_10.h5
     subpath_test_files = 'test_context_2probes'
-    # subpath_test_files = 'test_context_2probes_data'
     cat_check_integrity = True
 
     def test_0_distribute_data(self):

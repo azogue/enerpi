@@ -40,15 +40,3 @@
     {{ section_sep('# of samples') }}
     {{ tile_email('Samples/sec', '#', 'tachometer', data_monitor['ref']['tile'], (0.5922, 0.149, 0.1451, 0.83), (0.5922, 0.149, 0.1451, 0.27)) }}
 {% endblock %}
-
-{# TODO Sysmail template: #}
-{#{% from 'macros/macros.html' import item_sysmail with context %}#}
-{##}
-{#{% block content %}#}
-{#    <div class="container-fluid">#}
-{#        <h3>Mensaje del sistema:</h3>#}
-{#    </div>#}
-{#    <div class="container-fluid">#}
-{#        {{ item_sysmail(mensaje, False) }}#}
-{#    </div>#}
-{#{% endblock %}#}

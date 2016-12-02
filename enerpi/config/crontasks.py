@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-** CRON Scheduler **
+ENERPI - CRON Scheduler
+
+- Print User-CRON table
+- Set command on reboot
+- Set periodic command
+- Remove CRON command
+
 """
 from crontab import CronTab
 import datetime as dt

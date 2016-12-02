@@ -1,4 +1,14 @@
 # -*- coding: utf-8 -*-
+"""
+Flask routes for streamed ENERPI content
+    - Real-time enerpi values (receiving the ENERPI broadcast)
+    - Bokeh plots
+        - from buffered data (from ENERPI broadcast)
+        - from catalog data (combined with ENERPI broadcast data)
+    - Last broadcasted value / boolean 'stream_is_alive'
+    etc...
+
+"""
 from collections import deque
 import datetime as dt
 from flask import Response, request, render_template, jsonify
