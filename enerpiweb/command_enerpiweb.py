@@ -10,14 +10,14 @@ ENERPIWEB - CLI methods:
 import argparse
 import os
 import sys
-from enerpi.base import BASE_PATH, log, NGINX_CONFIG_FILE, UWSGI_CONFIG_FILE
-from enerpiweb import basedir, CONFIG, DATA_PATH, check_resource_files, app as application
+from enerpi.base import BASE_PATH, DATA_PATH, CONFIG, log, check_resource_files, NGINX_CONFIG_FILE, UWSGI_CONFIG_FILE
 from enerpi.prettyprinting import print_secc, print_cyan, print_red, print_magenta
 
 
 FLASK_WEBSERVER_PORT = CONFIG.getint('ENERPI_WEBSERVER', 'FLASK_WEBSERVER_PORT', fallback=7777)
 PERIOD_MINUTES_RSC_GEN = CONFIG.getint('ENERPI_WEBSERVER', 'RSC_GEN_EVERY_MINUTES', fallback=15)
 USER_SERVER = CONFIG.get('ENERPI_WEBSERVER', 'USER_SERVER', fallback='www-data')
+basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 def make_cron_command_task_periodic_rscgen():
@@ -128,6 +128,8 @@ def main():
                               'sudo rm /etc/uwsgi-emperor/vassals/{}'.format(UWSGI_CONFIG_FILE),
                               'sudo rm /etc/nginx/sites-enabled/{}'.format(NGINX_CONFIG_FILE)))
     else:
+        from enerpiweb import app as application
+
         log('EJECUTANDO FLASK WSGI A MANO en P:{}!'.format(args.port), 'ok', True, False)
         application.run(host="0.0.0.0", port=args.port, processes=1, threaded=True, debug=args.debug)
 
