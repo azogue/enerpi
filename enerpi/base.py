@@ -479,7 +479,15 @@ def timeit(cadena_log, verbose=False, *args_dec):
                 print_yellowb(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
             logging.debug(cadena_log.format(*args_dec, **kwargs_print) + ' TOOK: {:.3f} s'.format(time() - tic))
             return out
-        return _wrapper
+        f = _wrapper
+        f.__name__ = function.__name__
+        f.__doc__ = function.__doc__
+        # f.__dict__ = function.__dict__
+        # f.__module__ = function.__module__
+        # f.__annotations__ = function.__annotations__
+        # f.__defaults__ = function.__defaults__
+        # f.__kwdefaults__ = function.__kwdefaults__
+        return f
     return _real_deco
 
 
