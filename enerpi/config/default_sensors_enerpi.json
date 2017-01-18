@@ -8,6 +8,7 @@
     "tile_gradient_st": [12, 187, 67, 0.83],
     "tile_gradient_end": [55, 245, 119, 0.27],
     "icon": "flash",
+    "mdi:icon": "flash",
     "description": "Main Power"
   },
   {
@@ -19,6 +20,7 @@
     "tile_gradient_st": [12, 133, 52, 0.83],
     "tile_gradient_end": [45, 200, 97, 0.27],
     "icon": "bolt",
+    "mdi:icon": "flash",
     "description": "Power c2"
   },
   {
@@ -30,6 +32,7 @@
     "tile_gradient_st": [244, 216, 63, 0.83],
     "tile_gradient_end": [219, 221, 13, 0.33],
     "icon": "lightbulb-o",
+    "mdi:icon": "lightbulb",
     "description": "Illumination"
   },
   {
@@ -41,6 +44,7 @@
     "tile_gradient_st": [52, 148, 187, 0.83],
     "tile_gradient_end": [52, 148, 187, 0.27],
     "icon": "plug",
+    "mdi:icon": "power-plug",
     "description": "Noise"
   }
 ]
