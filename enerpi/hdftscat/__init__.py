@@ -250,9 +250,9 @@ class HDFTimeSeriesCatalog(object):
             index = pd.read_csv(p, index_col=0, parse_dates=['ts_ini', 'ts_fin', 'ts_st'])
             index.cols = index.cols.map(lambda x: json.loads(x.replace("'", '"')))
             return index.drop_duplicates(subset=['st', 'key', 'ts_st', 'ts_ini', 'ts_fin'])
-        except FileNotFoundError:
-            log('FileNotFoundError reading HDFTSCAT INDEX in "{}". Rebuilding index...'
-                .format(p), 'error', self.verbose)
+        except (FileNotFoundError, OSError) as e:
+            log('FileNotFoundError reading HDFTSCAT INDEX in "{}" [{}]. Rebuilding index...'
+                .format(p, e), 'error', self.verbose)
         except AttributeError:
             log('AttributeError reading HDFTSCAT INDEX in "{}". Corrupted?\n{}\n ...Rebuilding index...'
                 .format(p, open(p, 'r').readlines()), 'error', self.verbose)
@@ -690,7 +690,9 @@ class HDFTimeSeriesCatalog(object):
                 plus = self.process_data(self._load_store(self.raw_store))
                 if column is not None and plus is not None:
                     plus = plus[column]
-                if today is not None and plus is not None:
+                if column is not None and today is not None:
+                    today = today[column]
+                if column is not None and plus is not None:
                     last = pd.DataFrame(pd.concat([today, plus]))
                 elif today is not None:
                     last = today
