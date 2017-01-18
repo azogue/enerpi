@@ -3,12 +3,14 @@
 Flask main routes for ENERPIWEB
 
 """
+import datetime as dt
 from flask import request, redirect, url_for, render_template, jsonify, abort
 import json
 from threading import Timer
 import os
+from pandas import TimeGrouper
 import sys
-from enerpi.base import log
+from enerpi.base import log, SENSORS
 from enerpi.api import enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version
 from enerpiweb import app, auto, WITH_ML_SUBSYSTEM
@@ -106,6 +108,71 @@ def base_index():
 
     """
     return redirect(url_for('index'))
+
+
+#############################
+# DATA API
+#############################
+def _get_enerpi_data(start=None, end=None, is_consumption=True):
+    if not (start or end):
+        start = (dt.datetime.now(tz=SENSORS.TZ) - dt.timedelta(days=7)
+                 ).replace(hour=0, minute=0, second=0, microsecond=0)  # 1 week
+    else:
+        if start:
+            start = start.replace('_', ' ')
+        if end:
+            end = end.replace('_', ' ')
+    cat = enerpi_data_catalog(check_integrity=True)
+    if is_consumption:
+        df = cat.get_summary(start=start, end=end)
+    else:
+        df = cat.get(start=start, end=end, column=SENSORS.main_column)
+    return df
+
+
+@app.route('/api/consumption/from/<start>', methods=['GET'])
+@app.route('/api/consumption/from/<start>/to/<end>', methods=['GET'])
+@auto.doc()
+def consumption_data(start, end=None):
+    """
+    Endpoint for get consumption data from enerPI.
+
+    :param start: start time of data interval
+    :param end: end time of data interval
+
+    """
+    data = _get_enerpi_data(start, end, is_consumption=True)
+    if (data is not None) and not data.empty and ('kWh' in data):
+        daily_sum = request.args.get('daily', 'False').lower() == 'true'
+        round_prec = int(request.args.get('round', '4'))
+        consumption = data['kWh']
+        consumption.index = consumption.index.tz_localize(SENSORS.TZ)
+        if daily_sum:
+            consumption = consumption.groupby(TimeGrouper('D')).sum()
+        return jsonify(json.loads(consumption.to_json(double_precision=round_prec)))
+    return abort(500)
+
+
+@app.route('/api/power/from/<start>', methods=['GET'])
+@app.route('/api/power/from/<start>/to/<end>', methods=['GET'])
+@auto.doc()
+def mainpower_data(start, end=None):
+    """
+    Endpoint for get main power raw data from enerPI.
+
+    :param start: start time of data interval
+    :param end: end time of data interval
+
+    """
+    data = _get_enerpi_data(start, end, is_consumption=False)
+    if (data is not None) and not data.empty:
+        daily_sum = request.args.get('daily', 'False').lower() == 'true'
+        round_prec = int(request.args.get('round', '4'))
+        data.index = data.index.tz_localize(SENSORS.TZ)
+        if daily_sum:
+            data = data.groupby(TimeGrouper('D')).sum()
+        return jsonify(json.loads(data.to_json(double_precision=round_prec)))
+    return abort(500)
 
 
 #############################
