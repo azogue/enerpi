@@ -292,8 +292,8 @@ class TestCaseEnerpiWeb(TestCaseEnerpi):
                 print(r.data)
         if r.status_code != status_check:  # Print info before the status code assert, for context inspection
             cls.show_context_info()
-        assert r.status_code == status_check
         print('headers={}\nmimetype={}'.format(r.headers, r.mimetype))
+        assert r.status_code == status_check
         if mimetype_check is not None:
             assert r.mimetype == mimetype_check
         return r

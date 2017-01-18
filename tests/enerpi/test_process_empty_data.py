@@ -94,6 +94,10 @@ class TestEnerpiProcessEmptyData(TestCaseEnerpi):
         d5 = self.cat.get(start='2016-10-01', end='2016-09-02', column=SENSORS.main_column)
         self.assertIsNone(d5)
 
+        d6, d6_s = self.cat.get(start='2016-10-01', end='2016-09-02', with_summary=True)
+        self.assertIsNone(d6)
+        self.assertIsNone(d6_s)
+
     def test_7_export_data(self):
         exported_1 = self.cat.export_chunk(filename='enerpi_all_data_test_1.csv')
         pp.print_cyan(exported_1)
