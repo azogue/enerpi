@@ -79,7 +79,7 @@ def enerpi_data_catalog(check_integrity=False, **kwargs):
 
 
 def _request_enerpi_remote_file(url_api_download, dest_path,
-                                file_mimetype='application/octet-stream', verbose=False):
+                                file_mimetype='application/octet-stream', verbose=False, timeout=10):
     """
     Download remote file from ENERPI
 
@@ -92,7 +92,7 @@ def _request_enerpi_remote_file(url_api_download, dest_path,
 
     """
     try:
-        r = requests.get(url_api_download, timeout=(1, 10))
+        r = requests.get(url_api_download, timeout=timeout)
     except requests.exceptions.ConnectTimeout:
         log('TIMEOUT REQUEST AT "{}"'.format(url_api_download), 'error', verbose, False)
         return False
@@ -180,7 +180,7 @@ def replicate_remote_enerpi_data_catalog(local_path=DATA_PATH, enerpi_ip='192.16
     csv_url = url_mask.format('filedownload/catalog')
     path_csv = os.path.join(local_path, INDEX_DATA_CATALOG)
     mimetype_csv = 'text/csv; charset={}'.format(ENCODING.lower())
-    ok_catalog = _request_enerpi_remote_file(csv_url, path_csv, file_mimetype=mimetype_csv, verbose=verbose)
+    ok_catalog = _request_enerpi_remote_file(csv_url, path_csv, file_mimetype=mimetype_csv, verbose=verbose, timeout=60)
     if not ok_catalog:
         log('ERROR RETRIEVING REMOTE CATALOG FILE IN: {}, ok={}'.format(csv_url, ok_catalog), 'error', verbose, False)
         return False

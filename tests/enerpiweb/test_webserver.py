@@ -34,9 +34,13 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
                 "{}/index".format(self.url_prefix),
                 "{}/".format(self.url_prefix),
                 "{}/api/stream/bokeh/from/<start>/to/<end>".format(self.url_prefix),
+                '{}/api/consumption/from/<start>/to/<end>'.format(self.url_prefix),
+                '{}/api/power/from/<start>/to/<end>'.format(self.url_prefix),
                 "{}/api/stream/bokeh/last/<last_hours>".format(self.url_prefix),
                 "{}/api/stream/bokeh/from/<start>".format(self.url_prefix),
+                '{}/api/consumption/from/<start>'.format(self.url_prefix),
                 "{}/api/email/status/<recipients>".format(self.url_prefix),
+                '{}/api/power/from/<start>'.format(self.url_prefix),
                 "{}/api/filedownload/<file_id>".format(self.url_prefix),
                 "{}/api/editconfig/<file>".format(self.url_prefix),
                 "{}/api/uploadfile/<file>".format(self.url_prefix),
@@ -129,7 +133,7 @@ class TestEnerpiWebServerRoutes(TestCaseEnerpiWebServer):
         print(self.raw_file)
         self.endpoint_request("api/filedownload/{}?as_attachment=true".format('raw_store'),
                               status_check=302, verbose=True)
-        self.endpoint_request("api/hdfstores/DATA_2016_11_DAY_25.h5", status_check=200, verbose=True)
+        self.endpoint_request("api/hdfstores/DATA_2016_MONTH_11.h5", status_check=200, verbose=True)
         self.endpoint_request("api/hdfstores/TODAY.h5", status_check=404, verbose=True)
         self.endpoint_request("api/hdfstores/TODAY.h5?as_attachment=true", status_check=404)
 

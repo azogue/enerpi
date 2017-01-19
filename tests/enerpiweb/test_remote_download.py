@@ -8,13 +8,14 @@ This test needs a proper ENERPI running in another machine in the same network
 from tests.conftest import TestCaseEnerpi
 
 
-IP_RUNNING_ENERPI = '192.168.1.52'
-
 TS_GET_START = '2016-11-28'
 TS_GET_END = '2016-11-29'
 
 BAD_IP_WITH_NO_ENERPI = '192.168.1.99'
+IP_RUNNING_ENERPI = '192.168.1.44'
+# IP_RUNNING_ENERPI = 'localhost'
 PORT_RUNNING_ENERPI = 80
+# PORT_RUNNING_ENERPI = 7777
 WEBPREFIX_RUNNING_ENERPI = '/enerpi'
 
 
