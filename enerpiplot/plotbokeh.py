@@ -136,7 +136,6 @@ def _plot_bokeh_raw(data_plot, columns=None):
     """Bokeh plot de datos en bruto."""
     # Plot params:
     confp = _get_columns_data_for_raw_plot(columns)
-    print('DEBUG confp={}'.format(confp))
     # Bokeh does not work very well!! with timezones:
     data_plot = data_plot.tz_localize(None)
     for c in confp["sensors_mean"]:
