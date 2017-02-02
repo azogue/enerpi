@@ -17,6 +17,25 @@
         background: #8C27D3;
         height: 80%;
     }
+    {% for c in columns %}
+    .bootstrap-switch .bootstrap-switch-handle-on.bootstrap-switch-{{ c }}_columnon {
+        color: #fff;
+        background: {{ colors_vars[c] }};
+        height: 80%;
+    }
+    {% endfor %}
+    {% for c in columns_kwh %}
+    .bootstrap-switch .bootstrap-switch-handle-on.bootstrap-switch-{{ c }}_kwh_columnon {
+        color: #fff;
+        background: {{ colors_vars_kwh[c] }};
+        height: 80%;
+    }
+    {% endfor %}
+    .bootstrap-switch .bootstrap-switch-handle-off.bootstrap-switch-columnoff {
+        color: #fff;
+        background: rgba(197, 195, 199, 0.99);
+        height: 80%;
+    }
     </style>
 {% endblock %}
 
@@ -54,7 +73,7 @@
                     $('#titulo-graph').removeClass('btn-outline-success').addClass('btn-outline-warning');
                     console.log(data);
                     if (data.hasOwnProperty('error')) {
-                        $("#bokeh-plot-took").html(data['error']).removeClass('invisible').css({'background-color': 'red', 'color': 'white'});;
+                        $("#bokeh-plot-took").html(data['error']).removeClass('invisible').css({'background-color': 'red', 'color': 'white'});
                     }
                 }
             }
@@ -74,11 +93,27 @@
             url_query_plot += "rs_data=" + resample + "&";
         }
         url_query_plot += "kwh=" + get_summary;
-        console.log(url_query_plot);
+        if (get_summary) {
+            var columns_kwh = '';
+            {% for c in columns_kwh %}
+            if ($('#switch_column_{{ c }}_kwh').is(":checked")) {
+                columns_kwh += '{{ c }},';
+            }
+            {% endfor %}
+            url_query_plot += "&columns=" + columns_kwh;
+        } else {
+            var columns = '';
+            {% for c in columns %}
+            if ($('#switch_column_{{ c }}').is(":checked")) {
+                columns += '{{ c }},';
+            }
+            {% endfor %}
+            url_query_plot += "&columns=" + columns;
+        }
         updateBokehPlot(url_query_plot);
     }
     $(document).ready(function() {
-        var switch_selecct_summary = {
+        var switch_select_summary = {
             size: "mini",
             onColor: "consumption",
             offColor: "enerpi",
@@ -86,8 +121,42 @@
             onText: "kWh",
             animate: true
         };
-        $("#switchSummaryData").bootstrapSwitch(switch_selecct_summary);
-        updateBokehPlot("{{ url_stream_bokeh|safe }}")
+        var switch_kwh = $("#switchSummaryData");
+        switch_kwh.bootstrapSwitch(switch_select_summary);
+        {% for c in columns %}
+        var switch_column = {
+            size: "mini",
+            onColor: "{{ c }}_columnon",
+            offColor: "columnoff",
+            offText: "off",
+            onText: "{{ c.upper() }}",
+            animate: true
+        };
+        $("#switch_column_{{ c }}").bootstrapSwitch(switch_column);
+        {% endfor %}
+        {% for c in columns_kwh %}
+        var switch_column_kwh = {
+            size: "mini",
+            onColor: "{{ c }}_kwh_columnon",
+            offColor: "columnoff",
+            offText: "off",
+            onText: "{{ c.upper() }}",
+            animate: true
+        };
+        $("#switch_column_{{ c }}_kwh").bootstrapSwitch(switch_column_kwh);
+        {% endfor %}
+        updateBokehPlot("{{ url_stream_bokeh|safe }}");
+{#        switch_kwh.change(function (event) {#}
+        switch_kwh.on('switchChange.bootstrapSwitch', function (event, state) {
+            if (state) {
+                $("#selec_vars").addClass('hidden-xs-up');
+                $("#selec_vars_kwh").removeClass('hidden-xs-up');
+            } else {
+                $("#selec_vars_kwh").addClass('hidden-xs-up');
+                $("#selec_vars").removeClass('hidden-xs-up');
+            }
+            event.preventDefault();
+        });
     });
     </script>
 {% endblock %}
@@ -163,6 +232,36 @@
                     <button type="button" class="btn btn-success btn-sm" onclick=submitQuery()>Query!</button>
                 </div>
             </form>
+        </div>
+        <div class="row">
+            <div id="selec_vars" class="col-xs-12 form-inline">
+                    <div class="form-group form-group-sm">
+                        <small id="ColumnsHelp" class="form-text text-muted">Variable selection:</small>
+                        {% for c in columns %}
+                        {% if checked[c] %}
+                            <input type="checkbox" id="switch_column_{{ c }}" checked value="check_v_{{ c }}"
+                               class="form-control form-control-sm" alt="Selección de columna '{{ c }}'">
+                        {% else %}
+                            <input type="checkbox" id="switch_column_{{ c }}" value="check_v_{{ c }}"
+                               class="form-control form-control-sm" alt="Selección de columna '{{ c }}'">
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+            </div>
+            <div id="selec_vars_kwh" class="col-xs-12 form-inline hidden-xs-up">
+                    <div class="form-group form-group-sm">
+                        <small id="ColumnsHelp" class="form-text text-muted">Variable selection:</small>
+                        {% for c in columns_kwh %}
+                        {% if checked_kwh[c] %}
+                            <input type="checkbox" id="switch_column_{{ c }}_kwh" checked value="check_v_{{ c }}_kwh"
+                               class="form-control form-control-sm" alt="Selección de columna '{{ c }}'">
+                        {% else %}
+                            <input type="checkbox" id="switch_column_{{ c }}_kwh" value="check_v_{{ c }}_kwh"
+                               class="form-control form-control-sm" alt="Selección de columna '{{ c }}'">
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+            </div>
         </div>
         <hr>
     </div>

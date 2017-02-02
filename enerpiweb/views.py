@@ -12,7 +12,7 @@ from pandas import TimeGrouper
 import sys
 from enerpi.base import log, SENSORS
 from enerpi.api import enerpi_data_catalog
-from enerpiplot.plotbokeh import get_bokeh_version
+from enerpiplot.plotbokeh import get_bokeh_version, COLOR_REF_RMS, COLS_DATA_KWH, COLORS_DATA_KWH
 from enerpiweb import app, auto, WITH_ML_SUBSYSTEM
 from enerpiweb.rt_stream import stream_is_alive
 from enerpiweb.forms import DummyForm
@@ -97,7 +97,18 @@ def bokehplot():
     Base webpage for query & show bokeh plots of ENERPI data
 
     """
-    return render_template('bokeh_plot.html', url_stream_bokeh=url_for('bokeh_buffer'), b_version=BOKEH_VERSION)
+    cols_disp = SENSORS.columns_sensors_rms + SENSORS.columns_sensors_mean
+    colors_vars = {c: SENSORS[c].color for c in cols_disp}
+    checked = {c: True for c in cols_disp}
+    cols_disp += [SENSORS.ref_rms]
+    colors_vars.update({SENSORS.ref_rms: COLOR_REF_RMS})
+    checked.update({SENSORS.ref_rms: False})
+    cols_disp_arg = ','.join(cols_disp)
+    checked_kwh = {COLS_DATA_KWH[0]: True, COLS_DATA_KWH[1]: False, COLS_DATA_KWH[2]: False}
+    return render_template('bokeh_plot.html', url_stream_bokeh=url_for('bokeh_buffer', columns=cols_disp_arg),
+                           b_version=BOKEH_VERSION, columns=cols_disp, colors_vars=colors_vars,
+                           columns_kwh=COLS_DATA_KWH[:-1], checked=checked, checked_kwh=checked_kwh,
+                           colors_vars_kwh={c: color for c, color in zip(COLS_DATA_KWH[:-1], COLORS_DATA_KWH)})
 
 
 @app.route('/', methods=['GET'])
@@ -122,7 +133,7 @@ def _get_enerpi_data(start=None, end=None, is_consumption=True):
             start = start.replace('_', ' ')
         if end:
             end = end.replace('_', ' ')
-    cat = enerpi_data_catalog(check_integrity=True)
+    cat = enerpi_data_catalog(check_integrity=False)
     if is_consumption:
         df = cat.get_summary(start=start, end=end)
     else:

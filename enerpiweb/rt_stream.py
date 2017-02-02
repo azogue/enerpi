@@ -73,7 +73,7 @@ def _get_dataframe_buffer_data():
 
 
 def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
-                           rs_data=None, use_median=False, kwh=False):
+                           rs_data=None, use_median=False, kwh=False, columns=None):
     tic = time()
     if start or end or last_hours:
         cat = enerpi_data_catalog(check_integrity=False)
@@ -93,7 +93,7 @@ def _gen_stream_data_bokeh(start=None, end=None, last_hours=None,
         df = _get_dataframe_buffer_data()
     toc_df = time()
     if df is not None and not df.empty:
-        script, divs, version = html_plot_buffer_bokeh(df, is_kwh_plot=kwh)
+        script, divs, version = html_plot_buffer_bokeh(df, is_kwh_plot=kwh, columns=columns)
         toc_p = time()
         log('Bokeh plot gen in {:.3f} s; pd.df in {:.3f} s.'.format(toc_p - toc_df, toc_df - tic), 'debug', False)
         yield _format_event_stream(dict(success=True, b_version=version, script_bokeh=script, bokeh_div=divs[0],
@@ -221,6 +221,10 @@ def bokeh_buffer(start=None, end=None, last_hours=None):
 
     """
     kwargs = dict(start=start, end=end, last_hours=last_hours)
+    if 'columns' in request.args:
+        columns_plot = list(filter(lambda x: len(x) > 1, request.args['columns'].split(',')))
+        if columns_plot:
+            kwargs.update(columns=columns_plot)
     if 'kwh' in request.args:
         kwargs.update(kwh=request.args['kwh'] == 'true')
     if 'rs_data' in request.args:

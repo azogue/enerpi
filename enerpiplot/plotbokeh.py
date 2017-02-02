@@ -11,18 +11,7 @@ from enerpiplot import (ROUND_W, ROUND_KWH, COLS_DATA_KWH, COLORS_DATA_KWH, COLO
                         UNITS_DATA_KWH, LABELS_DATA_KWH, FMT_TOOLTIP_DATA_KWH)
 
 
-COLS_SENSORS_RMS = SENSORS.columns_sensors_rms
-COLS_SENSORS_MEAN = SENSORS.columns_sensors_mean
-COL_MAIN_RMS = COLS_SENSORS_RMS[0]
-COL_MAIN_MEAN = COLS_SENSORS_MEAN[0]
-
 COL_TS = SENSORS.ts_column
-COLS_DATA = COLS_SENSORS_RMS + COLS_SENSORS_MEAN + [SENSORS.ref_rms]
-B_SENSORS_RMS = [True] * len(COLS_SENSORS_RMS) + [False] * len(COLS_SENSORS_MEAN) + [True]
-COLORS_DATA = [SENSORS[s].color for s in COLS_DATA[:-1]] + [COLOR_REF_RMS]
-UNITS_DATA = [SENSORS[s].unit for s in COLS_DATA[:-1]] + ['']
-FMT_TOOLTIP_DATA = ['{0}'] * len(COLS_SENSORS_RMS) + ['{0.0}'] * len(COLS_SENSORS_MEAN) + ['{0}']
-LABELS_DATA = SENSORS.descriptions(COLS_DATA)
 
 # TOOLS = "pan,xwheel_zoom,ywheel_zoom,box_zoom,reset,save,crosshair"
 TOOLS = "pan,xwheel_zoom,box_zoom,reset,save,crosshair"
@@ -72,11 +61,11 @@ def _return_html_comps(plots):
     return script, divs, get_bokeh_version()
 
 
-def _get_figure_plot(extremos, y_range, **fig_kwargs):
-    kwargs = dict(x_range=extremos, y_range=y_range,
+def _get_figure_plot(extremos, y_range):
+    kwargs = dict(x_range=Range1d(*extremos), y_range=y_range,
                   tools=TOOLS, active_drag=None, plot_width=P_WIDTH, plot_height=P_HEIGHT,
                   x_axis_type="datetime", toolbar_location="right", toolbar_sticky=False,  # "above",
-                  title=_titulo_rango_temporal(extremos), responsive=True, **fig_kwargs)
+                  title=_titulo_rango_temporal(extremos), responsive=True)
     return figure(**kwargs)
 
 
@@ -115,33 +104,76 @@ def _plot_patch_series(fig_plot, pd_series, **kwargs_patch):
     fig_plot.patch(x, y, **kwargs_patch)
 
 
-def _plot_bokeh_raw(data_plot, **fig_kwargs):
+def _get_columns_data_for_raw_plot(columns=None):
+    col_main_rms = col_main_mean = None
+    cols_sensors_rms = SENSORS.columns_sensors_rms
+    cols_sensors_mean = SENSORS.columns_sensors_mean
+    if columns is not None:
+        cols_sensors_rms = list(filter(lambda x: x in columns, cols_sensors_rms))
+        cols_sensors_mean = list(filter(lambda x: x in columns, cols_sensors_mean))
+    if cols_sensors_rms:
+        col_main_rms = cols_sensors_rms[0]
+    if cols_sensors_mean:
+        col_main_mean = cols_sensors_mean[0]
+    cols_data = cols_sensors_rms + cols_sensors_mean
+    b_sensors_rms = [True] * len(cols_sensors_rms) + [False] * len(cols_sensors_mean)
+    colors_data = [SENSORS[s].color for s in cols_data]
+    units_data = [SENSORS[s].unit for s in cols_data]
+    fmt_tooltip_data = ['{0}'] * len(cols_sensors_rms) + ['{0.0}'] * len(cols_sensors_mean)
+    if (columns is None) or (SENSORS.ref_rms in columns):
+        cols_data += [SENSORS.ref_rms]
+        colors_data += [COLOR_REF_RMS]
+        units_data += ['']
+        fmt_tooltip_data += ['{0}']
+        b_sensors_rms += [True]
+    return {"main_rms": col_main_rms, "main_mean": col_main_mean,
+            "sensors_rms": cols_sensors_rms, "sensors_mean": cols_sensors_mean,
+            "labels": SENSORS.descriptions(cols_data), "colsdata": cols_data, "colors": colors_data,
+            "units": units_data, "tooltip_fmts": fmt_tooltip_data, "b_sensors": b_sensors_rms}
+
+
+def _plot_bokeh_raw(data_plot, columns=None):
+    """Bokeh plot de datos en bruto."""
+    # Plot params:
+    confp = _get_columns_data_for_raw_plot(columns)
+    print('DEBUG confp={}'.format(confp))
     # Bokeh does not work very well!! with timezones:
     data_plot = data_plot.tz_localize(None)
-    for c in COLS_SENSORS_MEAN:
+    for c in confp["sensors_mean"]:
+        # Corrección a % de 0 a 100
         data_plot[c] /= 10.
-    y_range = [0, max(500, int(np.ceil(data_plot[[COL_MAIN_RMS, SENSORS.ref_rms]].max().max() / ROUND_W) * ROUND_W))]
-    minmax_ejes = [y_range, [0, 100]]
+    if confp["main_rms"]:
+        y_range = [0, max(500, int(np.ceil(data_plot[[confp["main_rms"],
+                                                      SENSORS.ref_rms]].max().max() / ROUND_W) * ROUND_W))]
+        minmax_ejes = [y_range, [0, 100]]
+    else:
+        minmax_ejes = [[0, 100]]
+        # Elimina columna de # samples si no hay RMS columns
+        if SENSORS.ref_rms in confp["colsdata"]:
+            confp["colsdata"].remove(SENSORS.ref_rms)
 
     extremos = _get_extremos_dia(data_plot)
-    ejes = [COL_MAIN_RMS, COL_MAIN_MEAN]
-    pos_smean = len(COLS_SENSORS_RMS)
+    ejes = [confp["main_rms"]]
+    if confp["main_mean"]:
+        ejes += [confp["main_mean"]]
+    pos_smean = len(confp["sensors_rms"])
 
     # Figure
-    p = _get_figure_plot(extremos, minmax_ejes[0], **fig_kwargs)
+    p = _get_figure_plot(extremos, minmax_ejes[0])
 
+    zip_props = zip(confp["colsdata"], confp["colors"], confp["units"], confp["labels"], confp["tooltip_fmts"])
     tooltip_rows = TOOLTIP_ROWS
-    for c, color, unit, label, fmt in zip(COLS_DATA, COLORS_DATA, UNITS_DATA, LABELS_DATA, FMT_TOOLTIP_DATA):
+    for c, color, unit, label, fmt in zip_props:
         tooltip_rows += HTML_TROW.format('{}:'.format(label), '@{}{} {}'.format(c, fmt, unit), color)
     p.add_tools(HoverTool(tooltips='<div><table>{}</table></div>'.format(tooltip_rows)))
 
     # Axis formatting
-    _format_axis_plot(p, COLORS_DATA[0], LABELS_DATA[0], UNITS_DATA[0])
+    _format_axis_plot(p, confp["colors"][0], confp["labels"][0], confp["units"][0])
     if len(ejes) > 1:
         positions = (['right', 'left'] * 2)[:len(ejes[1:])]
-        for extra_eje, pos, minmax, color, label, unit in zip(ejes[1:], positions, minmax_ejes[1:],
-                                                              COLORS_DATA[pos_smean:], LABELS_DATA[pos_smean:],
-                                                              UNITS_DATA[pos_smean:]):
+        zip_ejes = zip(ejes[1:], positions, minmax_ejes[1:], confp["colors"][pos_smean:],
+                       confp["labels"][pos_smean:], confp["units"][pos_smean:])
+        for extra_eje, pos, minmax, color, label, unit in zip_ejes:
             p.extra_y_ranges[extra_eje] = Range1d(*minmax)
             axkw = dict(y_range_name=extra_eje,
                         axis_label='{} ({})'.format(label, unit),
@@ -155,26 +187,31 @@ def _plot_bokeh_raw(data_plot, **fig_kwargs):
     data = ColumnDataSource(_append_hover(data_plot, multi_day=(extremos[1] - extremos[0]).days > 1))
 
     # Plot lines of analog sensors
-    for s, is_rms, color in zip(COLS_DATA, B_SENSORS_RMS, COLORS_DATA):
+    for s, is_rms, color in zip(confp["colsdata"], confp["b_sensors"], confp["colors"]):
         kwargs_p = dict(source=data, alpha=.9, line_width=2, color=color)
-        if not is_rms:
+        if confp["main_rms"] and not is_rms:
             kwargs_p.update(dict(y_range_name=ejes[1]))
         p.line(COL_TS, s, **kwargs_p)
 
     # Plot patch of main rms & normal analog sensors
-    kwargs_patch = dict(color=COLORS_DATA[pos_smean], line_alpha=0, fill_alpha=0.10, y_range_name=ejes[1])
-    _plot_patch_series(p, data_plot[COL_MAIN_MEAN], **kwargs_patch)
+    if confp["main_mean"]:
+        kwargs_patch = dict(color=confp["colors"][pos_smean], line_alpha=0, fill_alpha=0.10)
+        if confp["main_rms"]:
+            kwargs_patch.update({"y_range_name": ejes[1]})
+        _plot_patch_series(p, data_plot[confp["main_mean"]], **kwargs_patch)
 
-    kwargs_patch = dict(color=COLORS_DATA[0], line_alpha=0, fill_alpha=0.15)
-    _plot_patch_series(p, data_plot[COL_MAIN_RMS], **kwargs_patch)
+    if confp["main_rms"]:
+        kwargs_patch = dict(color=confp["colors"][0], line_alpha=0, fill_alpha=0.15)
+        _plot_patch_series(p, data_plot[confp["main_rms"]], **kwargs_patch)
 
     # Legend formatting
-    # _format_legend_plot(p)
+    # if len(confp["colsdata"]) > 1:
+    #     _format_legend_plot(p)
     return p
 
 
 # TODO Arreglar summary plot
-def _plot_bokeh_hourly(data_plot, **fig_kwargs):
+def _plot_bokeh_hourly(data_plot, columns=None):
     # Bokeh does not work very well!! with timezones:
     data_plot = data_plot.tz_localize(None)
 
@@ -187,7 +224,7 @@ def _plot_bokeh_hourly(data_plot, **fig_kwargs):
     ejes = COLS_DATA_KWH[:2]
 
     # Figure
-    p = _get_figure_plot(extremos, minmax_ejes[0], **fig_kwargs)
+    p = _get_figure_plot(extremos, minmax_ejes[0])
 
     tooltip_rows = TOOLTIP_ROWS
     for c, color, unit, label, fmt in zip(COLS_DATA_KWH, COLORS_DATA_KWH,
@@ -214,27 +251,31 @@ def _plot_bokeh_hourly(data_plot, **fig_kwargs):
     data = ColumnDataSource(_append_hover(data_plot, delta_min=-30, multi_day=(extremos[1] - extremos[0]).days > 1))
 
     # Plot lines
-    kwargs_kwh = dict(source=data, x=COL_TS, width=3600000, bottom=0, top=COLS_DATA_KWH[0], legend=LABELS_DATA_KWH[0],
-                      fill_alpha=.7, line_alpha=.9, line_width=1, line_join='round', color=COLORS_DATA_KWH[0])
-    p.vbar(**kwargs_kwh)
-
-    kwargs_l = dict(source=data, alpha=.95, line_width=1.5, line_join='bevel', color=COLORS_DATA_KWH[1],
-                    y_range_name=COLS_DATA_KWH[1], legend=LABELS_DATA_KWH[1])
-    p.line(COL_TS, COLS_DATA_KWH[1], **kwargs_l)
-    kwargs_l.update(color=COLORS_DATA_KWH[2], legend=LABELS_DATA_KWH[2])
-    p.line(COL_TS, COLS_DATA_KWH[2], **kwargs_l)
+    if (columns is None) or (COLS_DATA_KWH[0] in columns):
+        kwargs_kwh = dict(source=data, x=COL_TS, width=3600000, bottom=0, top=COLS_DATA_KWH[0],
+                          legend=LABELS_DATA_KWH[0], fill_alpha=.7, line_alpha=.9, line_width=1,
+                          line_join='round', color=COLORS_DATA_KWH[0])
+        p.vbar(**kwargs_kwh)
+    if (columns is None) or (COLS_DATA_KWH[1] in columns):
+        kwargs_l = dict(source=data, alpha=.95, line_width=1.5, line_join='bevel', color=COLORS_DATA_KWH[1],
+                        y_range_name=COLS_DATA_KWH[1], legend=LABELS_DATA_KWH[1])
+        p.line(COL_TS, COLS_DATA_KWH[1], **kwargs_l)
+    if (columns is None) or (COLS_DATA_KWH[2] in columns):
+        kwargs_l = dict(source=data, alpha=.95, line_width=1.5, line_join='bevel', color=COLORS_DATA_KWH[2],
+                        y_range_name=COLS_DATA_KWH[1], legend=LABELS_DATA_KWH[2])
+        p.line(COL_TS, COLS_DATA_KWH[2], **kwargs_l)
 
     # Legend formatting
     _format_legend_plot(p)
     return p
 
 
-def html_plot_buffer_bokeh(data_plot, is_kwh_plot=False, **fig_kwargs):
+def html_plot_buffer_bokeh(data_plot, is_kwh_plot=False, columns=None):
     """
     Given a pandas DataFrame (or a list of df's), returns the html components for rendering the graph.
     :return script, divs, bokeh.__version__
     """
     if is_kwh_plot:
-        return _return_html_comps([_plot_bokeh_hourly(data_plot, **fig_kwargs)])
+        return _return_html_comps([_plot_bokeh_hourly(data_plot, columns)])
     else:
-        return _return_html_comps([_plot_bokeh_raw(data_plot, **fig_kwargs)])
+        return _return_html_comps([_plot_bokeh_raw(data_plot, columns)])
