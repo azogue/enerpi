@@ -66,7 +66,7 @@ mail = Mail(app)
 
 # Views
 # noinspection PyUnresolvedReferences,PyPep8
-from enerpiweb import views, views_filehandler, utils, rt_stream, emailing
+from enerpiweb import views, views_filehandler, utils, rt_stream, emailing, facturacionpvpc
 
 # wsgi
 app.wsgi_app = ProxyFix(app.wsgi_app)

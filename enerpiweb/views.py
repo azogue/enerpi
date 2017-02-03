@@ -129,9 +129,9 @@ def _get_enerpi_data(start=None, end=None, is_consumption=True):
         start = (dt.datetime.now(tz=SENSORS.TZ) - dt.timedelta(days=7)
                  ).replace(hour=0, minute=0, second=0, microsecond=0)  # 1 week
     else:
-        if start:
+        if start and (type(start) is str):
             start = start.replace('_', ' ')
-        if end:
+        if end and (type(end) is str):
             end = end.replace('_', ' ')
     cat = enerpi_data_catalog(check_integrity=False)
     if is_consumption:

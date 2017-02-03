@@ -635,8 +635,17 @@ DATA_PATH, CONFIG, sensors_theme = get_config_enerpi()
 GMAIL_ACCOUNT = 'enerpi.bot@gmail.com'
 GMAIL_APP_PASSWORD = 'qkdspbhmxouzrkvv'
 
+# Billing data
+billing_tarifa = CONFIG.getint('PVPC', 'TARIFA', fallback=1) - 1
+billing_impuestos = CONFIG.getint('PVPC', 'ZONA_IMPUESTOS', fallback=1) - 1
+billing_potencia = CONFIG.getfloat('PVPC', 'POTENCIA', fallback=3.45)
+billing_con_bono = CONFIG.getboolean('PVPC', 'CON_BONO_SOCIAL', fallback=False)
+billing_cups = CONFIG.get('PVPC', 'CUPS', fallback='ES00XXXXXXXXXXXXXXDB')
+BILLING_DATA = dict(con_bono=billing_con_bono, p_contrato=billing_potencia, cups=billing_cups,
+                    peaje=billing_tarifa, zona_impuestos=billing_impuestos)
+
 # Admin email for reports & nofifications:
-RECIPIENT = CONFIG.get('NOTIFY', 'RECIPIENT', fallback='eugenio.panadero@gmail.com')
+RECIPIENT = CONFIG.get('NOTIFY', 'RECIPIENT', fallback='enerpi.bot@gmail.com')
 
 # Set Locale
 custom_locale = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))

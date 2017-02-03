@@ -1,0 +1,222 @@
+{% extends "layout.html" %}
+
+{% block styles %}
+    <link href="{{ url_for('static', filename='css/bootstrap-switch.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.2/css/bootstrap-select.min.css">
+{#    <link href="{{ url_for('static', filename='css/bootstrap-select.min.css') }}" rel="stylesheet">#}
+    <style type="text/css">
+    .bootstrap-switch .bootstrap-switch-handle-on.bootstrap-switch-enerpi {
+        color: #fff;
+        background: #0CBB43;
+        height: 80%;
+    }
+    .bootstrap-switch .bootstrap-switch-handle-off.bootstrap-switch-columnoff {
+        color: #fff;
+        background: rgba(197, 195, 199, 0.99);
+        height: 80%;
+    }
+    .roundbox-viewing {
+        background-color: #f1ffed;
+        border-color: #0CBB43;
+        border-style: solid;
+        border-radius: 20px;
+    }
+    </style>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/bootstrap-switch.min.js') }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.2/js/bootstrap-select.min.js"></script>
+{#    <script src="{{ url_for('static', filename='js/bootstrap-select.min.js') }}"></script>#}
+    <script>
+    function updateFactura(url_factura) {
+        console.log('Se procede a actualizar la factura con URL=' + url_factura);
+        $("#report-took").addClass('invisible');
+        var div_subst = '<div id="hueco-text_factura" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" ';
+        var url_wait_src = "{{ url_for("static", filename="img/icons/waiting2.svg")}}";
+        url_wait_src = url_wait_src.replace(/.svg(\?)?([0-9]*)?/i, ".svg?" + String(new Date().getTime()));
+        div_subst = div_subst + 'src="' + url_wait_src + '"></div>';
+        $('#text_factura').html(div_subst);
+        var div_plot = $('#hueco-text_factura');
+        var cw = div_plot.width();
+        div_plot.css({'height': cw * 5 / 9 + 'px'});
+        sse = new EventSource(url_factura);
+        sse.onmessage = function(message) {
+            if (message.data == '"CLOSE"') {
+                console.log('Cerrando EventSource (CLOSE Event)');
+                sse.close();
+            } else {
+                var data = JSON.parse(message.data);
+                console.log('DATA Event!');
+                if (data['success']) {
+                    if (data.hasOwnProperty('factura') && data.hasOwnProperty('took'))
+                    {
+                        $('#text_factura_pre').html('<pre>' + data['factura']['text_repr'] + '</pre>');
+                        $('#text_factura').html(data['factura']['html_repr']);
+                        $("#report-took").html(' (Took ' + data['took'] + ' secs, df: ' + data['took_df'] +')').removeClass('invisible');
+                        $('#titulo-report').removeClass('btn-outline-warning').addClass('btn-outline-success');
+                    }
+                } else {
+                    console.log('WARN!');
+                    $('#titulo-report').removeClass('btn-outline-success').addClass('btn-outline-warning');
+                    console.log(data);
+                    if (data.hasOwnProperty('error')) {
+                        $("#report-took").html(data['error']).removeClass('invisible').css({'background-color': 'red', 'color': 'white'});
+                    }
+                }
+            }
+        };
+    }
+    function submitQuery() {
+        var from = $('form #selectFrom').val();
+        var to = $('form #selectTo').val();
+        var power = $('form #selectPower').val();
+        var with_social_bond = $('form #switchbonosocial').is(":checked");
+        var toll = $('form #SelectToll').val();
+        console.log(toll);
+        var tax_area = $('form #SelectTaxArea').val();
+        console.log(tax_area);
+        var url_query_bill = "{{ url_for('billing_data') }}" + "/from/" + from;
+        if (to.length > 0) {
+            url_query_bill += "/to/" + to;
+        }
+        url_query_bill += "?";
+        url_query_bill += "potencia=" + power + "&";
+        url_query_bill += "bono_social=" + with_social_bond + "&";
+        url_query_bill += "impuestos=" + tax_area + "&";
+        url_query_bill += "peaje=" + toll;
+        console.log(url_query_bill);
+        updateFactura(url_query_bill);
+    }
+    $(document).ready(function() {
+        var switch_bono = {
+            size: "small",
+            onColor: "enerpi",
+            offColor: "columnoff",
+            offText: "No",
+            onText: "Sí",
+            animate: true
+        };
+        $("#switchbonosocial").bootstrapSwitch(switch_bono);
+        $("#SelectToll").val({{ peaje }});
+        $("#SelectTaxArea").val({{ zona_impuestos }});
+        updateFactura("{{ url_factura_init|safe }}");
+    });
+    </script>
+{% endblock %}
+
+{% block content %}
+    <br>
+    <div class="container-fluid">
+        <div>
+            <h2 class=" display-4 float-xs-left"><i id="titulo-report" class="fa fa-money" aria-hidden="true"></i> Facturación</h2>
+            <span id="report-took" class="float-xs-right invisible"></span>
+        </div>
+    </div>
+    <div class="container-fluid">
+        <hr>
+        <div class="row">
+            <form>
+                <div class="col-xs-12 col-sm-7 col-md-6 col-lg-4 form-inline">
+                  <small id="ResampleHelp" class="form-text text-muted">Intervalo de facturación:</small>
+                  <div class="form-group form-group-sm">
+                      <div class="input-group input-group-sm">
+                      <div class="input-group-addon">De</div>
+                      <input type="date" class="form-control form-control-sm" id="selectFrom"
+                             min="2015-01-01" max="2018-12-31" maxlength="10" value="{{ ts_ini }}">
+                      <div class="input-group-addon">hasta</div>
+                      <input type="date" class="form-control form-control-sm" id="selectTo"
+                             min="2015-01-01" max="2018-12-31" maxlength="10" value="{{ ts_fin }}">
+                    </div>
+                  </div>
+                </div>
+                <div class="col-xs-6 col-sm-5 col-md-4 col-lg-2 form-inline">
+                      <small id="ResampleHelp" class="form-text text-muted">Potencia:</small>
+                      <div class="form-group form-group-sm form-inline">
+                          <div class="input-group input-group-sm">
+                                <div class="input-group-addon">P (kW)</div>
+                                <input type="number" min="1.00" max="10.00" step="0.05"
+                                       class="form-control form-control-sm" id="selectPower" maxlength="4" value="{{ p_contrato }}">
+                          </div>
+                      </div>
+                </div>
+                <div class="col-xs-6 col-sm-3 col-md-3 col-lg-1 form-inline">
+                    <div class="form-group form-group-sm">
+                        <small id="SocialBondHelp" class="form-text text-muted">Bono social:</small>
+                        <input type="checkbox" id="switchbonosocial" {% if con_bono %}checked{% endif %} value="check_bono" class="form-control form-control-sm">
+                    </div>
+                </div>
+                <div class="col-xs-6 col-sm-3 col-md-3 col-lg-2 form-inline">
+                    <div class="form-group form-group-sm">
+                        <small id="TollHelp" class="form-text text-muted">Peaje:</small>
+                        <select id="SelectToll" class="selectpicker form-control" data-style="btn-sm btn-primary"  data-size="{{ tipos_peaje.count }}">
+                        {% for tipo_peaje, (desc_peaje, code_tarif, code_tarif_num) in tipos_peaje.items() %}
+                          <option title="{{ tipo_peaje }}" value="{{ loop.index0 }}">{{ desc_peaje }} ({{ code_tarif }})</option>
+                        {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-xs-6 col-sm-3 col-md-3 col-lg-1 form-inline">
+                    <div class="form-group form-group-sm">
+                        <small id="TaxAreaHelp" class="form-text text-muted">Impuestos:</small>
+                        <select id="SelectTaxArea" class="selectpicker form-control" data-style="btn-sm btn-warning" data-size="{{ zonas_impuestos.count }}">
+                        {% for tipo_area, (desc_area, p1, p2) in zonas_impuestos.items() %}
+                          <option title="{{ tipo_area }}" value="{{ loop.index0 }}">{{ desc_area }}</option>
+                        {% endfor %}
+                        </select>
+                    </div>
+                </div>
+{#              <div class="col-sm-3 col-md-3 col-lg-2 hidden-xs-down float-md-right">
+                    <small id="SubmitHelp" class="form-text text-muted">Consultar:</small>
+                    <button type="button" class="btn btn-success btn-sm" onclick=submitQuery()>Nueva factura</button>
+                </div>
+                <div class="col-xs-12 hidden-sm-up">
+                    <button type="button" class="btn btn-success btn-sm btn-block" onclick=submitQuery()>Generar factura</button>
+                </div>
+            </form>
+        </div>
+        <hr>
+    </div>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-xs-12">
+                <ul class="nav nav-tabs" id="FacturaTabView" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-toggle="tab" href="#html_view" role="tab" aria-controls="html_view">
+                            <i class="fa fa-pencil-square-o" aria-hidden="true"></i> <strong>HTML</strong>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-toggle="tab" href="#text_view" role="tab" aria-controls="text_view">
+                            <i class="fa fa-eye" aria-hidden="true"></i> <strong>Texto</strong>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <br>
+    <div class="tab-content">
+        <div class="tab-pane fade in active" id="html_view" role="tabpanel">
+            <div class="container">
+                <div class="col-xs-12 roundbox roundbox-viewing">
+                    <br>
+                    <div id="text_factura" class="text_factura">
+                        <div id="hueco-text_factura" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="text_view" role="tabpanel">
+            <div class="container">
+                <div class="col-xs-12 roundbox roundbox-viewing">
+                    <br>
+                    <div id="text_factura_pre">
+                        <div id="hueco-text_factura" class="flex-img-container" style="width: 100%"><img class="hv-centered-image" src="{{ url_for("static", filename="img/icons/waiting2.svg")}}"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <br>
+{% endblock %}
