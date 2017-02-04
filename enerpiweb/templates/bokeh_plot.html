@@ -99,7 +99,7 @@
         return columns;
     }
     function updateRecentBokehPlot(url_query_plot) {
-        updateBokehPlot(url_query_plot + "columns=" + getSelectedColumns(false));
+        updateBokehPlot(url_query_plot + "?columns=" + getSelectedColumns(false));
     }
     function submitQuery() {
         var from = $('form #selectFrom').val();
