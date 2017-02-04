@@ -59,7 +59,8 @@ def send_status_email(recipients=(RECIPIENT,)):
     """
     GET method for send the enerPI status from last 24 hours to the specified email recipients.
 
-    :param recipients: comma separated emails, like: '/api/email/status/example@hotmail.com,eugenio.panadero@gmail.com'
+    :param recipients: comma separated emails,
+    like: '/api/email/status/example@hotmail.com,other@gmail.com'
     :return: Start the sending email process in async mode, and redirects to '/control' with an alert.
 
     """

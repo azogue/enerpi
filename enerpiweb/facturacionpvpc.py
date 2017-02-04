@@ -42,6 +42,7 @@ def _gen_stream_data_factura(start=None, end=None, **kwargs_factura):
         toc_p = time()
         msg = 'Factura generada en {:.3f} s; datos en {:.3f} s.'.format(toc_p - toc_df, toc_df - tic)
         log(msg, 'debug', False)
+        log('stream_data_factura: STREAM BILL from "{}" to "{}"'.format(start, end), 'debug', False)
         yield _format_event_stream(dict(success=True, factura=data_factura,
                                         took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
     elif df is not None:
@@ -50,13 +51,16 @@ def _gen_stream_data_factura(start=None, end=None, **kwargs_factura):
         toc_p = time()
         msg = 'Factura vacía generada en {:.3f} s; datos en {:.3f} s.'.format(toc_p - toc_df, toc_df - tic)
         log(msg, 'debug', False)
+        log('stream_data_factura: STREAM EMPTY BILL from "{}" to "{}"'.format(start, end), 'debug', False)
         yield _format_event_stream(dict(success=True, factura=data_factura, error=msg,
                                         took=round(toc_p - tic, 3), took_df=round(toc_df - tic, 3)))
     else:
         msg = 'No data from {} to {}. CATALOG:\n{}'.format(start, end, cat)
         log(msg, 'debug', False)
+        log('stream_data_factura: STREAM ERR NO DATA from "{}" to "{}"'.format(start, end), 'debug', False)
         yield _format_event_stream(dict(success=False, error=msg,
                                         took=round(time() - tic, 3), took_df=round(toc_df - tic, 3)))
+    log('CLOSING stream_data_factura from "{}" to "{}" with args={}'.format(start, end, kwargs_factura), 'debug', False)
     yield _format_event_stream('CLOSE')
 
 
@@ -89,6 +93,7 @@ def billing_data(start=None, end=None):
     if 'peaje' in request.args:
         peajes = list(DATOS_TIPO_PEAJE)
         kwargs.update(tipo_peaje=peajes[int(request.args['peaje'])])
+    log('BILLING_DATA: {}'.format(kwargs), 'debug', False)
     return Response(_gen_stream_data_factura(**kwargs), mimetype='text/event-stream')
 
 
@@ -105,5 +110,6 @@ def elec_bill():
     ts_fin = '{:%Y-%m-%d}'.format(now.date())
     url_factura_init = url_for('billing_data', peaje=BILLING_DATA['peaje'], impuestos=BILLING_DATA['zona_impuestos'],
                                bono_social=BILLING_DATA['con_bono'], potencia=BILLING_DATA['p_contrato'], )
+    log('In base page for BILLING_DATA with init bill in {}'.format(url_factura_init), 'debug', False)
     return render_template('elec_bill.html', url_factura_init=url_factura_init, ts_ini=ts_ini, ts_fin=ts_fin,
                            zonas_impuestos=DATOS_ZONAS_IMPUESTOS, tipos_peaje=DATOS_TIPO_PEAJE, **BILLING_DATA)

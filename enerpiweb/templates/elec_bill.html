@@ -2,8 +2,8 @@
 
 {% block styles %}
     <link href="{{ url_for('static', filename='css/bootstrap-switch.min.css') }}" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.2/css/bootstrap-select.min.css">
-{#    <link href="{{ url_for('static', filename='css/bootstrap-select.min.css') }}" rel="stylesheet">#}
+{#    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.2/css/bootstrap-select.min.css">#}
+    <link href="{{ url_for('static', filename='css/bootstrap-select.min.css') }}" rel="stylesheet">
     <style type="text/css">
     .bootstrap-switch .bootstrap-switch-handle-on.bootstrap-switch-enerpi {
         color: #fff;
@@ -26,8 +26,8 @@
 
 {% block scripts %}
     <script src="{{ url_for('static', filename='js/bootstrap-switch.min.js') }}"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.2/js/bootstrap-select.min.js"></script>
-{#    <script src="{{ url_for('static', filename='js/bootstrap-select.min.js') }}"></script>#}
+{#    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.12.2/js/bootstrap-select.min.js"></script>#}
+    <script src="{{ url_for('static', filename='js/bootstrap-select.min.js') }}"></script>
     <script>
     function updateFactura(url_factura) {
         console.log('Se procede a actualizar la factura con URL=' + url_factura);
@@ -53,7 +53,10 @@
                     {
                         $('#text_factura_pre').html('<pre>' + data['factura']['text_repr'] + '</pre>');
                         $('#text_factura').html(data['factura']['html_repr']);
+                        {% if config['EXTRA_INFO'] %}
                         $("#report-took").html(' (Took ' + data['took'] + ' secs, df: ' + data['took_df'] +')').removeClass('invisible');
+                        console.log(data['factura']);
+                        {% endif %}
                         $('#titulo-report').removeClass('btn-outline-warning').addClass('btn-outline-success');
                     }
                 } else {
@@ -73,9 +76,7 @@
         var power = $('form #selectPower').val();
         var with_social_bond = $('form #switchbonosocial').is(":checked");
         var toll = $('form #SelectToll').val();
-        console.log(toll);
         var tax_area = $('form #SelectTaxArea').val();
-        console.log(tax_area);
         var url_query_bill = "{{ url_for('billing_data') }}" + "/from/" + from;
         if (to.length > 0) {
             url_query_bill += "/to/" + to;
@@ -85,7 +86,7 @@
         url_query_bill += "bono_social=" + with_social_bond + "&";
         url_query_bill += "impuestos=" + tax_area + "&";
         url_query_bill += "peaje=" + toll;
-        console.log(url_query_bill);
+        console.log('Submit new bill with url=' + url_query_bill);
         updateFactura(url_query_bill);
     }
     $(document).ready(function() {
@@ -100,6 +101,7 @@
         $("#switchbonosocial").bootstrapSwitch(switch_bono);
         $("#SelectToll").val({{ peaje }});
         $("#SelectTaxArea").val({{ zona_impuestos }});
+        console.log('Submit initial bill with url=' + "{{ url_factura_init|safe }}");
         updateFactura("{{ url_factura_init|safe }}");
     });
     </script>
@@ -109,7 +111,7 @@
     <br>
     <div class="container-fluid">
         <div>
-            <h2 class=" display-4 float-xs-left"><i id="titulo-report" class="fa fa-money" aria-hidden="true"></i> Facturación</h2>
+            <h2 class=" display-5 float-xs-left"><i id="titulo-report" class="fa fa-money" aria-hidden="true"></i> Facturación</h2>
             <span id="report-took" class="float-xs-right invisible"></span>
         </div>
     </div>
@@ -166,7 +168,7 @@
                         </select>
                     </div>
                 </div>
-{#              <div class="col-sm-3 col-md-3 col-lg-2 hidden-xs-down float-md-right">
+                <div class="col-sm-3 col-md-3 col-lg-2 hidden-xs-down float-md-right">
                     <small id="SubmitHelp" class="form-text text-muted">Consultar:</small>
                     <button type="button" class="btn btn-success btn-sm" onclick=submitQuery()>Nueva factura</button>
                 </div>

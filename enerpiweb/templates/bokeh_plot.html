@@ -66,7 +66,9 @@
                     {
                         $('#div-plot-bokeh').html(data['bokeh_div']);
                         $("body").append(data['script_bokeh']);
+                        {% if config['EXTRA_INFO'] %}
                         $("#bokeh-plot-took").html(' (Took ' + data['took'] + ' secs, df: ' + data['took_df'] +')').removeClass('invisible');
+                        {% endif %}
                         $('#titulo-graph').removeClass('btn-outline-warning').addClass('btn-outline-success');
                     }
                 } else {
@@ -78,6 +80,26 @@
                 }
             }
         };
+    }
+    function getSelectedColumns(use_kwh_columns) {
+        var columns = '';
+        if (use_kwh_columns) {
+            {% for c in columns_kwh %}
+            if ($('#switch_column_{{ c }}_kwh').is(":checked")) {
+                columns += '{{ c }},';
+            }
+            {% endfor %}
+        } else {
+            {% for c in columns %}
+            if ($('#switch_column_{{ c }}').is(":checked")) {
+                columns += '{{ c }},';
+            }
+            {% endfor %}
+        }
+        return columns;
+    }
+    function updateRecentBokehPlot(url_query_plot) {
+        updateBokehPlot(url_query_plot + "columns=" + getSelectedColumns(false));
     }
     function submitQuery() {
         var from = $('form #selectFrom').val();
@@ -92,24 +114,8 @@
         if (resample.length > 0) {
             url_query_plot += "rs_data=" + resample + "&";
         }
-        url_query_plot += "kwh=" + get_summary;
-        if (get_summary) {
-            var columns_kwh = '';
-            {% for c in columns_kwh %}
-            if ($('#switch_column_{{ c }}_kwh').is(":checked")) {
-                columns_kwh += '{{ c }},';
-            }
-            {% endfor %}
-            url_query_plot += "&columns=" + columns_kwh;
-        } else {
-            var columns = '';
-            {% for c in columns %}
-            if ($('#switch_column_{{ c }}').is(":checked")) {
-                columns += '{{ c }},';
-            }
-            {% endfor %}
-            url_query_plot += "&columns=" + columns;
-        }
+        url_query_plot += "kwh=" + get_summary + "&";
+        url_query_plot += "columns=" + getSelectedColumns(get_summary);
         updateBokehPlot(url_query_plot);
     }
     $(document).ready(function() {
@@ -179,16 +185,18 @@
                 <small id="ResampleHelp" class="form-text text-muted">Quick graphs:</small>
                 <div class="btn-toolbar button-wrapper" role="toolbar" aria-label="Toolbar with More graphs">
                     <div class="btn-group btn-group-sm" role="group">
+
+
                         <button class="btn btn-secondary btn-outline-success"
-                                onclick=updateBokehPlot("{{ url_for('bokeh_buffer', last_hours=3) }}")>< 3h</button>
+                                onclick=updateRecentBokehPlot("{{ url_for('bokeh_buffer', last_hours=3) }}")>< 3h</button>
                         <button class="btn btn-secondary btn-outline-success"
-                                onclick=updateBokehPlot("{{ url_for('bokeh_buffer', last_hours=6) }}")>< 6h</button>
+                                onclick=updateRecentBokehPlot("{{ url_for('bokeh_buffer', last_hours=6) }}")>< 6h</button>
                         <button class="btn btn-secondary btn-outline-success"
-                                onclick=updateBokehPlot("{{ url_for('bokeh_buffer', last_hours=12, rs_data='1min') }}")>< 12h</button>
+                                onclick=updateRecentBokehPlot("{{ url_for('bokeh_buffer', last_hours=12, rs_data='1min') }}")>< 12h</button>
                         <button class="btn btn-secondary btn-outline-success"
-                                onclick=updateBokehPlot("{{ url_for('bokeh_buffer', last_hours=24, rs_data='2min') }}")>< 24h</button>
+                                onclick=updateRecentBokehPlot("{{ url_for('bokeh_buffer', last_hours=24, rs_data='2min') }}")>< 24h</button>
                         <button class="btn btn-secondary btn-outline-success"
-                                onclick=updateBokehPlot("{{ url_for('bokeh_buffer', last_hours=48, rs_data='5min') }}")>< 48h</button>
+                                onclick=updateRecentBokehPlot("{{ url_for('bokeh_buffer', last_hours=48, rs_data='5min') }}")>< 48h</button>
                     </div>
                 </div>
             </div>

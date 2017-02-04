@@ -140,12 +140,16 @@
                         var labeled_nsamples = false;
                         {% set ts_column = data_monitor['ts'] %}
                         {% for s in data_monitor['sensors'] %}
+                            {% if config['EXTRA_INFO'] %}
                             if (!labeled_nsamples) {
                                 $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}'] + ' (#ref=' + String(data['ref']) + ')');
                                 labeled_nsamples = true;
                             } else {
                                 $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}']);
                             }
+                            {% else %}
+                            $('.stream-ts-' + '{{ s['name'] }}').html(data['{{ ts_column }}']);
+                            {% endif %}
                             {% if s['is_rms'] %}
                             $('.stream-' + '{{ s['name'] }}').html(data['{{ s['name'] }}']);
                             {% else %}

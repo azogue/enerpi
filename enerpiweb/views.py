@@ -103,7 +103,7 @@ def bokehplot():
     cols_disp += [SENSORS.ref_rms]
     colors_vars.update({SENSORS.ref_rms: COLOR_REF_RMS})
     checked.update({SENSORS.ref_rms: False})
-    cols_disp_arg = ','.join(cols_disp)
+    cols_disp_arg = ','.join(cols_disp[:-1])
     checked_kwh = {COLS_DATA_KWH[0]: True, COLS_DATA_KWH[1]: False, COLS_DATA_KWH[2]: False}
     return render_template('bokeh_plot.html', url_stream_bokeh=url_for('bokeh_buffer', columns=cols_disp_arg),
                            b_version=BOKEH_VERSION, columns=cols_disp, colors_vars=colors_vars,

@@ -28,6 +28,9 @@ check_resource_files(STATIC_PATH, os.path.join(basedir, 'static'), verbose=False
 # WITH_WEB = CONFIG.getboolean('ENERPI_WEBSERVER', 'WITH_WEBSERVER', fallback=True)
 WITH_ML_SUBSYSTEM = CONFIG.getboolean('ENERPI_WEBSERVER', 'WITH_ML', fallback=False)
 
+# Shows more info (timming data, debug data, ...)
+EXTRA_INFO = CONFIG.getboolean('ENERPI_WEBSERVER', 'EXTRA_INFO', fallback=False)
+
 # FLASK APP
 app = Flask(__name__, static_path=PREFIX_WEB + '/static', static_folder=STATIC_PATH)
 app.url_rule_class = lambda path, **options: Rule(PREFIX_WEB + path, **options)
@@ -48,6 +51,7 @@ app.config['SECRET_KEY'] = get_encryption_key()
 app.config['STREAM_MAX_TIME'] = 1800
 app.config['BASECOLOR'] = BASECOLOR
 app.config['WITH_ML_SUBSYSTEM'] = WITH_ML_SUBSYSTEM
+app.config['EXTRA_INFO'] = EXTRA_INFO
 
 # Plug-ins
 # email server
