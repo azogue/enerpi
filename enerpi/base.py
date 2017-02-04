@@ -659,6 +659,7 @@ FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING',
 LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 
 STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH', fallback='WWW'))
+EXPORT_PNG_TILES = CONFIG.getboolean('ENERPI_WEBSERVER', 'PNG_TILES', fallback=False)
 SERVER_FILE_LOGGING_RSCGEN = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
 NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
 UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'

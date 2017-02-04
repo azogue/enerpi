@@ -19,18 +19,21 @@
      <img id="tile-{{ type_data + '-' + mag }}-img" class="tile-img-bg" alt="last 24h ev."
           src="{{ url_for('static', filename='img/generated/tile_{}_{}_last_72h.svg'.format(type_data, mag)) }}">
     <div class="tile-monitor-innerContent">
+        {% if unit|length > 0 %}
         <span class="tile-monitor-label float-left">
-            {% if glyp %}
-                <strong><i class="fa fa-{{ glyp }}" aria-hidden="true"></i> {{ title }}</strong>
-            {% else %}
-                <strong>{{ title }}:</strong>
-            {% endif %}
+            <strong><i class="fa fa-{{ glyp }}" aria-hidden="true"></i> {{ title }}</strong>
             <br><span class="tile-monitor-label-sub stream-ts-{{ mag }}"></span>
         </span>
         <span id="tile-{{ type_data + '-' + mag }}-text" class="float-right">
             <p class="tile-monitor-unit">{{ unit }}</p>
             <p class="tile-monitor-value stream-{{ mag }}"></p>
         </span>
+        {% else %}
+        <span class="tile-monitor-label" style="margin-top: 2%;">
+            <strong><i class="fa fa-{{ glyp }}" aria-hidden="true"></i> {{ title }}</strong>
+            <br><span class="tile-monitor-label-sub stream-ts-{{ mag }}"></span>
+        </span>
+        {% endif %}
     </div>
 </div>
 {% endmacro %}
@@ -47,9 +50,8 @@
     {% for s in data_monitor['sensors'] %}
       {{ monitor_tile_stream(s['description'].upper(), 'enerpi_data', s['name'], s['unit'], s['icon'], s['tile_gradient_st'], s['tile_gradient_end']) }}
     {% endfor %}
-{#    TODO tiles summary #}
     {% if with_consumption %}
-    {{ monitor_tile_stream('CONSUMPTION', 'enerpi_data', 'kWh', 'kWh', 'bar-chart', (140, 39, 211, 0.83), (191, 160, 245, 0.27)) }}
+    {{ monitor_tile_stream('CONSUMPTION', 'enerpi_data', 'kWh', '', 'bar-chart', (140, 39, 211, 0.83), (191, 160, 245, 0.27)) }}
     {% endif %}
 </div>
 {% endmacro %}

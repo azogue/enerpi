@@ -10,8 +10,10 @@ from matplotlib.colors import hex2color
 import numpy as np
 import os
 import re
-from enerpi.base import SENSORS, COLOR_TILES, IMG_BASEPATH, DEFAULT_IMG_MASK, log, check_resource_files, timeit
+from enerpi.base import (SENSORS, COLOR_TILES, IMG_BASEPATH, DEFAULT_IMG_MASK, EXPORT_PNG_TILES,
+                         log, check_resource_files, timeit)
 from enerpiplot import ROUND_W, ROUND_KWH, tableau20
+from esiosdata import FacturaElec
 
 
 REGEXPR_SVG_HEIGHT = re.compile(r'<svg height="\d{1,4}pt"')
@@ -390,6 +392,8 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES
             axes.set_xlim((x_lim[0] + delta_total * (1 - lh / total_hours), x_lim[1]))
             figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
             write_fig_to_svg(figure, name_img=file, preserve_ratio=preserve_ratio)
+            if EXPORT_PNG_TILES:
+                figure.savefig(file[:-3] + 'png', dpi=200)
 
     fig = ax = None
     total_hours = last_hours[0]
@@ -421,9 +425,33 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES
         # plt.cla()
         # fig.set_figwidth(_tile_figsize()[0])
 
-        # TODO Revisión tiles kWh
+        # Consumption tile (€ & kWh)
         if len(last_data_c) > 1:
             fig, ax = _plot_sensor_tile(last_data_c.kWh, barplot=True, ax=ax, fig=fig, color=color)
+
+            # Append cost data:
+            fact = FacturaElec(consumo=last_data_c.kWh)
+            last_data_coste = fact.reparto_coste()
+            coste_max = last_data_coste.max()
+            step_c = 0.05
+            c_max = max(3 * step_c, np.ceil(coste_max * 100) / 100.)
+            yticks = list(np.arange(start=0, stop=c_max, step=step_c))[1:-2]
+            ax_2 = plt.twinx(ax)
+            ax_2.plot(last_data_coste.tz_convert(None), color=color, lw=2, ls='-.')
+            ax_2.tick_params(axis='y', direction='in', pad=-40, length=3, width=.5, labelsize=FONTSIZE_TILE,
+                             labelright=True, colors='k')
+            ax_2.set_ylim((0, c_max))
+            ax_2.set_yticks(yticks)
+            ax_2.set_yticklabels(['{:.02f} €'.format(t) for t in yticks])
+
+            ax.annotate('{:.1f}kWh'.format(last_data_c.kWh.iloc[-25:-1].sum()), (.1, .7),
+                        xycoords='axes fraction', verticalalignment='top', alpha=.8,
+                        bbox={'edgecolor': color, 'pad': 2, 'linewidth': 1, 'facecolor':color, 'alpha':0.1},
+                        horizontalalignment='left', size=3 * FONTSIZE, color='k')
+            ax.annotate('{:.2f}€'.format(last_data_coste.iloc[-25:-1].sum()), (.9, .7),
+                        xycoords='axes fraction', verticalalignment='top', alpha=.8,
+                        bbox={'edgecolor': color, 'pad': 2, 'linewidth': 1, 'facecolor':color, 'alpha':0.1},
+                        horizontalalignment='right', size=3 * FONTSIZE, color='k')
             _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data_c.kWh.name)
 
         if fig is not None:
