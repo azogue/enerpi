@@ -9,6 +9,8 @@ import matplotlib.patches as mp
 from matplotlib.colors import hex2color
 import numpy as np
 import os
+from PIL import Image
+from math import sqrt
 import re
 from enerpi.base import (SENSORS, COLOR_TILES, IMG_BASEPATH, DEFAULT_IMG_MASK, EXPORT_PNG_TILES,
                          log, check_resource_files, timeit)
@@ -374,6 +376,39 @@ def _plot_sensor_tile(data_s, barplot=False, ax=None, fig=None, color=COLOR_TILE
     return fig, ax
 
 
+@timeit('make_radial_gradient_background', verbose=True)
+def _make_radial_gradient_background(out_color=(45, 200, 97, 0.27), in_color=(12, 133, 52, 0.83),
+                                     imgsize=(834, 556), center=(.5, .5)):
+    center_x = int(imgsize[0] * center[0])
+    center_y = int(imgsize[1] * center[1])
+    new_bg = Image.new('RGBA', size=imgsize)
+    # Distance to the center
+    distancias = [((x, y), float(sqrt((x - center_x) ** 2 + (y - center_y) ** 2)) / (5 * sqrt(center_y * center_x)))
+                  for x in range(imgsize[0]) for y in range(imgsize[1])]
+
+    # Calculate r, g, and b values
+    [new_bg.putpixel((x, y),
+                     (int(out_color[0] * dc + in_color[0] * (1 - dc)),
+                      int(out_color[1] * dc + in_color[1] * (1 - dc)),
+                      int(out_color[2] * dc + in_color[2] * (1 - dc)),
+                      int(255 * (out_color[3] * dc + in_color[3] * (1 - dc)))))
+     for (x, y), dc in distancias]
+    return new_bg
+
+
+def _get_png_tile_background(bg_path, size, c_out, c_in):
+    if os.path.exists(bg_path):
+        png_img = Image.open(bg_path)
+        loaded_size = (png_img.width, png_img.height)
+        if loaded_size == size:
+            return png_img
+        log('Diferent size in PNG TILE: {} == {} -> {}'.format(size, loaded_size, size == loaded_size), 'warn')
+    # Generate new tile background
+    png_img = _make_radial_gradient_background(out_color=c_out, in_color=c_in, imgsize=size, center=(.3, .3))
+    png_img.save(bg_path)
+    return png_img
+
+
 def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES):
     """
     Generate tiles (svg evolution plots of sensor variables) for enerpiweb
@@ -386,14 +421,27 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES
     :rtype: bool
 
     """
-    def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name, preserve_ratio=False):
-        for lh in last_hours:
+    def _cut_axes_and_save_svgs(figure, axes, x_lim, delta_total, data_name,
+                                tile_gradient_end, tile_gradient_st, preserve_ratio=False):
+        for i, lh in enumerate(last_hours):
             file = os.path.join(path_dest, 'tile_{}_{}_last_{}h.svg'.format('enerpi_data', data_name, lh))
             axes.set_xlim((x_lim[0] + delta_total * (1 - lh / total_hours), x_lim[1]))
             figure.set_figwidth(_tile_figsize(lh / total_hours)[0])
             write_fig_to_svg(figure, name_img=file, preserve_ratio=preserve_ratio)
-            if EXPORT_PNG_TILES:
-                figure.savefig(file[:-3] + 'png', dpi=200)
+            # if (i + 1 == len(last_hours)):
+            if EXPORT_PNG_TILES and (i + 1 == len(last_hours)):
+                path_png = file[:-3] + 'png'
+                base_path, name_png = os.path.split(path_png)
+                figure.set_dpi(216)
+                canvas = FigureCanvas(figure)
+                canvas.draw()
+                # Fusion data + bg:
+                data_img = Image.frombytes('RGBA', (900, 600), canvas.buffer_rgba())
+                png_img = _get_png_tile_background(os.path.join(base_path, 'fondo_' + name_png),
+                                                   (data_img.width, data_img.height),
+                                                   tile_gradient_end, tile_gradient_st)
+                png_img.paste(data_img, (0, 0), data_img)
+                png_img.save(path_png)
 
     fig = ax = None
     total_hours = last_hours[0]
@@ -406,14 +454,14 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES
         for c in SENSORS.columns_sensors_rms:
             fig, ax = _plot_sensor_tile(catalog.resample_data(last_data[c], rs_data='5min'),
                                         barplot=False, ax=ax, fig=fig, color=color)
-            _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
+            _cut_axes_and_save_svgs(fig, ax, xlim, delta, c, SENSORS[c].tile_gradient_end, SENSORS[c].tile_gradient_st)
             plt.cla()
             fig.set_figwidth(_tile_figsize()[0])
 
         for c in SENSORS.columns_sensors_mean:
             fig, ax = _plot_sensor_tile(catalog.resample_data(last_data[c], rs_data='30s', use_median=True),
                                         barplot=False, ax=ax, fig=fig, color=color)
-            _cut_axes_and_save_svgs(fig, ax, xlim, delta, c)
+            _cut_axes_and_save_svgs(fig, ax, xlim, delta, c, SENSORS[c].tile_gradient_end, SENSORS[c].tile_gradient_st)
             plt.cla()
             fig.set_figwidth(_tile_figsize()[0])
 
@@ -431,13 +479,14 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES
 
             # Append cost data:
             fact = FacturaElec(consumo=last_data_c.kWh)
-            last_data_coste = fact.reparto_coste()
+            last_data_coste = fact.reparto_coste().tz_localize(None)
+            last_data_coste.index = last_data_coste.index + dt.timedelta(minutes=30)
             coste_max = last_data_coste.max()
             step_c = 0.05
             c_max = max(3 * step_c, np.ceil(coste_max * 100) / 100.)
             yticks = list(np.arange(start=0, stop=c_max, step=step_c))[1:-2]
             ax_2 = plt.twinx(ax)
-            ax_2.plot(last_data_coste.tz_convert(None), color=color, lw=2, ls='-.')
+            ax_2.plot(last_data_coste, color=color, lw=2, ls='-.')
             ax_2.tick_params(axis='y', direction='in', pad=-40, length=3, width=.5, labelsize=FONTSIZE_TILE,
                              labelright=True, colors='k')
             ax_2.set_ylim((0, c_max))
@@ -446,13 +495,14 @@ def gen_svg_tiles(path_dest, catalog, last_hours=(72, 48, 24), color=COLOR_TILES
 
             ax.annotate('{:.1f}kWh'.format(last_data_c.kWh.iloc[-25:-1].sum()), (.1, .7),
                         xycoords='axes fraction', verticalalignment='top', alpha=.8,
-                        bbox={'edgecolor': color, 'pad': 2, 'linewidth': 1, 'facecolor':color, 'alpha':0.1},
+                        bbox={'edgecolor': color, 'pad': 2, 'linewidth': 1, 'facecolor': color, 'alpha': 0.1},
                         horizontalalignment='left', size=3 * FONTSIZE, color='k')
             ax.annotate('{:.2f}€'.format(last_data_coste.iloc[-25:-1].sum()), (.9, .7),
                         xycoords='axes fraction', verticalalignment='top', alpha=.8,
-                        bbox={'edgecolor': color, 'pad': 2, 'linewidth': 1, 'facecolor':color, 'alpha':0.1},
+                        bbox={'edgecolor': color, 'pad': 2, 'linewidth': 1, 'facecolor': color, 'alpha': 0.1},
                         horizontalalignment='right', size=3 * FONTSIZE, color='k')
-            _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data_c.kWh.name)
+            _cut_axes_and_save_svgs(fig, ax, xlim, delta, last_data_c.kWh.name,
+                                    (191, 160, 245, 0.27), (140, 39, 211, 0.83))
 
         if fig is not None:
             plt.close(fig)

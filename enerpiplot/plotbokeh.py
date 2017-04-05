@@ -209,7 +209,7 @@ def _plot_bokeh_raw(data_plot, columns=None):
     return p
 
 
-# TODO Arreglar summary plot
+# TODO Arreglar summary plot añadiendo precio con ejes kwh/€/kW_max_min
 def _plot_bokeh_hourly(data_plot, columns=None):
     # Bokeh does not work very well!! with timezones:
     data_plot = data_plot.tz_localize(None)
