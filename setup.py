@@ -50,8 +50,8 @@ setup(
                       'cryptography>=1.5.2',
                       'gpiozero>=1.3.1',  # 'RPi.GPIO>=0.6.3',
                       'matplotlib>=1.5.3', 'bokeh>=0.12.3', 'termcolor>=1.1.0',
-                      'python-crontab', 'pushbullet.py>=0.10.0', 'jsondiff>=1.0.0',
-                      'esiosdata>=0.6.5', 'python-dateutil', 'pillow'],
+                      'python-crontab>=2.1.1', 'pushbullet.py>=0.10.0', 'jsondiff>=1.0.0',
+                      'esiosdata>=0.6.5', 'python-dateutil>=2.6.0', 'pillow>=4.0.0'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,

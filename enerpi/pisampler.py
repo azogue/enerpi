@@ -255,8 +255,10 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                     power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * SENSORS.rms_multiplier
                     if counter_buffer_normal > 0:
                         other_values = cumsum_sensors_normal / counter_buffer_normal
-                    yield (dt.datetime.now(), *power_rms_values, *other_values,
-                           counter_buffer_rms, counter_buffer_normal)
+                    # yield (dt.datetime.now(), *power_rms_values, *other_values,
+                    #        counter_buffer_rms, counter_buffer_normal)
+                    yield tuple([dt.datetime.now()] + list(power_rms_values) + list(other_values)
+                                + [counter_buffer_rms, counter_buffer_normal])
                     cumsum_sensors_rms[:] = 0
                     cumsum_sensors_normal[:] = 0
                     counter_buffer_rms = counter_buffer_normal = 0

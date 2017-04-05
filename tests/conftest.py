@@ -6,6 +6,8 @@ Test Cases with the ability of reproduce different scenarios,
 without changing anything in the user custom configuration nor its ENERPI_DATA.
 
 """
+# crontab included in python-crontab
+# noinspection PyPackageRequirements
 from crontab import CronTab
 from glob import glob
 import os

@@ -5,6 +5,8 @@ ENERPI - RGB LED control methods
 """
 from enerpi.base import CONFIG, log, CONFIG_FILENAME
 import datetime as dt
+# dateutil included in python-dateutil
+# noinspection PyPackageRequirements
 from dateutil.parser import parse
 
 

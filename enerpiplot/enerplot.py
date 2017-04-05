@@ -9,6 +9,8 @@ import matplotlib.patches as mp
 from matplotlib.colors import hex2color
 import numpy as np
 import os
+# PIL included in pillow
+# noinspection PyPackageRequirements
 from PIL import Image
 from math import sqrt
 import re

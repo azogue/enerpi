@@ -8,6 +8,8 @@ ENERPI - CRON Scheduler
 - Remove CRON command
 
 """
+# crontab included in python-crontab
+# noinspection PyPackageRequirements
 from crontab import CronTab
 import datetime as dt
 
