@@ -48,8 +48,11 @@ def _send_status_email(text_msg, recipients):
     if os.path.exists(INDEX_DATA_CATALOG):
         with open(os.path.join(DATA_PATH, INDEX_DATA_CATALOG), 'rb') as fp:
             msg.attach(INDEX_DATA_CATALOG, "text /csv", fp.read())
-    mail.send(msg)
-    log('EMAIL SENDED', 'debug')
+    if mail is not None:
+        mail.send(msg)
+        log('EMAIL SENT', 'debug')
+    else:
+        log('EMAIL NOT SENT --> {}'.format(msg.as_string()), 'error')
 
 
 @app.route('/api/email/status', methods=['GET'])
@@ -70,7 +73,7 @@ def send_status_email(recipients=(RECIPIENT,)):
         text_msg = 'enerPI STATUS from last 24h... '
         _send_status_email(text_msg, recipients)
         alert = json.dumps({'alert_type': 'success',
-                            'texto_alerta': ('Sended email to: {}\n->"{}"'
+                            'texto_alerta': ('Sent email to: {}\n->"{}"'
                                              .format(recipients if len(recipients) > 1 else recipients[0], text_msg))})
     else:
         alert = json.dumps({'alert_type': 'danger',

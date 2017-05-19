@@ -147,7 +147,8 @@ class EnerpiSamplerConf(object):
         # V, V_ref RPI GPIO
         v_ref = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
         self.voltaje = voltaje
-        self.rms_multiplier = self.voltaje * a_ref * v_ref
+        # TODO Revisar parámetros no usados, establecer Pmax y controlar P>P_max*cs -> P=0
+        # self.rms_multiplier = self.voltaje * a_ref * v_ref
 
         # Sampling:
         self.ts_data_ms = CONFIG.getfloat('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
@@ -628,12 +629,12 @@ def reload_config():
     SENSORS = EnerpiSamplerConf(CONFIG, new_sensors_theme)
 
 
-# Loads configuration
+# Load configuration
 DATA_PATH, CONFIG, sensors_theme = get_config_enerpi()
 
-# Appends ENERPI gmail account: (Hardcoded)
-GMAIL_ACCOUNT = 'enerpi.bot@gmail.com'
-GMAIL_APP_PASSWORD = 'qkdspbhmxouzrkvv'
+# Get ENERPI gmail account:
+GMAIL_ACCOUNT = CONFIG.get('NOTIFY', 'GMAIL_ACCOUNT')
+GMAIL_APP_PASSWORD = CONFIG.get('NOTIFY', 'GMAIL_APP_PASSWORD')
 
 # Billing data
 billing_tarifa = CONFIG.getint('PVPC', 'TARIFA', fallback=1) - 1
@@ -641,32 +642,41 @@ billing_impuestos = CONFIG.getint('PVPC', 'ZONA_IMPUESTOS', fallback=1) - 1
 billing_potencia = CONFIG.getfloat('PVPC', 'POTENCIA', fallback=3.45)
 billing_con_bono = CONFIG.getboolean('PVPC', 'CON_BONO_SOCIAL', fallback=False)
 billing_cups = CONFIG.get('PVPC', 'CUPS', fallback='ES00XXXXXXXXXXXXXXDB')
-BILLING_DATA = dict(con_bono=billing_con_bono, p_contrato=billing_potencia, cups=billing_cups,
+BILLING_DATA = dict(con_bono=billing_con_bono,
+                    p_contrato=billing_potencia, cups=billing_cups,
                     peaje=billing_tarifa, zona_impuestos=billing_impuestos)
 
 # Admin email for reports & nofifications:
 RECIPIENT = CONFIG.get('NOTIFY', 'RECIPIENT', fallback='enerpi.bot@gmail.com')
 
 # Set Locale
-custom_locale = CONFIG.get('ENERPI_SAMPLER', 'LOCALE', fallback='{}.{}'.format(*locale.getlocale()))
+custom_locale = CONFIG.get('ENERPI_SAMPLER', 'LOCALE',
+                           fallback='{}.{}'.format(*locale.getlocale()))
 locale.setlocale(locale.LC_ALL, custom_locale)
 
 # ANALOG SENSORS WITH MCP3008 (Rasp.io Analog Zero)
 SENSORS = EnerpiSamplerConf(CONFIG, sensors_theme)
 
 # Logging files & other common paths:
-FILE_LOGGING = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING', fallback='enerpi.log'))
+FILE_LOGGING = os.path.join(
+    DATA_PATH, CONFIG.get('ENERPI_DATA', 'FILE_LOGGING',
+                          fallback='enerpi.log'))
 LOGGING_LEVEL = CONFIG.get('ENERPI_DATA', 'LOGGING_LEVEL', fallback='DEBUG')
 
-STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH', fallback='WWW'))
-EXPORT_PNG_TILES = CONFIG.getboolean('ENERPI_WEBSERVER', 'PNG_TILES', fallback=False)
+STATIC_PATH = os.path.join(
+    DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH', fallback='WWW'))
+EXPORT_PNG_TILES = CONFIG.getboolean(
+    'ENERPI_WEBSERVER', 'PNG_TILES', fallback=False)
 SERVER_FILE_LOGGING_RSCGEN = os.path.join(STATIC_PATH, 'enerpiweb_rscgen.log')
 NGINX_CONFIG_FILE = 'enerpiweb_nginx.conf'
 UWSGI_CONFIG_FILE = 'enerpiweb_uwsgi.ini'
 
 IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
-IMG_BASEPATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
-DEFAULT_IMG_MASK = CONFIG.get('ENERPI_DATA', 'DEFAULT_IMG_MASK', fallback='enerpi_plot_{:%Y%m%d_%H%M}.png')
+IMG_BASEPATH = os.path.join(
+    DATA_PATH, CONFIG.get('ENERPI_DATA', 'IMG_BASEPATH'))
+DEFAULT_IMG_MASK = CONFIG.get(
+    'ENERPI_DATA', 'DEFAULT_IMG_MASK',
+    fallback='enerpi_plot_{:%Y%m%d_%H%M}.png')
 COLOR_TILES = (1, 1, 1)
 
 DAEMON_STDOUT = '/tmp/enerpi_out.txt'
