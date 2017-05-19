@@ -21,7 +21,7 @@ ARCHIVE_DAILY = 2
 ARCHIVE_MONTHLY = 3
 
 STORE_EXT = '.h5'
-KWARGS_SAVE = dict(complevel=9, complib='blosc', fletcher32=True)
+KWARGS_SAVE = dict(complevel=9, complib='zlib', fletcher32=True)
 
 DIR_CURRENT_MONTH = 'CURRENT_MONTH'
 DIR_BACKUP = 'OLD_STORES'
@@ -279,13 +279,21 @@ class HDFTimeSeriesCatalog(object):
         index.to_csv(p)
         return True
 
+    def _recursive_basepath_glob(self):
+        """Instead of `glob.glob w/recursive=True` for python 3.4 compat."""
+        matches = []
+        for root, dirnames, filenames in os.walk(self.base_path):
+            [matches.append(os.path.join(root, filename))
+             for filename in filenames]
+        return matches
+
     def _check_index(self, index):
         index = index.copy()
         paths = index['st'].apply(lambda x: os.path.join(self.base_path, x))
         times = [self._ts_filepath(p) for p in paths]
         pb_bkp = os.path.join(self.base_path, DIR_BACKUP)
         new_stores = [f.replace(self.base_path + os.path.sep, '')
-                      for f in glob.glob(os.path.join(self.base_path, '**'), recursive=True)
+                      for f in self._recursive_basepath_glob()
                       if (f.endswith(STORE_EXT) and (pb_bkp not in f) and
                           (f != self.raw_store) and (f not in paths.values))]
         index['new_ts'] = times
@@ -441,7 +449,7 @@ class HDFTimeSeriesCatalog(object):
         dataframes = []
         pb_bkp = os.path.join(self.base_path, DIR_BACKUP)
         if paths is None:
-            paths = glob.glob(os.path.join(self.base_path, '**'), recursive=True)
+            paths = self._recursive_basepath_glob()
         for f in paths:
             if f.endswith(STORE_EXT) and (pb_bkp not in f) and (f != self.raw_store):
                 relat_path = f.replace(self.base_path + os.path.sep, '')

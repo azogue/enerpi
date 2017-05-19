@@ -105,7 +105,8 @@ def save_raw_data(data=None, path_st=HDF_STORE_PATH, catalog=None, verb=True):
                                 ).set_index(SENSORS.ts_column).dropna().astype(float)
             mode = 'a' if os.path.exists(path_st) else 'w'
             try:
-                with pd.HDFStore(path_st, mode=mode, complevel=9, complib='blosc') as st:
+                with pd.HDFStore(path_st,
+                                 mode=mode, complevel=9, complib='zlib') as st:
                     st.append(KEY, data)
                     if catalog is not None:
                         df_tot = st[KEY]
