@@ -150,8 +150,8 @@ class EnerpiSamplerConf(object):
         # V, V_ref RPI GPIO
         v_ref = CONFIG.getfloat('ENERPI_SAMPLER', 'V_REF', fallback=3.3)
         self.voltaje = voltaje
-        # TODO Revisar parámetros no usados, establecer Pmax y controlar P>P_max*cs -> P=0
-        # self.rms_multiplier = self.voltaje * a_ref * v_ref
+        self.rms_multiplier = self.voltaje * a_ref * v_ref
+        self.max_power = self.voltaje * a_ref
 
         # Sampling:
         self.ts_data_ms = CONFIG.getfloat('ENERPI_SAMPLER', 'TS_DATA_MS', fallback=12)
@@ -621,6 +621,8 @@ DATA_PATH, CONFIG, sensors_theme = get_config_enerpi()
 # Get ENERPI gmail account:
 GMAIL_ACCOUNT = CONFIG.get('NOTIFY', 'GMAIL_ACCOUNT')
 GMAIL_APP_PASSWORD = CONFIG.get('NOTIFY', 'GMAIL_APP_PASSWORD')
+# Admin email for reports & nofifications:
+RECIPIENT = CONFIG.get('NOTIFY', 'EMAIL_RECIPIENT')
 
 # Billing data
 billing_tarifa = CONFIG.getint('PVPC', 'TARIFA', fallback=1) - 1
@@ -632,8 +634,6 @@ BILLING_DATA = dict(con_bono=billing_con_bono,
                     p_contrato=billing_potencia, cups=billing_cups,
                     peaje=billing_tarifa, zona_impuestos=billing_impuestos)
 
-# Admin email for reports & nofifications:
-RECIPIENT = CONFIG.get('NOTIFY', 'RECIPIENT', fallback='enerpi.bot@gmail.com')
 
 # Set Locale
 custom_locale = CONFIG.get('ENERPI_SAMPLER', 'LOCALE',

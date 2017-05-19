@@ -13,7 +13,8 @@ from enerpi.base import SENSORS, log
 PREC_SAMPLING = .0002  # := dt.timedelta(microseconds=500)
 MIN_NUM_SAMPLES_RMS = 10
 HOST = check_output('hostname').decode().splitlines()[0]
-EXAMPLE_POWER_EV = [(0, 300), (3, 1200), (6, 3250), (8, 700), (9, 100), (10, 0), (12, 300)]
+EXAMPLE_POWER_EV = [(0, 300), (3, 1200), (6, 3250),
+                    (8, 700), (9, 100), (10, 0), (12, 300)]
 
 
 class DummySensor(object):
@@ -61,17 +62,19 @@ class DummySensor(object):
         self._true_value = value / self._power_divisor
         noise_v = 2 * (random.random() - .5) * self._noise
         v = self._true_value + noise_v
-        return self._center + np.sqrt(2) * v * np.sin((self._freq * 2 * np.pi) * self.elapsed)
+        return self._center + np.sqrt(2) * v * np.sin(
+            (self._freq * 2 * np.pi) * self.elapsed)
 
     @property
     def closed(self):
-        """Mimics closed state of MCP sensor"""
+        """Mimics closed state of MCP sensor."""
         return True
 
 
 class AnalogSensorBuffer(object):
-    """
-    Wrapper for MCP Sensor with 1D ring buffer using numpy arrays for RMS & M sensing.
+    """Wrapper for MCP Sensor.
+
+    (with 1D ring buffer using numpy arrays for RMS & M sensing).
     """
     def __init__(self, probe, value_correction, length, rms_sensor=True):
         self._probe = probe
@@ -94,17 +97,18 @@ class AnalogSensorBuffer(object):
 
     @property
     def is_active(self):
-        """Returns GPIOZERO_MCP sensor.is_active"""
+        """Returns GPIOZERO_MCP sensor.is_active."""
         return self._probe.is_active
 
     @property
     def is_rms(self):
-        """True if it's a Root-Mean-Squared measuring GPIOZERO_MCP sensor"""
+        """True if it's a Root-Mean-Squared measuring GPIOZERO_MCP sensor."""
         return self._rms_sensor
 
     def append_reading(self):
         """Read MCP sensor values, and append with value_correction
-        to obtain future Root-Mean-Squared (RMS) value or future simple Mean value"""
+        to obtain future Root-Mean-Squared (RMS) value
+        or future simple Mean value."""
         x = self._probe.value + self._value_correction
         if self._rms_sensor:
             new = x**2
@@ -147,7 +151,8 @@ def tuple_to_dict_json(data_tuple):
     """
     d_data = dict(zip(SENSORS.columns_sampling, data_tuple))
     d_data['host'] = HOST
-    d_data[SENSORS.ts_column] = d_data[SENSORS.ts_column].strftime(SENSORS.ts_fmt)
+    d_data[SENSORS.ts_column] = d_data[SENSORS.ts_column].strftime(
+        SENSORS.ts_fmt)
     # d_data[SENSORS.ts_column] = dt.datetime.now().strftime(SENSORS.ts_fmt)
 
     cols_rms, cols_mean, cols_ref = SENSORS.included_columns_sampling(d_data)
@@ -172,12 +177,16 @@ def msg_to_dict(msg):
         d_data = json.loads(msg)
     except json.decoder.JSONDecodeError:
         # Versión anterior:
-        rg_msg_mask = re.compile('^(?P<host>.*) __ (?P<ts>.*) __ (?P<power>.*) W __ Noise: (?P<noise>.*) W __ '
+        rg_msg_mask = re.compile('^(?P<host>.*) __ (?P<ts>.*) __ (?P<power>.*)'
+                                 ' W __ Noise: (?P<noise>.*) W __ '
                                  'REF: (?P<ref>.*) __ LDR: (?P<ldr>.*)')
         d_data = rg_msg_mask.search(msg).groupdict()
-        for k in filter(lambda x: x in d_data, SENSORS.columns_sensors_rms + SENSORS.columns_sensors_mean):
+        for k in filter(lambda x: x in d_data,
+                        SENSORS.columns_sensors_rms
+                        + SENSORS.columns_sensors_mean):
             d_data[k] = float(d_data[k])
-    d_data[SENSORS.ts_column] = SENSORS.TZ.localize(dt.datetime.strptime(d_data[SENSORS.ts_column], SENSORS.ts_fmt))
+    d_data[SENSORS.ts_column] = SENSORS.TZ.localize(
+        dt.datetime.strptime(d_data[SENSORS.ts_column], SENSORS.ts_fmt))
     d_data['msg'] = msg
     return d_data
 
@@ -187,6 +196,10 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms,
              min_ts_ms=SENSORS.ts_data_ms, delta_secs_raw_capture=None,
              measure_ldr_divisor=SENSORS.measure_ldr_divisor,
              use_dummy_sensors=False, reset_bias=False, verbose=False):
+    def _valid_power(rms_values):
+        return [value if value < SENSORS.max_power else 0
+                for value in rms_values]
+
     delta_sampling_calc = delta_sampling
     con_pausa = min_ts_ms > 0
     buffers = []
@@ -243,40 +256,47 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms,
                               1000 - (time() - tic)))
                     tic = time()
         else:
-            cumsum_sensors_rms = np.zeros(
+            cumsum_rms = np.zeros(
                 sum([b.is_rms for b in buffers]), dtype=float)
-            cumsum_sensors_normal = other_values = np.zeros(
+            cumsum_norm = other_values = np.zeros(
                 sum([not b.is_rms for b in buffers]), dtype=float)
-            assert (cumsum_sensors_rms.shape[0]
-                    + cumsum_sensors_normal.shape[0] == len(buffers))
+            assert (cumsum_rms.shape[0]
+                    + cumsum_norm.shape[0] == len(buffers))
             stop = tic = time()
             while True:
                 counter_buffer_rms += 1
-                process_all_sensors = counter_buffer_rms % measure_ldr_divisor == 0
-                if process_all_sensors:
+                process_all = counter_buffer_rms % measure_ldr_divisor == 0
+                if process_all:
                     counter_buffer_normal += 1
                     # Read instant values:
                     [b.append_reading() for b in buffers]
-                    cumsum_sensors_rms += [b.mean() for b in buffers if b.is_rms]
-                    cumsum_sensors_normal += [b.mean() for b in buffers if not b.is_rms]
+                    cumsum_rms += [b.mean() for b in buffers if b.is_rms]
+                    cumsum_norm += [b.mean() for b in buffers if not b.is_rms]
                 else:
                     # Read instant values:
                     [b.append_reading() for b in buffers if b.is_rms]
-                    cumsum_sensors_rms += [b.mean() for b in buffers if b.is_rms]
+                    cumsum_rms += [b.mean() for b in buffers if b.is_rms]
 
                 # yield & reset every delta_sampling_calc:
                 ts = time()
-                if (ts - stop > delta_sampling_calc - PREC_SAMPLING) and counter_buffer_rms > MIN_NUM_SAMPLES_RMS:
+                if (ts - stop > delta_sampling_calc - PREC_SAMPLING) \
+                        and counter_buffer_rms > MIN_NUM_SAMPLES_RMS:
                     stop = ts
-                    power_rms_values = np.sqrt(cumsum_sensors_rms / counter_buffer_rms) * SENSORS.rms_multiplier
+                    power_rms_values = _valid_power(
+                        np.sqrt(cumsum_rms / counter_buffer_rms)
+                        * SENSORS.rms_multiplier
+                    )
                     if counter_buffer_normal > 0:
-                        other_values = cumsum_sensors_normal / counter_buffer_normal
-                    # yield (dt.datetime.now(), *power_rms_values, *other_values,
+                        other_values = cumsum_norm / counter_buffer_normal
+                    # yield (dt.datetime.now(), *power_rms_values,
+                    #        *other_values,
                     #        counter_buffer_rms, counter_buffer_normal)
-                    yield tuple([dt.datetime.now()] + list(power_rms_values) + list(other_values)
+                    yield tuple([dt.datetime.now()]
+                                + power_rms_values
+                                + list(other_values)
                                 + [counter_buffer_rms, counter_buffer_normal])
-                    cumsum_sensors_rms[:] = 0
-                    cumsum_sensors_normal[:] = 0
+                    cumsum_rms[:] = 0
+                    cumsum_norm[:] = 0
                     counter_buffer_rms = counter_buffer_normal = 0
                 elif con_pausa:
                     t_sleep = (min_ts_ms - .05) / 1000 - (ts - tic)
