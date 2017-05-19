@@ -93,6 +93,11 @@
                            {% if after_sysop %}disabled{% endif %}
                            type="submit" formaction="{{ url_for('startstop', service='machine')}}"
                            value="Reboot system">
+                    <input class="btn btn-sm btn-outline-danger"
+                           {% if after_sysop %}disabled{% endif %}
+                           type="submit"
+                           formaction="{{ url_for('startstop', service='machine_off') }}"
+                           value="Shutdown system">
                 </div>
             </form>
         </div>
