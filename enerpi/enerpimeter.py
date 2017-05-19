@@ -29,11 +29,14 @@ PALETA = dict(off=(0., (0., 0., 1.)),
               high=(3500., (1., 0., 0.)),
               max=(4500., (1., 0., 1.)))
 
-# Decay control (# of samples/s dropping a lot sometimes--> y = -a * x**2. x(9:32)=1300, x(9:37)=1190, x(9:48)=995)
-MIN_N_SAMPLES_DELTA_FRACTION = .6
+# Decay control
+# (# of samples/s dropping a lot sometimes
+#       --> y = -a * x**2. x(9:32)=1300, x(9:37)=1190, x(9:48)=995)
+MIN_N_SAMPLES_DELTA_FRACTION = .5
 MIN_N_SAMPLES_MAX_CONSIDERED = 900
-MIN_N_SAMPLES_ABS = 60
-STATIC_PATH = os.path.join(DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH'))
+MIN_N_SAMPLES_ABS = 20  # 50 ms
+STATIC_PATH = os.path.join(
+    DATA_PATH, CONFIG.get('ENERPI_WEBSERVER', 'STATIC_PATH'))
 IMG_TILES_BASEPATH = os.path.join(STATIC_PATH, 'img', 'generated')
 
 
@@ -281,22 +284,27 @@ def enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
     global LED_STATE
     s_calc = sampling_ms if sampling_ms > 0 else 1
     n_samples_buffer = int(round(roll_time * 1000 / s_calc))
-    intro = (INIT_LOG_MARK + '\n  *** Calculating RMS values with window of {} frames (deltaT={} s, sampling: {} ms)'
+    intro = (INIT_LOG_MARK + '\n  *** Calculating RMS values with window '
+                             'of {} frames (deltaT={} s, sampling: {} ms)'
              .format(n_samples_buffer, roll_time, sampling_ms))
     log(intro, 'ok')
 
-    data_generator = enerpi_sampler_rms(n_samples_buffer=n_samples_buffer, delta_sampling=delta_sampling,
-                                        min_ts_ms=sampling_ms, use_dummy_sensors=is_demo, verbose=verbose)
+    data_generator = enerpi_sampler_rms(
+        n_samples_buffer=n_samples_buffer, delta_sampling=delta_sampling,
+        min_ts_ms=sampling_ms, use_dummy_sensors=is_demo, verbose=verbose)
     LED_STATE = 0
     counter, p_save = 0, None
     led = get_rgbled(verbose=verbose)
     sock_send, counter_unreachable = None, np.array([0, 0])
 
-    catalog = init_catalog(sensors=SENSORS, raw_file=path_st, check_integrity=True, archive_existent=True)
+    catalog = init_catalog(
+        sensors=SENSORS, raw_file=path_st,
+        check_integrity=True, archive_existent=True)
 
     l_ini = [np.nan] * SENSORS.n_cols_sampling
     l_ini[0] = dt.datetime.now()
-    buffer_disk = np.array(l_ini * N_SAMPLES_BUFFER_DISK).reshape(N_SAMPLES_BUFFER_DISK, SENSORS.n_cols_sampling)
+    buffer_disk = np.array(l_ini * N_SAMPLES_BUFFER_DISK).reshape(
+        N_SAMPLES_BUFFER_DISK, SENSORS.n_cols_sampling)
     tic_abs = time()
 
     cond_while = True if timeout is None else TimerExiter(timeout)
@@ -306,12 +314,16 @@ def enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
     if n_samples_buffer is None:
         min_n_raw_samples = MIN_N_SAMPLES_ABS
     else:
-        min_n_raw_samples = max(MIN_N_SAMPLES_ABS,
-                                int(MIN_N_SAMPLES_DELTA_FRACTION * min(MIN_N_SAMPLES_MAX_CONSIDERED, n_samples_buffer)))
+        min_n_raw_samples = max(
+            MIN_N_SAMPLES_ABS, int(
+                MIN_N_SAMPLES_DELTA_FRACTION
+                * min(MIN_N_SAMPLES_MAX_CONSIDERED, n_samples_buffer))
+        )
 
     error_decay = {'counter_act': 0,
                    'subject': 'SAMPLING DECAY -> {}',
-                   'mask': 'Sampling freq decay until {}. # act: {}. # Unreach. Net: {}',
+                   'mask': 'Sampling freq decay until {}. '
+                           '# act: {}. # Unreach. Net: {}',
                    'last_error_decay': None}
     # Loop
     try:
@@ -320,24 +332,31 @@ def enerpi_logger(path_st=HDF_STORE_PATH, delta_sampling=SENSORS.delta_sec_data,
             data = next(data_generator)
 
             # Broadcast mensaje
-            sock_send = broadcast_msg(tuple_to_dict_json(data), counter_unreachable,
-                                      sock_send=sock_send, verbose=verbose, codec=codec, port=port)
+            sock_send = broadcast_msg(
+                tuple_to_dict_json(data), counter_unreachable,
+                sock_send=sock_send, verbose=verbose, codec=codec, port=port)
             # Almacenamiento en buffer
             for i in range(len(data)):
                 buffer_disk[counter, i] = data[i]
             counter += 1
 
-            if (data[-2] < MIN_N_SAMPLES_ABS) or (data[-2] < min_n_raw_samples) and (LED_STATE == 0):
+            if (data[-2] < MIN_N_SAMPLES_ABS) \
+                    or (data[-2] < min_n_raw_samples) and (LED_STATE == 0):
                 # Sampling decay problem --> red blink (ERROR SAMPLING)
-                _set_led_state_alarm(led, time_blinking=10, timeout=10, time_on=.1, alarm_type='error')
+                _set_led_state_alarm(
+                    led, time_blinking=10, timeout=10,
+                    time_on=.1, alarm_type='error')
                 error_decay['counter_act'] += 1
                 if ((error_decay['counter_act'] > 5) and
                         ((error_decay['last_error_decay'] is None)
                          or (time() - error_decay['last_error_decay'] > 300))):
                     # Decay error update
                     error_decay['last_error_decay'] = time()
-                    msg = error_decay['mask'].format(data[-2], error_decay['counter_act'], counter_unreachable)
-                    _ = push_enerpi_error(error_decay['subject'].format(data[-2]), msg)
+                    msg = error_decay['mask'].format(
+                        data[-2], error_decay['counter_act'],
+                        counter_unreachable)
+                    _ = push_enerpi_error(
+                        error_decay['subject'].format(data[-2]), msg)
                     error_decay['counter_act'] = 0
             elif (counter_unreachable[0] > 1) and (LED_STATE == 0):
                 # Unreachable network (wifi issues) -->   2x yellow blink (ERROR NETWORK)
