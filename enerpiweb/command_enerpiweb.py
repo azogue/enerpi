@@ -58,9 +58,11 @@ def _make_webserver_config(overwrite=False):
                             path_enerpiweb=basedir,
                             path_venv=os.path.abspath(os.path.join(os.path.dirname(sys.executable), '..')))
         uwsgi_conf = uwsgi_raw.format(**local_params)
-        nginx_conf = nginx_raw.replace('{file_location}', local_params['file_location']
-                                       ).replace('{path_enerpiweb}', local_params['path_enerpiweb']
-                                                 ).replace('{filename}', NGINX_CONFIG_FILE)
+        nginx_conf = nginx_raw.replace(
+            '{file_location}', local_params['file_location']
+        ).replace(
+            '{path_enerpiweb}', local_params['path_enerpiweb']
+        ).replace('{filename}', NGINX_CONFIG_FILE)
 
         # Copy config files to DATA_PATH
         check_resource_files(DATA_PATH, verbose=True)

@@ -10,6 +10,7 @@ from threading import Timer
 import os
 from pandas import TimeGrouper
 import sys
+from enerpi import __version__ as VERSION
 from enerpi.base import log, SENSORS
 from enerpi.api import enerpi_data_catalog
 from enerpiplot.plotbokeh import get_bokeh_version, COLOR_REF_RMS, COLS_DATA_KWH, COLORS_DATA_KWH
@@ -59,19 +60,23 @@ def control():
     cat = enerpi_data_catalog(check_integrity=False)
     df = cat.tree
     if df is not None:
-        df = df[df.is_cat & df.is_raw].sort_values(by='ts_ini', ascending=False)
+        df = df[df.is_cat & df.is_raw].sort_values(
+            by='ts_ini', ascending=False)
         paths_rel = [(os.path.basename(p), _text_button_hdfstore(p, t0, tf, n))
-                     for p, t0, tf, n in zip(df['st'], df['ts_ini'], df['ts_fin'], df['n_rows'])]
+                     for p, t0, tf, n in zip(df['st'], df['ts_ini'],
+                                             df['ts_fin'], df['n_rows'])]
     else:
         paths_rel = []
     form_operate = DummyForm()
-    return render_template('control_panel.html',
-                           d_catalog={'path_raw_store': os.path.join(cat.base_path, cat.raw_store),
-                                      'path_catalog': os.path.join(cat.base_path, cat.catalog_file),
-                                      'ts_init': cat.min_ts, 'ts_catalog': cat.index_ts},
-                           d_last_msg=last, is_sender_active=is_sender_active, list_stores=paths_rel,
-                           form_operate=form_operate, after_sysop=after_sysop,
-                           alerta=alerta)
+    return render_template(
+        'control_panel.html',
+        d_catalog={
+            'path_raw_store': os.path.join(cat.base_path, cat.raw_store),
+            'path_catalog': os.path.join(cat.base_path, cat.catalog_file),
+            'ts_init': cat.min_ts, 'ts_catalog': cat.index_ts},
+        d_last_msg=last, is_sender_active=is_sender_active,
+        list_stores=paths_rel, form_operate=form_operate,
+        after_sysop=after_sysop, alerta=alerta, version=VERSION)
 
 
 @app.route('/api/help', methods=['GET'])
@@ -192,11 +197,13 @@ def mainpower_data(start, end=None):
 @app.route('/api/restart/<service>', methods=['POST'])
 @auto.doc()
 def startstop(service='enerpi_start'):
-    """
-    Endpoint for control ENERPI in RPI. Only for dev mode.
-    It can restart the ENERPI daemon logger or even reboot the machine for a fresh start after a config change.
+    """Endpoint for control ENERPI in RPI. Only for dev mode.
 
-    :param service: service id ('enerpi_start/stop' for operate with the logger, or 'machine' for a reboot)
+    It can restart the ENERPI daemon logger or even reboot the machine
+    for a fresh start after a config change.
+
+    :param service: service id ('enerpi_start/stop' for operate
+                    with the logger, or 'machine' for a reboot)
 
     """
     def _system_operation(command):
@@ -217,13 +224,20 @@ def startstop(service='enerpi_start'):
             msg = 'Stopping ENERPI logger from webserver... ({})'.format(cmd)
             alert = 'danger'
         elif service == 'machine':
-            cmd = 'reboot now'
+            cmd = 'sudo /sbin/reboot now'
             msg = 'Rebooting! MACHINE... see you soon... ({})'.format(cmd)
+            alert = 'danger'
+        elif service == 'machine_off':
+            cmd = 'sudo /sbin/shutdown now'
+            msg = 'Shutdown NOW!!!... Wait some time ' \
+                  'to turn power off... ({})'.format(cmd)
             alert = 'danger'
         if cmd is not None:
             log(msg, 'debug', False)
             t = Timer(.5, _system_operation, args=(cmd,))
             t.start()
-            return redirect(url_for('control', after_sysop=True,
-                                    alerta=json.dumps({'alert_type': alert, 'texto_alerta': msg})))
+            return redirect(
+                url_for('control', after_sysop=True,
+                        alerta=json.dumps(
+                            {'alert_type': alert, 'texto_alerta': msg})))
     return abort(500)

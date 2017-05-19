@@ -21,7 +21,8 @@ class DummySensor(object):
     Object for mimic a MCP Sensor.
     """
     def __init__(self, channel=0, power_noise=15,
-                 power_divisor=SENSORS.rms_multiplier, power_evolution=EXAMPLE_POWER_EV,
+                 power_divisor=SENSORS.rms_multiplier,
+                 power_evolution=EXAMPLE_POWER_EV,
                  signal_center=.49951124, freq_hz=50):
         self._ch = channel
         self._v_min = 0
@@ -84,7 +85,10 @@ class AnalogSensorBuffer(object):
 
     @property
     def software_spi(self):
-        """True if MCP/GPIOZERO is using Software SPI (much slower than Hardware mode)"""
+        """True if MCP/GPIOZERO is using Software SPI.
+
+         (much slower than Hardware mode)
+        """
         str_repr = self._probe.__repr__()
         return 'using software SPI' in str_repr
 
@@ -178,7 +182,8 @@ def msg_to_dict(msg):
     return d_data
 
 
-def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSORS.delta_sec_data,
+def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms,
+             delta_sampling=SENSORS.delta_sec_data,
              min_ts_ms=SENSORS.ts_data_ms, delta_secs_raw_capture=None,
              measure_ldr_divisor=SENSORS.measure_ldr_divisor,
              use_dummy_sensors=False, reset_bias=False, verbose=False):
@@ -197,17 +202,22 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
         sensor_probe, probe_type = MCP3008, 'MCP3008'
 
     try:
-        buffers = [AnalogSensorBuffer(sensor_probe(channel=s.channel), s.bias,
-                                      n_samples_buffer_rms if s.is_rms else n_samples_buffer_normal,
-                                      rms_sensor=s.is_rms) for s in SENSORS]
+        buffers = [AnalogSensorBuffer(
+            sensor_probe(channel=s.channel), s.bias,
+            n_samples_buffer_rms if s.is_rms else n_samples_buffer_normal,
+            rms_sensor=s.is_rms) for s in SENSORS]
 
-        software_spi_mode = (probe_type is 'DummySensor') or buffers[0].software_spi
+        software_spi_mode = (probe_type is 'DummySensor'
+                             ) or buffers[0].software_spi
         log('ENERPI ANALOG SENSING WITH {} - (channel={}, raw_value={:.5f}); '
             'Active:{}, Software SPI:{}, #buffer_rms:{}, #buffer:{}'
-            .format(probe_type, SENSORS[0].channel, buffers[0].read(), buffers[0].is_active, software_spi_mode,
-                    n_samples_buffer_rms, n_samples_buffer_normal), 'debug', verbose)
+            .format(probe_type, SENSORS[0].channel, buffers[0].read(),
+                    buffers[0].is_active, software_spi_mode,
+                    n_samples_buffer_rms, n_samples_buffer_normal),
+            'debug', verbose)
         if software_spi_mode and (probe_type is 'MCP3008'):
-            log('SOFTWARE_SPI --> No hardware/driver present, so bye bye...', 'error', verbose)
+            log('SOFTWARE_SPI --> No hardware/driver present, so bye bye...',
+                'error', verbose)
             raise KeyboardInterrupt
         counter_buffer_rms = counter_buffer_normal = 0
 
@@ -215,10 +225,12 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
             max_counter_frames = delta_secs_raw_capture * n_samples_buffer
             counter_frames = 0
             buffer_values = np.zeros((n_samples_buffer, len(buffers)))
-            buffer_dates = np.array([np.nan] * n_samples_buffer, dtype=dt.datetime)
+            buffer_dates = np.array([np.nan] * n_samples_buffer,
+                                    dtype=dt.datetime)
             tic = time()
             while counter_frames < max_counter_frames:
-                buffer_values[counter_buffer_normal, :] = [b.read() for b in buffers]
+                buffer_values[counter_buffer_normal, :] = [b.read()
+                                                           for b in buffers]
                 ts = dt.datetime.now()
                 buffer_dates[counter_buffer_normal] = ts
                 counter_buffer_normal += 1
@@ -227,12 +239,16 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                     yield (buffer_dates, buffer_values)
                     counter_buffer_normal = 0
                 if con_pausa:
-                    sleep(max(.00001, (min_ts_ms - .05) / 1000 - (time() - tic)))
+                    sleep(max(.00001, (min_ts_ms - .05) /
+                              1000 - (time() - tic)))
                     tic = time()
         else:
-            cumsum_sensors_rms = np.zeros(sum([b.is_rms for b in buffers]), dtype=float)
-            cumsum_sensors_normal = other_values = np.zeros(sum([not b.is_rms for b in buffers]), dtype=float)
-            assert (cumsum_sensors_rms.shape[0] + cumsum_sensors_normal.shape[0] == len(buffers))
+            cumsum_sensors_rms = np.zeros(
+                sum([b.is_rms for b in buffers]), dtype=float)
+            cumsum_sensors_normal = other_values = np.zeros(
+                sum([not b.is_rms for b in buffers]), dtype=float)
+            assert (cumsum_sensors_rms.shape[0]
+                    + cumsum_sensors_normal.shape[0] == len(buffers))
             stop = tic = time()
             while True:
                 counter_buffer_rms += 1
@@ -268,19 +284,23 @@ def _sampler(n_samples_buffer=SENSORS.n_samples_buffer_rms, delta_sampling=SENSO
                         sleep(t_sleep)
                     tic = time()
     except KeyboardInterrupt:
-        log('KeyboardInterrupt en PISAMPLER: Exiting at {}...'.format(dt.datetime.now()), 'warn', verbose)
+        log('KeyboardInterrupt en PISAMPLER: Exiting at {}...'
+            .format(dt.datetime.now()), 'warn', verbose)
     except OSError as e:
-        log('OSError en PISAMPLER: "{}". Terminando el generador con KeyboardInterrupt.'.format(e), 'error', verbose)
+        log('OSError en PISAMPLER: "{}". Terminando el generador '
+            'con KeyboardInterrupt.'.format(e), 'error', verbose)
     except (RuntimeError, AttributeError) as e:
-        log('{} en PISAMPLER: "{}". Terminando el generador.'.format(e.__class__, e), 'error', verbose)
+        log('{} en PISAMPLER: "{}". Terminando el generador.'
+            .format(e.__class__, e), 'error', verbose)
     # Exiting
     [b.close_probe() for b in buffers]
     raise KeyboardInterrupt
 
 
 def enerpi_sampler_rms(n_samples_buffer=SENSORS.n_samples_buffer_rms,
-                       delta_sampling=SENSORS.delta_sec_data, min_ts_ms=SENSORS.ts_data_ms,
-                       use_dummy_sensors=False, verbose=False):
+                       delta_sampling=SENSORS.delta_sec_data,
+                       min_ts_ms=SENSORS.ts_data_ms, use_dummy_sensors=False,
+                       verbose=False):
     """
     Generador de valores RMS de las conexiones analógicas vía MCP3008.
         - Esta función realiza el sampling de alta frecuencia y va calculando los valores RMS con un buffer (como una
@@ -304,8 +324,11 @@ def enerpi_sampler_rms(n_samples_buffer=SENSORS.n_samples_buffer_rms,
                     use_dummy_sensors=use_dummy_sensors, verbose=verbose)
 
 
-def enerpi_raw_sampler(delta_secs=20, n_samples_buffer=SENSORS.n_samples_buffer_rms, min_ts_ms=0,
-                       use_dummy_sensors=False, verbose=True):
+def enerpi_raw_sampler(delta_secs=20,
+                       n_samples_buffer=SENSORS.n_samples_buffer_rms,
+                       min_ts_ms=0,
+                       use_dummy_sensors=False,
+                       verbose=True):
     """
     Generador de valores en bruto de las conexiones analógicas vía MCP3008 (sampling de alta frecuencia)
 
@@ -319,4 +342,5 @@ def enerpi_raw_sampler(delta_secs=20, n_samples_buffer=SENSORS.n_samples_buffer_
     """
     return _sampler(delta_secs_raw_capture=delta_secs,
                     n_samples_buffer=n_samples_buffer, min_ts_ms=min_ts_ms,
-                    use_dummy_sensors=use_dummy_sensors, reset_bias=True, verbose=verbose)
+                    use_dummy_sensors=use_dummy_sensors, reset_bias=True,
+                    verbose=verbose)
