@@ -26,7 +26,10 @@ from enerpi.pitemps import get_cpu_temp, get_gpu_temp
 ENCODING = 'UTF-8'
 CONFIG_FILENAME = 'config_enerpi.ini'
 SENSORS_CONFIG_JSON_FILENAME = 'sensors_enerpi.json'
-
+ENERPI_DIRNAME = 'ENERPIDATA'
+DATA_PATH = os.path.expanduser('~/' + ENERPI_DIRNAME)
+if 'www' in DATA_PATH:  # quick - dirty - manual fix for www-data
+    DATA_PATH = '/home/pi/' + ENERPI_DIRNAME
 
 class TimerExiter(object):
     """
@@ -566,24 +569,7 @@ def get_config_enerpi():
 
     # Load DATA_PATH:
     dir_config = os.path.join(BASE_PATH, 'config')
-    path_default_datapath = os.path.join(dir_config, '.enerpi_data_path')
-    try:
-        with open(path_default_datapath, 'r', encoding=ENCODING) as f:
-            raw = f.read()
-        data_path = raw.split('\n')[0]
-        if data_path != os.path.expanduser(data_path):  # Hay '~', se expande el usuario y se graba abspath
-            data_path = os.path.expanduser(data_path)
-            log('''Sobreescritura del archivo "{}",
-almacenando la ruta absoluta a la instalación de ENERPI
-    -> DATA_PATH := {}
-** Para mover la instalación de ENERPI a otro lugar, edite directamente este fichero
-   (y mueva manualmente la carpeta DATA_PATH)'''.format(path_default_datapath, data_path), 'info', True, True)
-            with open(path_default_datapath, 'w', encoding=ENCODING) as f:
-                f.write(data_path)
-    except Exception as e:
-        log('ENERPI LOAD CONFIG ERROR at "{}" --> {} [{}]'
-            .format(path_default_datapath, e, e.__class__), 'error', True, True)
-        data_path = os.path.expanduser('~/ENERPIDATA')
+    data_path = DATA_PATH
 
     # Checks paths & re-gen configuration if not existent
     check_resource_files(data_path)

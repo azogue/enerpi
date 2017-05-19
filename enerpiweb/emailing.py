@@ -2,14 +2,13 @@
 """
 Flask routes for send emails with Flask-Mail
 
-    * GMAIL ACCOUNT:        enerpi.bot@gmail.com (hardcoded in enerpi.base with pw)
-
 """
 from flask import redirect, url_for, render_template
 from flask_mail import Message
 import json
 import os
-from enerpi.base import log, DATA_PATH, RECIPIENT, SENSORS, INDEX_DATA_CATALOG, async_task
+from enerpi.base import (log, DATA_PATH, RECIPIENT, SENSORS,
+                         INDEX_DATA_CATALOG, async_task)
 from enerpiweb import app, auto, mail, STATIC_PATH, GMAIL_ACCOUNT
 
 
@@ -19,22 +18,26 @@ from enerpiweb import app, auto, mail, STATIC_PATH, GMAIL_ACCOUNT
 @async_task
 def _send_status_email(text_msg, recipients):
     log('SENDING STATUS EMAIL TO {}'.format(recipients), 'debug')
-    mask = os.path.join(STATIC_PATH, "img/generated/tile_enerpi_data_{}_last_24h.svg")
+    mask = os.path.join(
+        STATIC_PATH, "img/generated/tile_enerpi_data_{}_last_24h.svg")
     data_monitor = SENSORS.to_dict()
     for i, k in enumerate(data_monitor['sensors']):
         try:
-            data_monitor['sensors'][i]['tile'] = open(mask.format(data_monitor['sensors'][i]['name']), 'r').read()
+            data_monitor['sensors'][i]['tile'] = open(
+                mask.format(data_monitor['sensors'][i]['name']), 'r').read()
         except OSError:
             data_monitor['sensors'][i]['tile'] = 'NO TILE'
     try:
-        data_monitor['consumption'] = {'tile': open(mask.format('kWh'), 'r').read()}
+        data_monitor['consumption'] = {'tile': open(
+            mask.format('kWh'), 'r').read()}
     except OSError:
         data_monitor['consumption'] = {'tile': 'NO kWh TILE'}
     try:
         data_monitor['ref'] = {'tile': open(mask.format('ref'), 'r').read()}
     except OSError:
         data_monitor['ref'] = {'tile': 'NO REF TILE'}
-    html_msg = render_template('email/status_email.html', data_monitor=data_monitor, msg=text_msg)
+    html_msg = render_template(
+        'email/status_email.html', data_monitor=data_monitor, msg=text_msg)
 
     msg = Message("Status Info",
                   recipients=recipients,
@@ -59,12 +62,13 @@ def _send_status_email(text_msg, recipients):
 @app.route('/api/email/status/<recipients>', methods=['GET'])
 @auto.doc()
 def send_status_email(recipients=(RECIPIENT,)):
-    """
-    GET method for send the enerPI status from last 24 hours to the specified email recipients.
+    """GET method for send the enerPI status from last 24 hours
+    to the specified email recipients.
 
     :param recipients: comma separated emails,
     like: '/api/email/status/example@hotmail.com,other@gmail.com'
-    :return: Start the sending email process in async mode, and redirects to '/control' with an alert.
+    :return: Start the sending email process in async mode,
+            and redirects to '/control' with an alert.
 
     """
     if type(recipients) is str:
